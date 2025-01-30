@@ -1,45 +1,34 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>DICOMHawk - Honeypot DICOM Server</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOMHawk - Dashboard</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='particles.min.js') }}"></script>
+
 </head>
 <body>
-    <div id="particles-js"></div>
-    <div class="container">
-        <header>
-            <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
-            <h1>Welcome to DICOMHawk</h1>
-            <p>The ultimate honeypot DICOM server to track and analyze unauthorized access attempts.</p>
-        </header>
+    <div class="sidebar">
+        <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
+        <p>DICOMHawk</p>
         <nav>
             <ul>
-                <li>
-                    <a href="{{ url_for('home') }}">Home</a>
-                    <p>View the status of the DICOMHawk server.</p>
-                </li>
-                <li>
-                    <a href="{{ url_for('logs') }}">Logs</a>
-                    <p>Access detailed logs of server interactions and events.</p>
-                </li>
-                <li>
-                    <a href="{{ url_for('simplified_logs_page') }}">Simplified Logs</a>
-                    <p>View simplified logs for a quick overview of events.</p>
-                </li>
-                <li>
-                    <a href="{{ url_for('status') }}">Server Status</a>
-                    <p>Check the current status and number of active associations.</p>
-                </li>
+                <li><a href="{{url_for('home')}}">Home</a></li>
+                <li><a href="{{url_for('logs')}}">Logs</a></li>
+                <li><a href="{{url_for('simplified_logs_page')}}">Simplified Logs</a></li>
+                <li><a href="{{url_for('status')}}">Server Status</a></li>
             </ul>
         </nav>
-        <footer>
-            <p>&copy; 2024 DICOMHawk. All rights reserved.</p>
-        </footer>
+    </div>
+    <div class="main-content">
+        <div class="header">
+            <h1>DICOMHawk Dashboard</h1>
+            <div class="status">Server Status:🟢 Online</div>
+        </div>
+        <p>Welcome to DICOMHawk, the honeypot DICOM server to track and analyze unauthorized access attempts.</p>
     </div>
     <script>
-        particlesJS.load('particles-js', '{{ url_for('static', filename='particles.json') }}', function() {
+        particlesJS.load('particles-js', "{{ url_for('static', filename='particles.json') }}", function() {
             console.log('particles.js loaded - callback');
         });
     </script>
