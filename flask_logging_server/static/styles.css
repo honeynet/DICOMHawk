@@ -1,8 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f0f0f0;
     margin: 0;
-    padding: 0;
+    font-family: Roboto, Arial, sans-serif;
+    display: flex;
+    height: 100vh;
+    background-color: #121212;
+    color: white;
     overflow-x: hidden; /* Prevent horizontal scrolling */
 }
 
@@ -23,6 +27,65 @@ body {
     text-align: center;
 }
 
+.sidebar {
+    width: 250px;
+    background: #1e1e1e;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.sidebar img.logo {
+    width: 120px;
+    margin-bottom: 20px;
+}
+
+.sidebar nav ul {
+    list-style: none;
+    padding: 0;
+    width: 100%;
+}
+
+.sidebar nav ul li {
+    padding: 15px;
+    text-align: center;
+    border-radius: 8px;
+    transition: 0.3s;
+}
+
+.sidebar nav ul li:hover {
+    background: #333;
+}
+
+.sidebar nav ul li a {
+    text-decoration: none;
+    color: white;
+    display: block;
+}
+
+.main-content {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e1e1e;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.status {
+    background: #333;
+    padding: 10px 15px;
+    border-radius: 8px;
+}
+
 h1 {
     text-align: center;
     padding: 20px;
@@ -33,12 +96,13 @@ h1 {
 
 #logs-container {
     padding: 20px;
-    background-color: white;
+    background-color: #1e1e1e;
+    color: white;
     margin: 20px;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    overflow-y: auto; /* Enable vertical scrolling */
-    max-height: 80vh; /* Set maximum height to 80% of the viewport height */
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    overflow-y: auto;
+    max-height: 80vh;
 }
 
 p {
@@ -55,7 +119,7 @@ table {
 }
 
 table, th, td {
-    border: 1px solid #ddd;
+    border: 1px solid #444;
 }
 
 th, td {
@@ -64,11 +128,12 @@ th, td {
 }
 
 th {
-    background-color: #f4f4f4;
+    background-color: #333;
+    color: white;
 }
 
 tbody tr:nth-child(even) {
-    background-color: #f9f9f9;
+    background-color: #222;
 }
 
 header {
@@ -84,11 +149,11 @@ header .logo {
 }
 
 nav {
-    background-color: white;
+    background-color: #1e1e1e;
     padding: 20px;
     margin-bottom: 20px;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
 }
 
 nav ul {
@@ -116,7 +181,7 @@ footer {
     color: white;
     margin-top: 20px;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
 }
 
 @media (max-width: 768px) {
