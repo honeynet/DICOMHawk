@@ -1,0 +1,23 @@
+/* table_styles.css */
+#simplifiedLogsTable {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+#simplifiedLogsTable th, #simplifiedLogsTable td {
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+
+#simplifiedLogsTable th {
+    background-color: #333;
+    color: white;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    #simplifiedLogsTable {
+        font-size: 12px;
+    }
+}

@@ -1,33 +1,20 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Simplified Logs</title>
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-    <h1>Simplified Logs</h1>
-    <div id="logs-container">
-        <table id="logs-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>IP</th>
-                    <th>Port</th>
-                    <th>Version</th>
-                    <th>Command</th>
-                    <th>Type</th>
-                    <th>Term</th>
-                    <th>Matches</th>
-                    <th>Status</th>
-                    <th>Level</th>
-                    <th>Message</th>
-                    <th>Time</th>
-                </tr>
-            </thead>
-            <tbody>
-            </tbody>
-        </table>
-    </div>
-    <script src="{{ url_for('static', filename='logs.js') }}"></script>
-</body>
-</html>
+<table id="simplifiedLogsTable">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>IP</th>
+            <th>Port</th>
+            <th>Version</th>
+            <th>Command Type</th>
+            <th>Term Matches</th>
+            <th>Status</th>
+            <th>Level</th>
+            <th>Message</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Log entries go here -->
+    </tbody>
+</table>
+<script src="{{ url_for('static', filename='table_formatter.js') }}"></script>

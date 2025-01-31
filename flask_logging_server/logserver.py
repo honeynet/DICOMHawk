@@ -42,7 +42,7 @@ pynetdicom_logger.addHandler(logging.FileHandler(log_file_path))
 
 app = Flask(__name__)
 
-@app.route('/')
+('/')
 def landing_page():
   
     return render_template('landing.html')
@@ -51,7 +51,7 @@ def landing_page():
 def home():
     return render_template('status.html')
 
-@app.route('/logs')
+@app.route('/logs')@app.route
 def logs():
     return render_template('logs.html')
 
@@ -89,7 +89,7 @@ def simplified_logs():
         return jsonify(log_entries)
     except Exception as e:
         exception_logger.error(f"Error reading simplified log file: {e}")
-        return jsonify([])  # Return an empty list in case of error
+        return jsonify([])  # Return an empty list in case of errorDICOMHawk\simplified_logs
 
 @app.route('/logs/simplified_page')
 def simplified_logs_page():
