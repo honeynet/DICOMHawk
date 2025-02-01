@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -5,32 +6,77 @@
     <title>DICOMHawk - Dashboard</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='particles.min.js') }}"></script>
-
 </head>
 <body>
+    <div id="particles-js"></div>
     <div class="sidebar">
-        <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
-        <p>DICOMHawk</p>
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
+            <h2>DICOMHawk</h2>
+        </div>
         <nav>
             <ul>
-                <li><a href="{{url_for('home')}}">Home</a></li>
-                <li><a href="{{url_for('logs')}}">Logs</a></li>
-                <li><a href="{{url_for('simplified_logs_page')}}">Simplified Logs</a></li>
-                <li><a href="{{url_for('status')}}">Server Status</a></li>
+                <li><a href="{{url_for('home')}}" class="nav-link"><i class="fas fa-home"></i>Home</a></li>
+                <li><a href="{{url_for('logs')}}" class="nav-link"><i class="fas fa-list-alt"></i>Logs</a></li>
+                <li><a href="{{url_for('simplified_logs_page')}}" class="nav-link"><i class="fas fa-stream"></i>Simplified Logs</a></li>
+                <li><a href="{{url_for('status')}}" class="nav-link"><i class="fas fa-server"></i>Server Status</a></li>
             </ul>
         </nav>
+        <div class="sidebar-footer">
+            <div class="server-status">
+                <span class="status-dot"></span>
+                Server Online
+            </div>
+        </div>
     </div>
     <div class="main-content">
         <div class="header">
-            <h1>DICOMHawk Dashboard</h1>
-            <div class="status">Server Status:🟢 Online</div>
+            <div class="header-content">
+                <h1>Dashboard Overview</h1>
+                <p class="subtitle">Real-time honeypot monitoring and analysis</p>
+            </div>
+            <div class="header-actions">
+                <div class="date-time" id="datetime"></div>
+            </div>
         </div>
-        <p>Welcome to DICOMHawk, the honeypot DICOM server to track and analyze unauthorized access attempts.</p>
+        <div class="dashboard-cards">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>System Status</h3>
+                </div>
+                <div class="card-content">
+                    <p>DICOM Honeypot Active</p>
+                    <div class="status-indicator">
+                        <span class="status-dot"></span>
+                        Protected
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Activity Overview</h3>
+                </div>
+                <div class="card-content">
+                    <p>Monitoring unauthorized access attempts</p>
+                    <a href="{{url_for('logs')}}" class="button">View Logs</a>
+                </div>
+            </div>
+        </div>
     </div>
     <script>
         particlesJS.load('particles-js', "{{ url_for('static', filename='particles.json') }}", function() {
             console.log('particles.js loaded - callback');
         });
+
+        // Update datetime
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('datetime').textContent = now.toLocaleString();
+        }
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
     </script>
 </body>
 </html>
