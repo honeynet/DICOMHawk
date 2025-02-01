@@ -3,15 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Logs</title>
+    <title>DICOMHawk - Server Logs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>Server Logs</h1>
-        <pre id="logs">
-            <!-- Logs will be dynamically updated here -->
-        </pre>
+    <div id="particles-js"></div>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
+            <h2>DICOMHawk</h2>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="{{url_for('home')}}" class="nav-link"><i class="fas fa-home"></i>Home</a></li>
+                <li><a href="{{url_for('logs')}}" class="nav-link"><i class="fas fa-list-alt"></i>Logs</a></li>
+                <li><a href="{{url_for('simplified_logs_page')}}" class="nav-link"><i class="fas fa-stream"></i>Simplified Logs</a></li>
+                <li><a href="{{url_for('status')}}" class="nav-link"><i class="fas fa-server"></i>Server Status</a></li>
+            </ul>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="server-status">
+                <span class="status-dot"></span>
+                Server Online
+            </div>
+        </div>
+    </div>
+    <div class="main-content">
+        <div class="header">
+            <div class="header-content">
+                <h1>Server Logs</h1>
+                <p class="subtitle">Detailed system activity monitoring</p>
+            </div>
+            <div class="header-actions">
+                <button class="button" id="refreshLogs">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="dashboard-cards">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>System Status</h3>
+                </div>
+                <div class="card-content">
+                    <p>DICOM Honeypot Active</p>
+                    <div class="status-indicator">
+                        <span class="status-dot"></span>
+                        Protected
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Activity Overview</h3>
+                </div>
+                <div class="card-content">
+                    <p>Monitoring unauthorized access attempts</p>
+                    <a href="{{url_for('logs')}}" class="button">View Logs</a>
+                </div>
+            </div>
+        </div>
+        <div class="logs-wrapper">
+       
+            <div class="logs-container">
+                <pre id="logs" class="logs-content">
+                    <!-- Logs will be dynamically updated here -->
+                </pre>
+            </div>
+        </div>
     </div>
     <script src="{{ url_for('static', filename='all_logs.js') }}"></script>
 </body>
