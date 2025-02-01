@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 // Display grouped logs
                 for (const [sessionId, sessionLogs] of Object.entries(groupedLogs)) {
-                    // Create a row for the session_id
+                   
                     const sessionRow = document.createElement("tr");
                     const sessionCell = document.createElement("td");
                     sessionCell.textContent = `Session ID: ${sessionId}`;
@@ -30,9 +30,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     sessionLogs.forEach(log => {
                         const row = document.createElement("tr");
 
-                        const idCell = document.createElement("td");
-                        idCell.textContent = log.ID || "N/A";
-                        row.appendChild(idCell);
+                       
 
                         const ipCell = document.createElement("td");
                         ipCell.textContent = log.IP || "N/A";
