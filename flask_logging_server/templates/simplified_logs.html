@@ -1,32 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Simplified Logs</title>
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOMHawk - Simplified Logs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Simplified Logs</h1>
-    <div id="logs-container">
-        <table id="logs-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>IP</th>
-                    <th>Port</th>
-                    <th>Version</th>
-                    <th>Command</th>
-                    <th>Type</th>
-                    <th>Term</th>
-                    <th>Matches</th>
-                    <th>Status</th>
-                    <th>Level</th>
-                    <th>Message</th>
-                    <th>Time</th>
-                </tr>
-            </thead>
-            <tbody>
-            </tbody>
-        </table>
+    <div id="particles-js"></div>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
+            <h2>DICOMHawk</h2>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="{{url_for('home')}}" class="nav-link"><i class="fas fa-home"></i>Home</a></li>
+                <li><a href="{{url_for('logs')}}" class="nav-link"><i class="fas fa-list-alt"></i>Logs</a></li>
+                <li><a href="{{url_for('simplified_logs_page')}}" class="nav-link"><i class="fas fa-stream"></i>Simplified Logs</a></li>
+                <li><a href="{{url_for('status')}}" class="nav-link"><i class="fas fa-server"></i>Server Status</a></li>
+            </ul>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="server-status">
+                <span class="status-dot"></span>
+                Server Online
+            </div>
+        </div>
+    </div>
+    <div class="main-content">
+        <div class="header">
+            <div class="header-content">
+                <h1>Simplified Logs</h1>
+                <p class="subtitle">Streamlined activity overview</p>
+            </div>
+            <div class="header-actions">
+                <div class="export-button">
+                    <button class="button" id="exportLogs">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="dashboard-cards">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>System Status</h3>
+                </div>
+                <div class="card-content">
+                    <p>DICOM Honeypot Active</p>
+                    <div class="status-indicator">
+                        <span class="status-dot"></span>
+                        Protected
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Activity Overview</h3>
+                </div>
+                <div class="card-content">
+                    <p>Monitoring unauthorized access attempts</p>
+                    <a href="{{url_for('logs')}}" class="button">View Logs</a>
+                </div>
+            </div>
+        </div>
+        <div class="table-container">
+      
+            <div class="table-wrapper">
+                <table id="logs-table">
+                    <thead>
+                        <tr>
+                           
+                            <th>IP <i class="fas fa-sort"></i></th>
+                            <th>Port <i class="fas fa-sort"></i></th>
+                            <th>Version <i class="fas fa-sort"></i></th>
+                            <th>Command <i class="fas fa-sort"></i></th>
+                            <th>Type <i class="fas fa-sort"></i></th>
+                            <th>Term <i class="fas fa-sort"></i></th>
+                            <th>Matches <i class="fas fa-sort"></i></th>
+                            <th>Status <i class="fas fa-sort"></i></th>
+                            <th>Level <i class="fas fa-sort"></i></th>
+                            <th>Message <i class="fas fa-sort"></i></th>
+                            <th>Time <i class="fas fa-sort"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                      
+                    </tbody>
+                </table>
+            </div>
+    
+        </div>
     </div>
     <script src="{{ url_for('static', filename='logs.js') }}"></script>
 </body>
