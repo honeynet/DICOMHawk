@@ -6,8 +6,11 @@
 </head>
 <body>
     <h1>DICOM Server Status</h1>
-    <div id="status-container">
-        <p id="status">Loading...</p>
+    <div id="status-container" class="status-container">
+        <div id="status-display">
+            <p>Status: <span id="server-status">{{ status }}</span></p>
+            <p id="status-timestamp">Last Updated: {{ last_updated }}</p>
+        </div>
     </div>
     <script src="{{ url_for('static', filename='scripts.js') }}"></script>
 </body>
