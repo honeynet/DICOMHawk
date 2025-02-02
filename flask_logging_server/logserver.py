@@ -1,9 +1,9 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from flask import Flask, jsonify, render_template, send_from_directory
+from flask import Flask, jsonify, request, render_template, send_from_directory
 import os
 import json
-
+from datetime import datetime 
 
 # Set paths for log files
 log_directory = '/app/logs/'
@@ -42,6 +42,11 @@ pynetdicom_logger.addHandler(logging.FileHandler(log_file_path))
 
 app = Flask(__name__)
 
+def get_server_status():
+    return {
+        "status": "running",
+        "last updated": datetime.now().isoformat()
+    }
 @app.route('/')
 def landing_page():
   
@@ -57,7 +62,12 @@ def logs():
 
 @app.route('/status')
 def status():
-    return jsonify({"status": "running"})
+    server_status = get_server_status()
+    if request.headers.get('Accept') == 'application/json':
+        return jsonify(server_status)
+    return render_template('status.html',
+                            status=server_status["status"],
+                            last_updated=server_status["last_updated"])
 
 @app.route('/logs/all')
 def all_logs():
