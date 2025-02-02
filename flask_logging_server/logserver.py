@@ -56,7 +56,7 @@ def landing_page():
 def home():
     try:
         server_status = get_server_status()
-        return render_template('status.html', 
+        return render_template('home.html', 
                          status=server_status["status"],
                          last_updated=server_status["last_updated"])
     except Exception as e:

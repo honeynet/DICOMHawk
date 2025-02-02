@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>DICOM Server Status</title>
+    <title>DICOMHawk Home</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>DICOM Server Status</h1>
-    <div id="status-container" class="status-container">
+    <h1>DICOMHawk Dashboard</h1>
+    <div id="status-container">
         <div id="status-display">
-            <p>Status: <span id="server-status">{{ status }}</span></p>
+            <p>Server Status: <span id="server-status">{{ status }}</span></p>
             <p id="status-timestamp">Last Updated: {{ last_updated }}</p>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='status.js') }}"></script>
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
 </body>
 </html>
