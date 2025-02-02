@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DICOMHawk</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
