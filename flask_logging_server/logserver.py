@@ -45,7 +45,7 @@ app = Flask(__name__)
 def get_server_status():
     return {
         "status": "running",
-        "last updated": datetime.now().isoformat()
+        "last_updated": datetime.now().isoformat()
     }
 @app.route('/')
 def landing_page():
@@ -54,7 +54,14 @@ def landing_page():
 
 @app.route('/home')
 def home():
-    return render_template('status.html')
+    try:
+        server_status = get_server_status()
+        return render_template('status.html', 
+                         status=server_status["status"],
+                         last_updated=server_status["last_updated"])
+    except Exception as e:
+        exception_logger.error(f"Error in home route: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/logs')
 def logs():
@@ -62,12 +69,16 @@ def logs():
 
 @app.route('/status')
 def status():
-    server_status = get_server_status()
-    if request.headers.get('Accept') == 'application/json':
-        return jsonify(server_status)
-    return render_template('status.html',
-                            status=server_status["status"],
-                            last_updated=server_status["last_updated"])
+    try:
+        server_status = get_server_status()
+        if request.headers.get('Accept') == 'application/json':
+            return jsonify(server_status)
+        return render_template('status.html', 
+                             status=server_status["status"],
+                             last_updated=server_status["last_updated"])
+    except Exception as e:
+        exception_logger.error(f"Error in status route: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/logs/all')
 def all_logs():
