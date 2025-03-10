@@ -112,12 +112,138 @@ nav ul li a:hover {
 
 footer {
     background-color: #000000;
-    padding: 10px;
+    padding: 20px;
     color: white;
     margin-top: 20px;
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    position: relative;
+    z-index: 1;
+    width: 100%;
 }
+
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.footer-links {
+    display: flex;
+    gap: 20px;
+}
+
+.footer-links a {
+    color: white;
+    text-decoration: none;
+    transition: opacity 0.3s ease;
+}
+
+.footer-links a:hover {
+    opacity: 0.8;
+}
+
+.footer-version {
+    color: #ffffff80;
+}
+
+#logs-container {
+    padding: 20px;
+    background-color: white;
+    margin: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 80vh;
+}
+
+#logs-table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: separate;
+    border-spacing: 4px;
+    table-layout: fixed;
+}
+
+#logs-table th {
+    padding: 18px 30px;
+    text-align: center;
+    background: linear-gradient(45deg, #2c3e50, #3498db);
+    border: 3px solid #2980b9;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 1px;
+    color: #ffffff;
+    min-width: 120px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    text-transform: uppercase;
+    margin: 0 4px;
+    border-radius: 6px 6px 0 0;
+    transition: all 0.3s ease;
+}
+
+#logs-table th:hover {
+    background: linear-gradient(45deg, #3498db, #2c3e50);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+}
+
+#logs-table td {
+    padding: 12px 25px;
+    border: 2px solid #e0e0e0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    font-size: 14px;
+}
+
+#logs-table tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+
+#logs-table tbody tr:hover {
+    background-color: #e3f2fd;
+    transition: background-color 0.3s ease;
+}
+
+#logs-table th:not(:last-child),
+#logs-table td:not(:last-child) {
+    border-right: 3px solid #2980b9;
+}
+
+/* Additional spacing between columns */
+#logs-table th::after {
+    content: '';
+    position: absolute;
+    right: -4px;
+    top: 0;
+    height: 100%;
+    width: 4px;
+    background-color: white;
+}
+
+
+
+@media (max-width: 768px) {
+    .footer-content {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .footer-links {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
 
 #logs-table th {
     padding: 10px 15px;
@@ -126,7 +252,7 @@ footer {
     top: 0;
     background-color: #f4f4f4;
     z-index: 1;
-    border-right: 1px solid #ddd;
+    border-right: 1px solid #ddd; 
     font-weight: bold;
     min-width: fit-content;
 }
@@ -135,11 +261,11 @@ footer {
     table-layout: auto;
     min-width: 100%;
     border-spacing: 0;
-    border-collapse: separate;
+    border-collapse: separate; 
 }
 
 #logs-container {
-    overflow-x: auto; 
+    overflow-x: auto;
     padding: 20px;
     background-color: white;
     margin: 20px;
