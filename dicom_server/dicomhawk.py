@@ -334,7 +334,7 @@ def start_dicom_server():
     if is_port_in_use(dicom_port):
         print(f"Port {dicom_port} is in use. Please free up the port and try again.")
         return
-    ae.start_server(('172.29.0.3', dicom_port), evt_handlers=handlers)
+    ae.start_server(('0.0.0.0', dicom_port), evt_handlers=handlers)
 
 
 

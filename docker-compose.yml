@@ -1,13 +1,12 @@
-version: '3.8'  # Use the latest version of Compose
- 
+
 services:
   logserver:
     build: ./flask_logging_server/.
     volumes:
       - shared_data:/app
     networks:
-      host:
-        ipv4_address: 172.29.0.2
+      custom_network:
+        ipv4_address: 172.28.0.2
     ports:
       - "5000:5000"
     depends_on:
@@ -15,24 +14,31 @@ services:
  
   dicomhawk:
     environment:
-      - ENABLE_LOGGING=true
-      - Docker_ENV=true
+      - ENABLE_LOGGING= ${ENABLE_LOGGING}
+      - Docker_ENV= ${Docker_ENV}
     build: ./dicom_server/.
     volumes:
       - shared_data:/app
     ports:
       - "11112:11112"
     networks:
-      host:
-        ipv4_address: 172.29.0.3
+      custom_network:
+        ipv4_address: 172.28.0.3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11112/health"]
+      interval: 30s
+      retries: 3
+      start_period: 10s
+      timeout: 5s
+
 volumes:
   shared_data:
     driver: local
  
  
 networks:
-  host:
+  custom_network:
     ipam:
       config:
-        - subnet: 172.29.0.0/16
-          gateway: 172.29.0.1
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
