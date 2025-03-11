@@ -67,10 +67,6 @@ th {
     background-color: #f4f4f4;
 }
 
-tbody tr:nth-child(even) {
-    background-color: #f9f9f9;
-}
-
 header {
     background-color: #000000;
     padding: 20px;

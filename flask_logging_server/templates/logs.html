@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Logs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="../static/dark_mode.css">
 </head>
 <body>
     <div class="nav-bar">
@@ -15,11 +16,13 @@
         <a href="/status">Server Status</a>
     </div>
     <div class="container">
+        <button class="toggle-btn" onclick="toggleDarkMode()">Toggle Dark Mode</button>
         <h1>Server Logs</h1>
         <pre id="logs">
             <!-- Logs will be dynamically updated here -->
         </pre>
     </div>
     <script src="{{ url_for('static', filename='all_logs.js') }}"></script>
+    <script src="../static/dark_mode.js"></script>
 </body>
 </html>

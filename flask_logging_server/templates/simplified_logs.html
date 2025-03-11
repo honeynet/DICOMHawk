@@ -3,6 +3,7 @@
 <head>
     <title>Simplified Logs</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="../static/dark_mode.css">
 </head>
 <body>
     <div class="nav-bar">
@@ -12,6 +13,8 @@
         <a href="/logs/simplified_page">Simplified Logs</a>
         <a href="/status">Server Status</a>
     </div>
+    <button class="toggle-btn" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+
     <h1>Simplified Logs</h1>
     <div id="logs-container">
         <table id="logs-table">
@@ -36,5 +39,6 @@
         </table>
     </div>
     <script src="{{ url_for('static', filename='logs.js') }}"></script>
+    <script src="../static/dark_mode.js"></script>
 </body>
 </html>
