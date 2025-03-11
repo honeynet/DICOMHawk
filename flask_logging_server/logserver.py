@@ -1,9 +1,9 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from flask import Flask, jsonify, render_template, send_from_directory
+from flask import Flask, jsonify, render_template, send_from_directory, request
 import os
 import json
-
+from datetime import datetime
 
 # Set paths for log files
 log_directory = '/app/logs/'
@@ -42,6 +42,19 @@ pynetdicom_logger.addHandler(logging.FileHandler(log_file_path))
 
 app = Flask(__name__)
 
+def get_server_status():
+    try:
+        return {
+            "status": "running",
+            "last_updated": datetime.now().isoformat()
+        }
+    except Exception as e:
+        exception_logger.error(f"Error getting server status: {e}")
+        return {
+            "status": "error",
+            "last_updated": None,
+            "error": str(e)
+        }
 @app.route('/')
 def landing_page():
   
@@ -49,7 +62,14 @@ def landing_page():
 
 @app.route('/home')
 def home():
-    return render_template('status.html')
+    try:
+        server_status = get_server_status()
+        return render_template('home.html', 
+                         status=server_status["status"],
+                         last_updated=server_status["last_updated"])
+    except Exception as e:
+        exception_logger.error(f"Error in home route: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/logs')
 def logs():
@@ -57,7 +77,16 @@ def logs():
 
 @app.route('/status')
 def status():
-    return jsonify({"status": "running"})
+    try:
+        server_status = get_server_status()
+        if request.headers.get('Accept') == 'application/json':
+            return jsonify(server_status)
+        return render_template('status.html', 
+                             status=server_status["status"],
+                             last_updated=server_status["last_updated"])
+    except Exception as e:
+        exception_logger.error(f"Error in status route: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/logs/all')
 def all_logs():

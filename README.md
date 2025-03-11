@@ -23,7 +23,7 @@ DICOMHawk is a powerful and efficient honeypot for DICOM servers, designed to at
 1. **Clone the repository**:
 
     ```bash
-    git clone https://github.com/gtheodoridis/DICOMHawk.git
+    git clone https://github.com/honeynet/DICOMHawk.git
     cd dicomhawk
     ```
 
