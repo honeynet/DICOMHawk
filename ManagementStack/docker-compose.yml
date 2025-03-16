@@ -1,0 +1,41 @@
+
+services:
+  logstash:
+    image: 6711/logstash3:1.0.0
+    environment:
+       REDIS_HOST : "localhost"
+    entrypoint: ["/bin/bash", "/sub.sh"]
+    depends_on:
+      - elastiksearch
+    networks:
+      host:
+        ipv4_address: 172.18.0.2
+        
+  elastiksearch:
+    image: 6711/elasticsearch
+    entrypoint: ["/bin/bash", "/entry.sh"]
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      host:
+        ipv4_address: 172.18.0.3
+
+  kibana:
+    image: 6711/kibana
+    depends_on:
+      - elastiksearch
+    ports:
+      - "5601:5601"
+    networks:
+      host:
+        ipv4_address: 172.18.0.4
+
+
+networks:
+  host:
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
+    

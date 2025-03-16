@@ -1,0 +1,30 @@
+Exception at 01-03-2025 : 21-11-23
+.............................................
+In dicomdb
+Message: Exception in handling C-FIND operation
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 98, in handle_find
+    matches = self.dicomdb.query_all_studies()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicomdb.py", line 67, in query_all_studies
+    1 / 0
+    ~~^~~
+ZeroDivisionError: division by zero
+
+Exception at 01-03-2025 : 21-46-56
+.............................................
+In dicomdb
+Message: Exception in handling C-FIND operation
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 98, in handle_find
+    matches = self.dicomdb.query_all_studies()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicomdb.py", line 67, in query_all_studies
+    1 / 0
+    ~~^~~
+ZeroDivisionError: division by zero
+

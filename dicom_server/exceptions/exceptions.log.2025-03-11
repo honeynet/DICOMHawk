@@ -1,0 +1,268 @@
+Exception at 11-03-2025 : 15-12-02
+.............................................
+In pynetdicom.association
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 34, in handle_assoc
+    print("AAAAAAA", f"{attr}: {getattr(requestor, attr, None)}")
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\association.py", line 3682, in accepted_common_extended
+    raise RuntimeError(
+RuntimeError: 'accepted_common_extended' is only available for the 'acceptor'
+
+Exception at 11-03-2025 : 15-12-02
+.............................................
+In pynetdicom.association
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 34, in handle_assoc
+    print("AAAAAAA", f"{attr}: {getattr(requestor, attr, None)}")
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\association.py", line 3682, in accepted_common_extended
+    raise RuntimeError(
+RuntimeError: 'accepted_common_extended' is only available for the 'acceptor'
+
+Exception at 11-03-2025 : 15-15-07
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    for attr in all_attributes["_user_info"]:
+                ~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+TypeError: list indices must be integers or slices, not str
+
+Exception at 11-03-2025 : 15-15-07
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    for attr in all_attributes["_user_info"]:
+                ~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+TypeError: list indices must be integers or slices, not str
+
+Exception at 11-03-2025 : 15-15-49
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    for attr in all_attributes._user_info:
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute '_user_info'
+
+Exception at 11-03-2025 : 15-15-49
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    for attr in all_attributes._user_info:
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute '_user_info'
+
+Exception at 11-03-2025 : 15-31-55
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 31, in handle_assoc
+    print("AAAAA", event.assoc.user_information.implementation_version_name)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Association' object has no attribute 'user_information'
+
+Exception at 11-03-2025 : 15-31-55
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 31, in handle_assoc
+    print("AAAAA", event.assoc.user_information.implementation_version_name)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Association' object has no attribute 'user_information'
+
+Exception at 11-03-2025 : 15-35-10
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    user_info = cast("UserInformationItem", event.assoc_ac.user_information)
+                                            ^^^^^^^^^^^^^^
+AttributeError: 'Event' object has no attribute 'assoc_ac'
+
+Exception at 11-03-2025 : 15-35-10
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    user_info = cast("UserInformationItem", event.assoc_ac.user_information)
+                                            ^^^^^^^^^^^^^^
+AttributeError: 'Event' object has no attribute 'assoc_ac'
+
+Exception at 11-03-2025 : 15-35-48
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    user_info = cast("UserInformationItem", event.assoc.user_information)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Association' object has no attribute 'user_information'
+
+Exception at 11-03-2025 : 15-35-48
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 33, in handle_assoc
+    user_info = cast("UserInformationItem", event.assoc.user_information)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Association' object has no attribute 'user_information'
+
+Exception at 11-03-2025 : 15-38-28
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 34, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_AC", event.pdu)
+                                      ^^^^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-38-28
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 34, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_AC", event.pdu)
+                                      ^^^^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-40-18
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 36, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_AC", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-40-18
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 36, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_AC", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-41-14
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 37, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_AC", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-41-14
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 37, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_AC", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-51-46
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 37, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_RQ", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 15-51-46
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 37, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_RQ", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 16-08-37
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 37, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_RQ", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+
+Exception at 11-03-2025 : 16-08-37
+.............................................
+In dicom_handlers
+Message: Unexpected error while handling association
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\dicom_handlers.py", line 37, in handle_assoc
+    assoc_ac = cast("A_ASSOCIATE_RQ", ev.pdu)
+                                      ^^^^^^
+AttributeError: 'Event' object has no attribute 'pdu'
+

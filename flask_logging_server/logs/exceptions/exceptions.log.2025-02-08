@@ -1,0 +1,931 @@
+Exception at 08-02-2025 : 13-40-05
+.............................................
+In redis.connection
+Message: Exception while checking IPs list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-40-09
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 20, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-40-09
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+
+Exception at 08-02-2025 : 13-40-13
+.............................................
+In redis.connection
+Message: Exception while adding a request information to Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 34, in add_request_data
+    self.redis_client.rpush("requests", redis_log_data)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-52-33
+.............................................
+In redis.connection
+Message: Exception while checking IPs list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-52-37
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 20, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-52-37
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+
+Exception at 08-02-2025 : 13-52-41
+.............................................
+In redis.connection
+Message: Exception while adding a request information to Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 34, in add_request_data
+    self.redis_client.rpush("requests", redis_log_data)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-54-05
+.............................................
+In redis.connection
+Message: Exception while checking IPs list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-54-09
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 20, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-54-09
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+
+Exception at 08-02-2025 : 13-54-13
+.............................................
+In redis.connection
+Message: Exception while adding a request information to Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 34, in add_request_data
+    self.redis_client.rpush("requests", redis_log_data)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-56-36
+.............................................
+In redis.connection
+Message: Exception while checking IPs list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-56-41
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 20, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-56-41
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+
+Exception at 08-02-2025 : 13-56-45
+.............................................
+In redis.connection
+Message: Exception while adding a request information to Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 34, in add_request_data
+    self.redis_client.rpush("requests", redis_log_data)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-57-20
+.............................................
+In redis.connection
+Message: Exception while checking IPs list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-57-24
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 20, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-57-24
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+
+Exception at 08-02-2025 : 13-57-28
+.............................................
+In redis.connection
+Message: Exception while adding a request information to Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 34, in add_request_data
+    self.redis_client.rpush("requests", redis_log_data)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-58-24
+.............................................
+In redis.connection
+Message: Exception while checking IPs list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-58-28
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 20, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 13-58-28
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+
+Exception at 08-02-2025 : 13-58-32
+.............................................
+In redis.connection
+Message: Exception while adding a request information to Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 34, in add_request_data
+    self.redis_client.rpush("requests", redis_log_data)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 14-07-47
+.............................................
+In redis.connection
+Message: Exception while retrieving IPs list from Redis
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 14, in is_ip_scanned
+    return ip.encode() in self.redis_client.lrange("scannedIPs", 0, -1)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2748, in lrange
+    return self.execute_command("LRANGE", name, start, end, keys=[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 14-07-51
+.............................................
+In redis.connection
+Message: Exception while adding a scanned IP to the scanned list
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 357, in connect
+    sock = self.retry.call_with_retry(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\retry.py", line 62, in call_with_retry
+    return do()
+           ^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 358, in <lambda>
+    lambda: self._connect(), lambda error: self.disconnect(error)
+            ^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 730, in _connect
+    raise err
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 718, in _connect
+    sock.connect(socket_address)
+ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\redis_handler.py", line 22, in add_scanned_ip
+    self.redis_client.rpush("scannedIPs", ip)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\commands\core.py", line 2818, in rpush
+    return self.execute_command("RPUSH", name, *values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 559, in execute_command
+    return self._execute_command(*args, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\client.py", line 565, in _execute_command
+    conn = self.connection or pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 1422, in get_connection
+    connection.connect()
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\redis\connection.py", line 363, in connect
+    raise ConnectionError(self._error_message(e))
+redis.exceptions.ConnectionError: Error 10061 connecting to localhost:6379. No connection could be made because the target machine actively refused it.
+
+Exception at 08-02-2025 : 14-07-51
+.............................................
+In dicom_session_manager
+Message: Exception while getting session requestor reputation data
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\dicom_session_manager.py", line 47, in get_session_requestor_reputation
+    rep_dat = self.threat_intelligence.get_reputation_data(ip, ip_scanned)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ThreatIntelligence.get_reputation_data() missing 1 required positional argument: 'ip_scanned'
+

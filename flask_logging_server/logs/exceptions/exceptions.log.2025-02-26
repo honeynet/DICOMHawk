@@ -1,0 +1,38 @@
+Exception at 26-02-2025 : 08-52-42
+.............................................
+In dicom_application
+Message: Unexpected error while registering the DICOM handlers
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_application.py", line 67, in register_dicom_handlers
+    10 / 0
+    ~~~^~~
+ZeroDivisionError: division by zero
+
+
+
+Exception at 26-02-2025 : 08-55-10
+.............................................
+In dicom_application
+Message: Unexpected error while registering the DICOM handlers
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_application.py", line 67, in register_dicom_handlers
+    10 / 0
+    ~~~^~~
+ZeroDivisionError: division by zero
+
+Exception at 26-02-2025 : 12-45-59
+.............................................
+In dicom_application
+Message: Unexpected error while registering the DICOM handlers
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_application.py", line 67, in register_dicom_handlers
+    10 / 0
+    ~~~^~~
+ZeroDivisionError: division by zero
+

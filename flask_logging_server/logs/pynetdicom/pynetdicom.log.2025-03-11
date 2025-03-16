@@ -1,0 +1,1438 @@
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 1)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 1
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 2)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 2
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 3)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 3
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 4)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 4
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 5)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 5
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 7)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 7
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 8)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 8
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 9)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 9
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 10)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 10
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 11)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 11
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 12)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 12
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 13)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 13
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 14)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 14
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 15)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 15
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 16)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 16
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 17)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 17
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 18)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 18
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+The received PDU is shorter than expected (256 of 17670 bytes received)
+The received PDU is shorter than expected (256 of 17670 bytes received)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Their Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    PYNETDICOM
+Called Application Name:     ANY-SCP
+Their Max PDU Receive Size:  16382
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =CT Image Storage
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =CT Image Storage
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Association Aborted (A-P-ABORT)
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-user
+Abort Reason: (no value available)
+============================= END A-ABORT PDU ==============================
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-user
+Abort Reason: (no value available)
+============================= END A-ABORT PDU ==============================
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-user
+Abort Reason: (no value available)
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x50'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-user
+Abort Reason: (no value available)
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x52'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x32'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x35'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x37'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x38'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x2E'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Unknown PDU type received '0x20'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-user
+Abort Reason: (no value available)
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x31'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x30'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x38'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x2E'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x30'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x2E'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x51'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0xFF'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x31'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x30'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x37'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x32'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x2E'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x2E'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+The received PDU is shorter than expected (39 of 52742 bytes received)
+The received PDU is shorter than expected (39 of 52742 bytes received)
+The received PDU is shorter than expected (48 of 52742 bytes received)
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-user
+Abort Reason: (no value available)
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x63'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x74'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x20'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x45'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x20'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x00'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x31'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x30'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Unknown PDU type received '0x38'
+Abort Parameters:
+=========================== OUTGOING A-ABORT PDU ===========================
+Abort Source: DUL service-provider
+Abort Reason: Unexpected PDU
+============================= END A-ABORT PDU ==============================
+Connection closed before the entire PDU was received
+[WinError 10054] An existing connection was forcibly closed by the remote host
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\dul.py", line 268, in _read_pdu_data
+    bytestream.extend(self.socket.recv(6))
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\transport.py", line 402, in recv
+    bytes_read = self.socket.recv(bufsize)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+The received PDU is shorter than expected (211 of 52742 bytes received)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 19)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 19
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
