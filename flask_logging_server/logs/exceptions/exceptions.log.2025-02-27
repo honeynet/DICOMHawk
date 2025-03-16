@@ -1,0 +1,380 @@
+Exception at 27-02-2025 : 15-52-58
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), self.period_unit)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuite'
+
+Exception at 27-02-2025 : 15-53-52
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), self.period_unit)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuites'
+
+Exception at 27-02-2025 : 15-54-19
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), self.period_unit)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuit'
+
+Exception at 27-02-2025 : 15-54-38
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), self.period_unit)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuite'
+
+Exception at 27-02-2025 : 15-55-29
+.............................................
+In schedule
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), "minute")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\schedule\__init__.py", line 339, in minute
+    raise IntervalError("Use minutes instead of minute")
+schedule.IntervalError: Use minutes instead of minute
+
+Exception at 27-02-2025 : 15-56-29
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), str(self.period_unit))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuites'
+
+Exception at 27-02-2025 : 15-57-31
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), "minuites")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuites'
+
+Exception at 27-02-2025 : 15-57-51
+.............................................
+In custom_units.tcia_management
+Message: Unexpected error while running TCIA files retrieve scheduler
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 38, in schedule_files_retrieval
+    schedule_unit = getattr(schedule.every(self.period), "minuite")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'minuite'
+
+Exception at 27-02-2025 : 17-24-46
+.............................................
+In utilities.tcia_util
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 82, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 194, in stage_old_files
+    for folder in os.listdir(tcia_dir):
+                  ^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] The system cannot find the path specified: './tcia_data'
+
+Exception at 27-02-2025 : 18-04-49
+.............................................
+In shutil
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 825, in move
+    os.rename(src, real_dst)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\US_Lars Iversen_1.dcm' -> './storage/stagger\\DICOM\\US_Lars Iversen_1.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 846, in move
+    os.unlink(src)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\US_Lars Iversen_1.dcm'
+
+Exception at 27-02-2025 : 18-06-32
+.............................................
+In shutil
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/stagger\DICOM\US_Lars Iversen_1.dcm' already exists
+
+Exception at 27-02-2025 : 18-07-55
+.............................................
+In shutil
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/stagger\DICOM\US_Lars Iversen_1.dcm' already exists
+
+Exception at 27-02-2025 : 18-14-51
+.............................................
+In shutil
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 825, in move
+    os.rename(src, real_dst)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\US_Jarl Frederiksen_1.dcm' -> './storage/stagger\\DICOM\\US_Jarl Frederiksen_1.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 846, in move
+    os.unlink(src)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\US_Jarl Frederiksen_1.dcm'
+
+Exception at 27-02-2025 : 18-14-51
+.............................................
+In shutil
+Message: Unexpected error while restoring files
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 825, in move
+    os.rename(src, real_dst)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\US_Jarl Frederiksen_1.dcm' -> './storage/stagger\\DICOM\\US_Jarl Frederiksen_1.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 846, in move
+    os.unlink(src)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\US_Jarl Frederiksen_1.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 207, in restore_old_files
+    shutil.move(full_file_path, storage_dir)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/dicom_storage\US_Jarl Frederiksen_1.dcm' already exists
+
+Exception at 27-02-2025 : 18-20-04
+.............................................
+In shutil
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 825, in move
+    os.rename(src, real_dst)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' -> './storage/stagger\\DICOM\\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 846, in move
+    os.unlink(src)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm'
+
+Exception at 27-02-2025 : 18-20-05
+.............................................
+In shutil
+Message: Unexpected error while restoring files
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 825, in move
+    os.rename(src, real_dst)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' -> './storage/stagger\\DICOM\\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 846, in move
+    os.unlink(src)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: './storage/dicom_storage\\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 207, in restore_old_files
+    shutil.move(full_file_path, storage_dir)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/dicom_storage\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' already exists
+
+Exception at 27-02-2025 : 18-28-16
+.............................................
+In shutil
+Message: Unexpected error while stagging files
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/stagger\DICOM\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' already exists
+
+Exception at 27-02-2025 : 18-28-51
+.............................................
+In shutil
+Message: Unexpected error while stagging files
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/stagger\DICOM\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' already exists
+
+Exception at 27-02-2025 : 18-28-51
+.............................................
+In shutil
+Message: Changing Dicom files with TCIA files failed: Rolling back changes
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/stagger\DICOM\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' already exists
+
+Exception at 27-02-2025 : 18-28-51
+.............................................
+In shutil
+Message: Unexpected error while restoring files
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 85, in change_dicom_files
+    tcia_util.stage_old_files(
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 193, in stage_old_files
+    shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/stagger\DICOM\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' already exists
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\utilities\tcia_util.py", line 210, in restore_old_files
+    shutil.move(full_file_path, storage_dir)
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\shutil.py", line 823, in move
+    raise Error("Destination path '%s' already exists" % real_dst)
+shutil.Error: Destination path './storage/dicom_storage\OPT_Ronnie Nikolajsen_compressed_MPEG4AV.dcm' already exists
+
+Exception at 27-02-2025 : 19-35-11
+.............................................
+In pydicom.dataset
+Message: Unexpected error while injecting canary token
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 234, in inject_pdf_canary_token
+    f"DICOM file for Patient: {dataset.PatientName},  modality: {dataset.moadality} injected with pdf canary token"
+                                                                 ^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydicom\dataset.py", line 908, in __getattr__
+    return object.__getattribute__(self, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'FileDataset' object has no attribute 'moadality'
+
+Exception at 27-02-2025 : 19-35-11
+.............................................
+In pydicom.dataset
+Message: Unexpected error while injecting canary token
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 234, in inject_pdf_canary_token
+    f"DICOM file for Patient: {dataset.PatientName},  modality: {dataset.moadality} injected with pdf canary token"
+                                                                 ^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydicom\dataset.py", line 908, in __getattr__
+    return object.__getattribute__(self, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'FileDataset' object has no attribute 'moadality'
+
+Exception at 27-02-2025 : 19-35-11
+.............................................
+In pydicom.dataset
+Message: Unexpected error while injecting canary token
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\custom_units\tcia_management.py", line 234, in inject_pdf_canary_token
+    f"DICOM file for Patient: {dataset.PatientName},  modality: {dataset.moadality} injected with pdf canary token"
+                                                                 ^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydicom\dataset.py", line 908, in __getattr__
+    return object.__getattribute__(self, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'FileDataset' object has no attribute 'moadality'
+

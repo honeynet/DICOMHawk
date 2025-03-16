@@ -1,0 +1,103 @@
+Exception at 28-02-2025 : 10-06-03
+.............................................
+In dicom_session_manager
+Message: Unexpected error while collecting DICOM session information
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_session_manager.py", line 100, in collect_session_info
+    current_time = datetime.strptime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: strptime() argument 1 must be str, not datetime.datetime
+
+Exception at 28-02-2025 : 10-06-03
+.............................................
+In dicom_session_manager
+Message: Unexpected error while collecting DICOM session information
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_session_manager.py", line 100, in collect_session_info
+    current_time = datetime.strptime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: strptime() argument 1 must be str, not datetime.datetime
+
+Exception at 28-02-2025 : 10-06-03
+.............................................
+In dicom_session_manager
+Message: Unexpected error while collecting DICOM session information
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_session_manager.py", line 100, in collect_session_info
+    current_time = datetime.strptime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: strptime() argument 1 must be str, not datetime.datetime
+
+Exception at 28-02-2025 : 10-47-20
+.............................................
+In dicom_session_manager
+Message: Unexpected error while collecting DICOM session information
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_session_manager.py", line 106, in collect_session_info
+    print("Timezone Name:             ", current_time.tzname())
+                                         ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'tzname'
+
+Exception at 28-02-2025 : 10-47-20
+.............................................
+In dicom_session_manager
+Message: Unexpected error while collecting DICOM session information
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_session_manager.py", line 106, in collect_session_info
+    print("Timezone Name:             ", current_time.tzname())
+                                         ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'tzname'
+
+Exception at 28-02-2025 : 10-47-20
+.............................................
+In dicom_session_manager
+Message: Unexpected error while collecting DICOM session information
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_session_manager.py", line 106, in collect_session_info
+    print("Timezone Name:             ", current_time.tzname())
+                                         ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'tzname'
+
+Exception at 28-02-2025 : 11-36-51
+.............................................
+In db
+Message: Exception in STUDY level query
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicomdb.py", line 99, in query_study_level
+    matchedInstances = db.search(
+                       ^^^^^^^^^^
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\db.py", line 475, in search
+    return _search_qr(model, identifier, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\db.py", line 497, in _search_qr
+    _check_identifier(identifier, model)
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\db.py", line 357, in _check_identifier
+    raise InvalidIdentifier("The Identifier contains no keys")
+db.InvalidIdentifier: The Identifier contains no keys
+
+Exception at 28-02-2025 : 11-36-51
+.............................................
+In dicom_handlers
+Message: Exception in handling C-FIND operation
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\dicom_server\core\dicom_handlers.py", line 128, in handle_find
+    {session_keys.MATCHES.key: len(matches)}, True
+                               ^^^^^^^^^^^^
+TypeError: object of type 'NoneType' has no len()
+

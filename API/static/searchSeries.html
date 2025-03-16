@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Series</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f3f6f9;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            color: #1f4e79;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table, th, td {
+            border: 1px solid #d3d3d3;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #e9eef2;
+            color: #1f4e79;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9fbfd;
+        }
+
+        #return-button {
+            position: absolute;
+            top: 10px;  
+            left: 10px;
+
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 12px 20px; 
+            text-align: center; 
+            display: inline-block; 
+            font-size: 16px; 
+            margin: 4px 2px; 
+            cursor: pointer; 
+            border-radius: 5px; 
+        }
+
+        #return-button:hover {
+            background-color: #0056b3; /* Darker green on hover */
+        }
+        /* Align the button to the right */
+        .button-container {
+            text-align: right; /* Aligns text (button) to the right */
+            margin-top: 10px; /* Space above the button */
+        }
+
+        
+
+        
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/sql-wasm.js"></script>
+
+    <!-- <script src='/dbcontroller.mjs' type="module"></script>
+    <script type="module">
+         import { getAllStudies } from '/dbcontroller.mjs';
+         window.onload = function(){
+            console.log("ddddddddddd")
+            const popdata = getAllStudies();
+            console.log(popdata)
+         };
+    </script> -->
+</head>
+<body>
+    <div class="container">
+        <h2>Series</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Series Instance UID</th>
+                    <th>Modality</th>
+                    <th>Series Number</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                <!-- Placeholder for data rows -->
+                <!-- <tr>
+                    <td>2023-10-26</td>
+                    <td>14:30</td>
+                    <td>12345</td>
+                    <td>A1B2C3</td>
+                </tr> -->
+                <!-- <tr>
+                    <td>2023-10-27</td>
+                    <td>15:45</td>
+                    <td>67890</td>
+                    <td>D4E5F6</td>
+                </tr> -->
+            </tbody>
+        </table>
+    </div>
+    <div class="button-container">
+        <button id="return-button">Return</button>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () =>{
+            fetch('/main/series')
+                .then(response => response.json())
+                .then(data=>{
+                    const tableBody = document.getElementById('table-body');
+                    data.forEach(row=>{
+                        const tr = document.createElement('tr');
+                        tr.innerHTML=`
+                        <td>${row.series_instance_uid}</td>
+                        <td>${row.modality}</td>
+                        <td>${row.series_number}</td>
+                        `;
+                        
+                        tableBody.appendChild(tr);
+                        
+
+            });
+        })
+        .catch(error=> console.error('Error. Data were not fetched: ',error));
+        });
+
+        document.getElementById('return-button').addEventListener('click', () => {
+            window.history.back();
+        });
+        
+    </script>
+
+
+
+</body>
+</html>

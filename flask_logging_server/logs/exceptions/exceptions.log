@@ -1,0 +1,60 @@
+Exception at 01-03-2025 : 12-11-46
+.............................................
+In threat_intelligence_handler
+Message: Unexpected error while building IP reputation object
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\threat_intelligence_handler.py", line 105, in get_reputation_data
+    rep_dat["timestamp"] = str(current_time)
+    ~~~~~~~^^^^^^^^^^^^^
+TypeError: 'str' object does not support item assignment
+
+Exception at 01-03-2025 : 12-17-22
+.............................................
+In threat_intelligence_handler
+Message: Unexpected error while building IP reputation object
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\threat_intelligence_handler.py", line 105, in get_reputation_data
+    rep_dat["timestamp"] = current_time
+    ~~~~~~~^^^^^^^^^^^^^
+TypeError: 'str' object does not support item assignment
+
+Exception at 01-03-2025 : 12-23-01
+.............................................
+In threat_intelligence_handler
+Message: Unexpected error while building IP reputation object
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\threat_intelligence_handler.py", line 113, in get_reputation_data
+    rep_dat["country"] = abusedb_report[2]
+                         ~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+
+Exception at 01-03-2025 : 12-25-09
+.............................................
+In threat_intelligence_handler
+Message: Unexpected error while building IP reputation object
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\threat_intelligence_handler.py", line 114, in get_reputation_data
+    rep_dat["country"] = abusedb_report[2]
+                         ~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+
+Exception at 01-03-2025 : 12-28-23
+.............................................
+In threat_intelligence_handler
+Message: Unexpected error while building IP reputation object
+Traceback :
+ ............
+Traceback (most recent call last):
+  File "C:\Users\45422\Desktop\API_version\ThesisProject2\DICOMHawk_thesis_project\dicom_server\core\threat_intelligence_handler.py", line 117, in get_reputation_data
+    rep_dat["country"] = abusedb_object[2]
+                         ~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+

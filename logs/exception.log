@@ -1,5 +1,0 @@
-Unhandled exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
-Unhandled exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
-Unhandled exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
-Failed to log simplified message: {'ID': '1718028466984566', 'event': 'C-FIND request received', 'Command': 'C-FIND', 'identifier': "(0010, 0010) Patient's Name                      PN: '*'", 'PatientName': '*', 'level': 'info', 'msg': 'Received', 'timestamp': '2024-06-10T16:07:46.985579'} - Object of type PersonName is not JSON serializable
-Failed to log simplified message: {'ID': '1718029029720116', 'Term': '*', 'Type': 'PatientName', 'level': 'info', 'msg': 'C-FIND Search', 'timestamp': '2024-06-10T16:17:09.721116'} - Object of type PersonName is not JSON serializable

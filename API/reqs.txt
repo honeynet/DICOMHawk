@@ -1,0 +1,13 @@
+npm install express ejs
+npm install dotenv
+npm install jsonwebtoken --save
+npm install bcryptjs --save
+npm install axios
+npm install -g concurrently
+npm install cors
+npm install multer
+npm install serve-favicon
+npm install ejs
+npm install express express-session
+npm install date-fns
+npm install redis

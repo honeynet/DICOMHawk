@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload DICOM Files</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .file-list {
+            margin-top: 20px;
+            list-style: none;
+            padding: 0;
+        }
+        .file-list li {
+            padding: 5px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            border-radius: 5px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/form-data@4.0.1/lib/browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fs-js@1.0.6/index.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload DICOM Files</h1>
+        <form id="uploadForm">
+            <label for="dicomFiles">Select DICOM files (you can select multiple):</label>
+            <input type="file" id="dicomFiles" name="dicomFiles" accept=".dcm" multiple>
+            <button type="submit" style="margin-top: 10px;">Upload</button>
+        </form>
+        <ul class="file-list" id="fileList">
+            <!-- Selected files will be listed here -->
+        </ul>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('dicomFiles');
+        const fileList = document.getElementById('fileList');
+        const form = document.getElementById('uploadForm');
+
+
+        document.getElementById('uploadForm').addEventListener('submit', function (e) {
+            event.preventDefault();
+            const response =  fetch('https://api.ipify.org?format=json');
+            const data = response.json();
+            alert('Your public IP is: ' + data.ip);
+            const fileInput = document.getElementById('dicomFiles');
+            const maxFiles = 10;
+
+            if (fileInput.files.length > maxFiles) {
+                e.preventDefault(); // Prevent form submission
+                alert(`You cannot upload more than ${maxFiles} files at a time.`);
+
+                const dataTransfer = new DataTransfer();
+                for (let i = 0; i < maxFiles; i++) {
+                    dataTransfer.items.add(fileInput.files[i]);
+                }
+                fileInput.files = dataTransfer.files;
+               
+            }
+        });
+
+
+        // Display selected files
+        fileInput.addEventListener('change', () => {
+            fileList.innerHTML = ''; // Clear previous list
+            Array.from(fileInput.files).forEach(file => {
+                const listItem = document.createElement('li');
+                listItem.textContent = `${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                fileList.appendChild(listItem);
+            });
+        });
+
+        
+        form.addEventListener('submit', event => {
+        
+            fetch('/get-ip')
+        .then(response => response.json())
+        .then(data => {
+            let ip = data.ip;
+            let port=data.port
+        
+            
+            
+            if (fileInput.files.length === 0) {
+                alert('Please make your file selection.');
+                return; 
+            }
+
+            const formData = new FormData();
+            
+            Array.from(fileInput.files).forEach(file => {
+                
+                //This file size here: think of it again. What should the size be?
+                if (file.size > 5 * 1024 * 1024) { // 5 MB limit
+                    alert(`${file.name} is too large. Please upload files smaller than 5 MB.`);
+                    return;
+                }
+                formData.append('dicomFiles[]', file);
+
+               
+            });
+            
+        
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData,
+                
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Files uploaded successfully!');                
+                const filename=data.files[0].filename;
+                console.log(filename)
+                fetch('/main/scan', {
+                    method: 'POST',
+                    headers: {
+                       'Content-Type': 'application/json',
+                        'X-Requestor-IP': ip, 
+                        'port':port
+                    },
+                    body: JSON.stringify({ filename: data.files[0].filename                       
+                    }) 
+                })
+                .then(response => response.json())
+                .then(data => {
+                  fileInput.value='';
+                  fileList.innerHTML = '';
+                   
+                })
+                .catch(error => {
+                    console.error('Error uploading files:', error);
+                });
+            });  
+
+
+
+                fileInput.value='';
+                fileList.innerHTML = '';
+               
+            })
+            .catch(error => {
+                console.error('Error uploading files:', error);
+            });
+        
+        })
+        .catch(error => {
+            console.error("Error fetching IP:", error);
+        });
+
+
+        
+    </script>
+</body>
+</html>
