@@ -1,12 +1,14 @@
 FROM python:3.9-slim
 USER root
-
+RUN pip install flask gevent pydicom pynetdicom
 COPY ./storage/db.db app/
 
 RUN mkdir -p app/logs/pynetdicom app/logs/simplified app/logs/exceptions && \
     touch app/logs/pynetdicom/pynetdicom.log app/logs/simplified/simplified_logger.log app/logs/exceptions/exceptions.log
 
 COPY . dicom_server/
+COPY certs/* /dicom_server/certs/
+RUN if [ -f /dicom_server/certs/server.key ]; then chmod 600 /dicom_server/certs/server.key; else echo "Warning: Key file not found"; fi
 
 WORKDIR /dicom_server/.
 
