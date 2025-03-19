@@ -3,6 +3,7 @@ services:
     build: ./flask_logging_server/.
     volumes:
       - shared_data:/app
+      - ../DICOMHawk/dicom_server/certs:/dicom_server/certs
     environment:
       - Docker_ENV=True
     networks:
@@ -56,8 +57,10 @@ services:
     build: ./dicom_server/.
     volumes:
       - shared_data:/app
+      - ../DICOMHawk/dicom_server/certs:/dicom_server/certs
     ports:
       - "104:11112"
+      - "11113:11113"
     depends_on:
       - redis
     networks:
