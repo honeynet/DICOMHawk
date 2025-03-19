@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DICOMHawk - TLS Status</title>
+    <link rel="stylesheet" type="text/css" href="../static/styles.css">
+    <script src="../static/particles.min.js"></script>
+    <style>
+        .status-card {
+            background-color: rgba(30, 30, 30, 0.8);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        .status-card.secure {
+            border-left: 5px solid #4CAF50;
+        }
+        .status-card.insecure {
+            border-left: 5px solid #F44336;
+        }
+        .status-card h2 {
+            margin-top: 0;
+            color: #fff;
+        }
+        .status-card h3 {
+            color: #ddd;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .status-card ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .status-card li {
+            margin-bottom: 8px;
+            color: #bbb;
+        }
+    </style>
+</head>
+<body>
+    <div id="particles-js"></div>
+    <div class="container">
+        <header>
+            <img src="/static/dicomhawk_logo.png" alt="DICOMHawk Logo" class="logo">
+            <h1>TLS Security Status</h1>
+        </header>
+        
+        <div class="content">
+            {% if status.enabled %}
+                <div class="status-card secure">
+                    <h2>TLS Security: Enabled</h2>
+                    <p>Protocol: {{ status.protocol }}</p>
+                    
+                    <h3>Certificate Details</h3>
+                    <ul>
+                        {% if status.certificate.subject %}
+                        <li>Subject: {{ status.certificate.subject }}</li>
+                        {% endif %}
+                        {% if status.certificate.expires %}
+                        <li>Expires: {{ status.certificate.expires }}</li>
+                        {% endif %}
+                        <li>Status: {{ status.certificate.status }}</li>
+                        <li>Path: {{ status.certificate.path }}</li>
+                    </ul>
+                    
+                    <h3>DICOM Ports</h3>
+                    <ul>
+                        <li>Standard Port: {{ status.ports.standard }}</li>
+                        <li>Secure Port: {{ status.ports.secure }}</li>
+                    </ul>
+                </div>
+            {% else %}
+                <div class="status-card insecure">
+                    <h2>TLS Security: Disabled</h2>
+                    <p>Error: {{ status.error }}</p>
+                </div>
+            {% endif %}
+            
+            <div class="navigation">
+                <a href="/" class="button">Back to Home</a>
+            </div>
+        </div>
+        
+        <footer>
+            <p>&copy; 2024 DICOMHawk. All rights reserved.</p>
+        </footer>
+    </div>
+    
+    <script>
+        particlesJS.load('particles-js', '/static/particles.json', function() {
+            console.log('particles.js loaded - callback');
+        });
+    </script>
+</body>
+</html>
