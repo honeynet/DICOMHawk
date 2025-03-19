@@ -1,5 +1,19 @@
 FROM python:3.8-slim
-
+RUN pip install flask gevent
+# Copy the current directory contents into the container at /app
+COPY . .
+ 
+ 
+# Set the working directory in the container
+WORKDIR /.
+ 
+RUN pip install flask
+ 
+# Expose the DICOM
+EXPOSE 5000
+ 
+# Run the app
+CMD ["python","-u", "logserver.py"]
 # Set the working directory in the container to /app
 WORKDIR /log_server
 
