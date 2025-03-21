@@ -16,7 +16,7 @@ DICOMHawk is a powerful and efficient honeypot for DICOM servers, designed to at
   
 - DICOMHawk employs different types of honeytokens in both the DICOM server and the Web API including encapsulated PDF canary tokens, honeyURLs (fake URLs that are seeded into the DICOM datasets), credential honeytokens, hidden endpoints and hidden credentials in the source code.
 
-- DICOMHawk provides automatic threat intelligence chack on each unique IP address interacts with honeypot.
+- DICOMHawk provides automatic threat intelligence checks on each unique IP address that interacts with honeypot.
 
 - An optional Blackhole service is integrated to DICOMHawk blocking traffic on kernel level for the known mass-scanner services. To enable it, see _DICOMHawk configuration_.
 
@@ -60,8 +60,8 @@ services:
       - BLOCK_SCANNERS=no
       - INTEGRITY_CHECK=yes
       - TCIA_ACTIVATED=yes
-      - IP_QUALITY_SCORE_API_KEY=YourIPQualityScoreApiKey
-      - VIRUS_TOTAL_API_KEY=YourVirusTotalApiKey
+      - IP_QUALITY_SCORE_API_KEY=APIKEY
+      - VIRUS_TOTAL_API_KEY=APIKEY
 ```
 
 ## Key Configurable Parameters in `config.py`
@@ -76,9 +76,9 @@ The main configurable parameters available in the `config.py` file, along with t
 TCIA Service should be configured by creating an account for [TCIA](https://www.cancerimagingarchive.net/access-data/) following this link to [create an account](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=23691309). DICOMHawk has a staging mechanism that will update files periodically, when TCIA configurations are enabled. 
 The files retrieved from the archive are retrived from publicly available repositories and their licence is saved in 
 
-```
-dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceUID/LICENSE
-```
+`
+dicom_server/dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceUID/LICENSE
+`
 .
 
 - **TCIA_USER_NAME**: Username for TCIA API authentication.
@@ -97,7 +97,13 @@ dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceUID/LICENSE
 ### Integrity Checks 
 - **INTEGRITY_CHECK**: Boolean to enable (`yes`) or disable (`no`) periodic integrity checks on dicom files stored in the honeypot.
 
-### Threat Intelligence for the DICOM server and the Web API
+### DICOM Server and Blackhole Configuration
+
+- **DICOM_PORT**: Port number for the DICOM server.
+- **DICOM_SERVER_HOST**: IP address or hostname of the DICOM server.
+- **BLOCK_SCANNERS**: Boolean to block (`yes`) or allow (`no`) known mass scanners.
+
+## Threat Intelligence for the DICOM server and the Web API
 
 To enable IP reputation checks for addresses interacting with DICOMHawk, include the following environment variables in your `docker-compose.yml` file.
 
@@ -118,16 +124,10 @@ VIRUS_TOTAL_API_KEY=APIKEY
 
 **AFTER**:
 ```env
-ABUSE_IP_API_KEY=[THE_KEY_YOU_OBTAINED]
-IP_QUALITY_SCORE_API_KEY=[THE_KEY_YOU_OBTAINED]
-VIRUS_TOTAL_API_KEY=[THE_KEY_YOU_OBTAINED]
+ABUSE_IP_API_KEY=THE_KEY_YOU_OBTAINED
+IP_QUALITY_SCORE_API_KEY=THE_KEY_YOU_OBTAINED
+VIRUS_TOTAL_API_KEY=THE_KEY_YOU_OBTAINED
 ```
-
-### DICOM Server and Blackhole Configuration
-
-- **DICOM_PORT**: Port number for the DICOM server.
-- **DICOM_SERVER_HOST**: IP address or hostname of the DICOM server.
-- **BLOCK_SCANNERS**: Boolean to block (`yes`) or allow (`no`) known mass scanners.
 
 ## Deploying DICOMHawk Using Docker Compose
 
@@ -177,8 +177,9 @@ To run DICOMHawk locally, each service should be run separately in its directory
   ```bash
   docker run -p 6379:6379 --name redis-db -d redis
   ```
-- **Installing packages**:
+- **Installing Packages**:
   ```bash
+  cd ./dicom_server
   pip install -r .\requirements.txt
   ```
 
@@ -189,7 +190,7 @@ To run DICOMHawk locally, each service should be run separately in its directory
 - Navigate to the DICOM server directory from the project root:
 
   ```bash
-  cd /dicom_server
+  cd ./dicom_server
   ```
 
 - Run the DICOM server using Python:
@@ -203,7 +204,7 @@ To run DICOMHawk locally, each service should be run separately in its directory
 - Navigate to the API service directory from the project root:
 
   ```bash
-  cd /API
+  cd ./API
   ```
 
 - Run the API using Node.js:
@@ -217,7 +218,7 @@ To run DICOMHawk locally, each service should be run separately in its directory
 - Navigate to the Flask logging server directory from the project root:
 
   ```bash
-  cd /flask_logging_server
+  cd ./flask_logging_server
   ```
 
 - Start the logging server:
@@ -228,7 +229,7 @@ To run DICOMHawk locally, each service should be run separately in its directory
 
 ## Running the Monitoring Stack
 
-Before deploying monitoring stack, be sure that the required ports (5601, 9200, 9300) are not in use on your system. Follow the same steps to check the DICOMHawk ports and make them available in case they are in use or configure the monitoring stack to use different ports.
+Before deploying the monitoring stack, be sure that the required ports (5601, 9200, 9300) are not in use on your system. Follow the same steps to check the DICOMHawk ports and make them available in case they are in use or configure the monitoring stack to use different ports.
 
 **For Linux users**
 
@@ -249,66 +250,6 @@ cd monitoring_stack/
 docker-compose up -d
 ```
 
-# Usage Examples
-
-Users can interact with the DICOM server utilizing DCMTK tools and DICOM client applications such as Sante DICOM Viewer, and others.
-To download SANTE DICOM viewer: [click on this link](https://santesoft.com/win/sante-dicom-viewer-lite/sante-dicom-viewer-lite.html).
-
-Example commands to interact with the server using DCMTK are:
-
-- Verify the connection to the server using this command.
-
-  ```bash
-  echoscu.exe  localhost 11112
-  ```
-
-- Find all patients using the PatientRootQueryRetrieveInformationModelFind.
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=PATIENT localhost 104
-  ```
-
-- Find a specific patient using the PatientRootQueryRetrieveInformationModelFind attributes.
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=PATIENT -k PatientName="Jim Madsen" localhost 104
-  ```
-
-- Find all studies using the StudyRootQueryRetrieveInformationModelFind.
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=STUDY  localhost 104
-  ```
-
-- Find a specific study using the StudyRootQueryRetrieveInformationModelFind attributes.
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=STUDY -k StudyInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.142460980973539163820236983184  localhost 104
-  ```
-
-- Get a specific study using the StudyRootQueryRetrieveInformationModelGet attributes.
-
-  ```bash
-  getscu -v -S -k QueryRetrieveLevel=STUDY -k StudyInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.142460980973539163820236983184  localhost 104
-  ```
-
-Get all studies for a specific patient using the PatientRootQueryRetrieveInformationModelGet attributes.
-
-```bash
-getscu -v -S -k QueryRetrieveLevel=PATIENT -k PatientName="Jim Madsen"  localhost 104
-```
-
-## Access the Kibana Dashbord
-
-    To access the Kibana dashbord after running the monitoring stack, navigate to "http://localhost:5601/app/dashboards" then click on DICOMHawk.
-
-## Access the Simplified Logging Server
-
-     To access the simplified logging server, navigate to "http://localhost:5000".
-
-## Access the Web API User Interface
-
-     To access the Web API user interface, navigate to "http://localhost:3000" and use username and password is "test" - "test", respectively.
 
 # Honeytokens
 Honeytokens (canary PDFs and honeyURLs) are security measures used to detect and alert on unauthorized access or potential breaches.
@@ -354,6 +295,89 @@ Fake credentials appear to be ”leaked” in the login page of the Web API. The
 Moreover, in order to access the Web API from the very start, the potential adversary has to login into the system. Honey credentials 
 ”test” - ”test” are used. The
 login page is continuously monitored for login attempts and therefore guessing, credential stuffing and brute force attacks can be identified.
+
+
+
+
+# Usage Examples
+
+Users can interact with the DICOM server utilizing DCMTK tools and DICOM client applications such as Sante DICOM Viewer, and others.
+To download SANTE DICOM viewer: [click on this link](https://santesoft.com/win/sante-dicom-viewer-lite/sante-dicom-viewer-lite.html).
+
+Example commands to interact with the server using DCMTK are:
+
+- Verify the connection to the server using this command.
+
+  ```bash
+  echoscu localhost 104
+  ```
+
+- Find all patients.
+
+  ```bash
+  findscu -v -S -k QueryRetrieveLevel=PATIENT localhost 104
+  ```
+
+- Find a specific patient by their name.
+
+  ```bash
+  findscu -v -S -k QueryRetrieveLevel=PATIENT -k PatientName="Jim Madsen" localhost 104
+  ```
+
+- Find all studies.
+
+  ```bash
+  findscu -v -S -k QueryRetrieveLevel=STUDY  localhost 104
+  ```
+
+- Find a specific study by its StudyInstanceUID.
+
+  ```bash
+  findscu -v -S -k QueryRetrieveLevel=STUDY -k StudyInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.142460980973539163820236983184  localhost 104
+  ```
+
+- Get a specific study using its StudyInstanceUID.
+
+  ```bash
+  getscu -v -S -k QueryRetrieveLevel=STUDY -k StudyInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.142460980973539163820236983184  localhost 104
+  ```
+
+- Get all studies for a specific patient using patient name.
+
+  ```bash
+  getscu -v -S -k QueryRetrieveLevel=STUDY -k PatientName="Jim Madsen"  localhost 104
+  ```
+
+
+- Get all studies for a specific patient using patient name.
+
+  ```bash
+  getscu -v -S -k QueryRetrieveLevel=STUDY -k PatientName="Jim Madsen"  localhost 104
+  ```
+
+- Get all studies for a specific SeriesInstanceUID.
+  ```bash
+  getscu -v -S -k QueryRetrieveLevel=SERIES -k SeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.140614242738455943374226148817  localhost 104
+  ```
+
+- Store a DICOM file
+  ```bash
+  storescu -v -d localhost 104 [Path to your DICOM file]
+  ```
+
+## Access the Kibana Dashbord
+
+    To access the Kibana dashbord after running the monitoring stack, navigate to "http://localhost:5601/app/dashboards" then click on DICOMHawk.
+
+## Access the Simplified Logging Server
+
+     To access the simplified logging server, navigate to "http://localhost:5000".
+
+## Access the Web API User Interface
+
+     To access the Web API user interface, navigate to "http://localhost:3000" and use username and password is "test" - "test", respectively.
+
+
 
 
 
