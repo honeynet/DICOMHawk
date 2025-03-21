@@ -154,7 +154,7 @@ MAXIMUM_TCIA_FILES_IN_SERIE = int(os.getenv("MAXIMUM_TCIA_FILES_IN_SERIE", 3))
 TCIA_STUDIES_PER_MODALITY = int(os.getenv("TCIA_STUDIES_PER_MODALITY", 10))
 
 """Honeytoken URL"""
-HONEY_URL = "https://52.6.96.126:3000/"
+HONEY_URL = os.getenv("HONEY_URL","VALUE")
 
 """Activate DICOM files integrity checks every 6 hours"""
 INTEGRITY_CHECK = os.getenv("INTEGRITY_CHECK", "True").lower() in TRUE_LIST

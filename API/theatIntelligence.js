@@ -2,7 +2,7 @@ const axios = require('axios');
 const { format } = require('date-fns');
 
 async function getIPSecurityScore(ip) {
-    const apiKey = "95c2c4b357f46e9fb9ce626d06295c1002454709007a43ed5ea49de785a7e3bb0db670e44bb10875";
+    const apiKey = process.env.ABUSE_IP_API_KEY;
     const url = "https://api.abuseipdb.com/api/v2/check";
     const headers = {
         Accept: "application/json",
@@ -27,7 +27,7 @@ async function getIPSecurityScore(ip) {
 }
 
 async function getIpqualityScore(ip) {
-    const apiKey = "JyGDPZk1kg5Y6Cqqiagx4y1YBkDmJ7tP";
+    const apiKey = process.env.IP_QUALITY_SCORE_API_KEY;
     const url = `https://ipqualityscore.com/api/json/ip/${apiKey}/${ip}`;
 
     try {
@@ -49,7 +49,7 @@ async function getIpqualityScore(ip) {
 }
 
 async function getVirusTotalScore(ip) {
-    const apiKey = "715bccfb503dc801d1fdc5f095bb3c0c2a4412a7b81cca1a2f5c15e14361f1fa";
+    const apiKey = process.env.VIRUS_TOTAL_API_KEY;
     const url = `https://www.virustotal.com/api/v3/ip_addresses/${ip}`;
     const headers = { "x-apikey": apiKey };
 
