@@ -22,6 +22,9 @@ services:
       - "3000:3000"
     environment:
       - Docker_ENV=True
+      - ABUSE_IP_API_KEY= APIKEY
+      - IP_QUALITY_SCORE_API_KEY= APIKEY
+      - VIRUS_TOTAL_API_KEY= APIKEY
 
   redis:
       image: redis
@@ -45,14 +48,15 @@ services:
       - TCIA_PASSWORD= TCIA pass
       - TCIA_PERIOD_UNIT=week
       - TCIA_PERIOD=1
-      - ABUSE_IP_API_KEY= API key
-      - IP_QUALITY_SCORE_API_KEY= API key
-      - VIRUS_TOTAL_API_KEY= API key
+      - ABUSE_IP_API_KEY= APIKEY
+      - IP_QUALITY_SCORE_API_KEY= APIKEY
+      - VIRUS_TOTAL_API_KEY= APIKEY
       - MODALITIES=["CT", "MR", "US", "DX"]
       - MINIMUM_TCIA_FILES_IN_SERIE=1
       - MAXIMUM_TCIA_FILES_IN_SERIE=3
       - TCIA_STUDIES_PER_MODALITY=10
       - DOCKER=yes
+      - HONEY_URL="https://[YOURHONEYURL]"
     build: ./dicom_server/.
     volumes:
       - shared_data:/app
