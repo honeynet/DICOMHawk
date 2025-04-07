@@ -26,3 +26,6 @@
 - Special thanks to Dr. Emmanouil Vasilomanolakis for guidance and support.
 - The Honeynet Project for hosting and maintaining the repository.
 
+- **Harish Srinivasan** – Implemented basic DICOM honeypot and alert logger.
+
+
