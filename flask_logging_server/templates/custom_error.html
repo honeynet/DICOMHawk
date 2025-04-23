@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Error - {{ error_code }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .error-container {
+            padding: 20px;
+            background-color: white;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .error-header {
+            color: #d32f2f;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .error-details {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        .system-info {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        .sensitive-info {
+            color: #777;
+            font-size: 0.9em;
+        }
+        .error-id {
+            color: #666;
+            font-size: 0.8em;
+            text-align: right;
+            margin-top: 20px;
+        }
+        .nav-bar {
+            background-color: #2c3e50;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+        .nav-bar a {
+            color: #ecf0f1;
+            text-decoration: none;
+            padding: 8px 15px;
+            margin: 5px;
+            border-radius: 4px;
+            transition: background-color 0.3s, color 0.3s;
+            font-weight: 500;
+        }
+        .nav-bar a:hover {
+            background-color: #3498db;
+            color: white;
+        }
+        .nav-bar a.active {
+            background-color: #2980b9;
+            color: white;
+        }
+        @media (max-width: 768px) {
+            .nav-bar {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .nav-bar a {
+                width: 100%;
+                text-align: center;
+                margin: 3px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="nav-bar">
+        <a href="/">Landing Page</a>
+        <a href="/home">Home</a>
+        <a href="/logs">Logs</a>
+        <a href="/logs/simplified_page">Simplified Logs</a>
+        <a href="/status">Server Status</a>
+    </div>
+    
+    <h1>System Error</h1>
+    
+    <div class="error-container">
+        <h2 class="error-header">Error {{ error_code }}: {{ error_title }}</h2>
+        
+        <p>{{ error_message }}</p>
+        
+        <div class="error-details">
+            <p>Request ID: {{ request_id }}</p>
+            <p>Timestamp: {{ timestamp }}</p>
+            <p>Path: {{ path }}</p>
+            <p>Method: {{ method }}</p>
+            <p>Client IP: {{ client_ip }}</p>
+        </div>
+        
+        <div class="system-info">
+            <h3>System Information</h3>
+            <p>Server: DICOM Service v{{ server_version }}</p>
+            <p>Environment: {{ environment }}</p>
+            <p>Database Status: {{ db_status }}</p>
+            <p>Last System Check: {{ last_check }}</p>
+        </div>
+        
+        <div class="sensitive-info">
+            <h3>Debug Information (Internal Use Only)</h3>
+            <p>Configuration Path: {{ config_path }}</p>
+            <p>Active Modules: {{ active_modules }}</p>
+            <p>System User: {{ system_user }}</p>
+            <p>Log Location: {{ log_location }}</p>
+        </div>
+        
+        <p class="error-id">Error Reference: {{ error_reference }}</p>
+    </div>
+    
+    <script>
+        console.log("Custom error page loaded for error code: {{ error_code }}");
+        console.log("Error details:", {
+            code: "{{ error_code }}",
+            title: "{{ error_title }}",
+            message: "{{ error_message }}",
+            requestId: "{{ request_id }}",
+            path: "{{ path }}",
+            clientIp: "{{ client_ip }}"
+        });
+        
+        const startTime = new Date();
+        window.addEventListener('beforeunload', function() {
+            const endTime = new Date();
+            const timeSpent = (endTime - startTime) / 1000; // in seconds
+            
+            fetch('/log_error_page_interaction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    error_code: "{{ error_code }}",
+                    request_id: "{{ request_id }}",
+                    time_spent: timeSpent
+                }),
+                keepalive: true
+            }).then(response => {
+                console.log("Interaction logged successfully");
+            }).catch(error => {
+                console.error("Failed to log interaction:", error);
+            });
+        });
+    </script>
+</body>
+</html>
