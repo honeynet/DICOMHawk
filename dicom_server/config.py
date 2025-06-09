@@ -75,7 +75,12 @@ DICOM_STORAGE_DIR = "./storage/dicom_storage"
 C_STORE_STORAGE = "./storage/c_store_files"
 
 """DICOM server port configuration"""
-DICOM_PORT = 11112
+try:
+    DICOM_PORTS = json.loads(os.getenv("ALL_PORTS", "[11112, 104, 4242, 3702]"))
+except json.JSONDecodeError:
+    DICOM_PORTS = [11112, 104, 4242, 3702] 
+
+DICOM_PORT = DICOM_PORTS[0] if DICOM_PORTS else 11112
 
 """DICOM server host ip configuration"""
 

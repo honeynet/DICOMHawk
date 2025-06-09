@@ -4,6 +4,8 @@ services:
     profiles: ["main"]
     build: ./flask_logging_server/.
     volumes:
+      - ./flask_logging_server/templates:/log_server/templates
+      - ./flask_logging_server/static:/log_server/static
       - shared_data:/app
     environment:
       - Docker_ENV=True
@@ -61,11 +63,20 @@ services:
       - TCIA_STUDIES_PER_MODALITY=10
       - DOCKER=yes
       - HONEY_URL="https://[YOURHONEYURL]"
+      - DICOM_PORTS=[11112, 104, 4242, 3702, 8889, 3389, 80, 135, 5985]
     build: ./dicom_server/.
     volumes:
       - shared_data:/app
     ports:
       - "104:11112"
+      - "1112:1112"
+      - "4242:4242"
+      - "3702:3702"
+      - "8889:8889"
+      - "3389:3389"
+      - "80:80"
+      - "135:135"
+      - "5985:5985"
     depends_on:
       - redis
     networks:

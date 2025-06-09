@@ -28,7 +28,6 @@ class DICOMHandlers:
 
     def handle_assoc(self, event):
         try:
-
             version_name = (
                 str(event.assoc.requestor.implementation_version_name)
                 if event.assoc.requestor.implementation_version_name
@@ -36,6 +35,12 @@ class DICOMHandlers:
             )
             ip = str(event.assoc.requestor.address)
             port = event.assoc.requestor.port
+            local_port = event.assoc.acceptor.port
+            self.event_collector.collect_session_info(
+                {
+                    session_keys.LOCAL_PORT.key: local_port,
+                },
+            )
             self.event_collector.session_started(ip, port, version_name)
         except Exception as e:
             self.exceptions_logger.exception(
@@ -44,11 +49,13 @@ class DICOMHandlers:
 
     def handle_echo(self, event):
         try:
+            local_port = event.assoc.acceptor.port
             self.event_collector.collect_session_info(
                 {
                     session_keys.LOG_LEVEL.key: "Info",
                     session_keys.REQUEST_TYPE.key: "C_ECHO",
                     session_keys.SESSION_MAIN_OPERATION.key: "C_ECHO",
+                    session_keys.LOCAL_PORT.key: local_port,
                 },
                 True,
             )
@@ -65,11 +72,13 @@ class DICOMHandlers:
         matches = []
 
         try:
+            local_port = event.assoc.acceptor.port
             self.event_collector.collect_session_info(
                 {
                     session_keys.LOG_LEVEL.key: "Info",
                     session_keys.REQUEST_TYPE.key: "C_FIND",
                     session_keys.SESSION_MAIN_OPERATION.key: "C_FIND",
+                    session_keys.LOCAL_PORT.key: local_port,
                 }
             )
             sop_class_uid = event.request.AffectedSOPClassUID
@@ -152,6 +161,7 @@ class DICOMHandlers:
 
     def handle_get(self, event) -> Generator[Tuple[int, Optional[Dataset]], None, None]:
         try:
+            local_port = event.assoc.acceptor.port
             assoc = event.assoc
             identifier = event.identifier
 
@@ -169,6 +179,7 @@ class DICOMHandlers:
                     session_keys.SESSION_MAIN_OPERATION.key: "C_GET",
                     session_keys.REQUEST_TYPE.key: "C_GET",
                     session_keys.MATCHES.key: len(matching),
+                    session_keys.LOCAL_PORT.key: local_port,
                 },
                 True,
             )
@@ -191,12 +202,13 @@ class DICOMHandlers:
             yield (0xC001, None)
 
     def handle_store(self, event):
-
+        local_port = event.assoc.acceptor.port
         self.event_collector.collect_session_info(
             {
                 session_keys.LOG_LEVEL.key: "Info",
                 session_keys.REQUEST_TYPE.key: "C_STORE",
                 session_keys.SESSION_MAIN_OPERATION.key: "C_STORE",
+                session_keys.LOCAL_PORT.key: local_port,
             },
             True,
         )
@@ -206,7 +218,8 @@ class DICOMHandlers:
     def handle_move(
         self, event
     ) -> Generator[Tuple[int, Optional[Dataset]], None, None]:
-
+        
+        local_port = event.assoc.acceptor.port
         addr = assoc.requestor.address
         port = assoc.requestor.port
         yield (str(addr), port)
@@ -226,6 +239,7 @@ class DICOMHandlers:
                 session_keys.LOG_LEVEL.key: "Info",
                 session_keys.REQUEST_TYPE.key: "C_MOVE",
                 session_keys.MATCHES.key: len(matching),
+                session_keys.LOCAL_PORT.key: local_port,
             },
             True,
         )
@@ -242,19 +256,20 @@ class DICOMHandlers:
         yield 0x0000, None
 
     def handle_release(self, event):
+        local_port = event.assoc.acceptor.port
         self.event_collector.collect_session_info(
             {
                 session_keys.LOG_LEVEL.key: "Warning",
                 session_keys.REQUEST_TYPE.key: "Association Released",
+                session_keys.LOCAL_PORT.key: local_port,
             },
             True,
         )
         self.event_collector.session_ended()
 
     def handle_abort(self, event):
-
+        local_port = event.assoc.acceptor.port
         if event.assoc.requestor.implementation_version_name:
-
             self.event_collector.collect_session_info(
                 {
                     session_keys.LOG_LEVEL.key: "Warning",
@@ -262,6 +277,7 @@ class DICOMHandlers:
                     session_keys.VERSION.key: str(
                         event.assoc.requestor.implementation_version_name
                     ),
+                    session_keys.LOCAL_PORT.key: local_port,
                 },
                 True,
             )
@@ -270,6 +286,7 @@ class DICOMHandlers:
                 {
                     session_keys.LOG_LEVEL.key: "Warning",
                     session_keys.REQUEST_TYPE.key: "Association Aborted",
+                    session_keys.LOCAL_PORT.key: local_port,
                 },
                 True,
             )

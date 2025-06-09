@@ -7,6 +7,7 @@ and verifies port availability before starting the server
 """
 
 import socket
+import time
 from pynetdicom import evt
 from pynetdicom.sop_class import (
     PatientRootQueryRetrieveInformationModelFind,
@@ -26,7 +27,7 @@ from pynetdicom import (
 
 class DicomStarter:
 
-    def __init__(self, app_logger, exceptions_logger, port, ip, handlers):
+    def __init__(self, app_logger, exceptions_logger, ports, ip, handlers):
         """
 
         Constructor for DicomStarter.
@@ -34,16 +35,16 @@ class DicomStarter:
         ----------
         exceptions_logger : Logger
             A previously sat logger to handle exceptions.
-        port : int
-            DICOM server port.
+        ports : list or int
+            DICOM server ports.
         ip : str
-            DICOM host IP address .
+            DICOM host IP address.
         handlers : object
-            Assoc, C-FIND, C-GET, C-MOVE, Release, Abort  handler methods.
+            Assoc, C-FIND, C-GET, C-MOVE, Release, Abort handler methods.
 
         """
         self.logger = app_logger
-        self.port = port
+        self.ports = [ports] if isinstance(ports, int) else ports 
         self.ip = ip
         self.handlers = handlers
         self.exceptions_logger = exceptions_logger
@@ -75,20 +76,33 @@ class DicomStarter:
     def start_the_application(self):
         """
         Start the DICOM server.
-        Sets up the Application Entity and registers event handlers if the port is not already used.
+        Sets up the Application Entity and registers event handlers if the ports are not already used.
 
         """
         try:
-            ae = self.initialize_application_entity()
             handlers = self.register_dicom_handlers()
-            if not self.is_port_in_use():
-                self.logger.info("DICOM Server Started")
-                ae.start_server(
-                    (self.ip, self.port),
-                    evt_handlers=handlers,
-                )
-            else:
-                self.logger.debug(f"port {self.port} is in use")
+            
+            # Start server on each port
+            for port in self.ports:
+                if not self.is_port_in_use(port):
+                    # Create a new AE instance for each port
+                    ae = self.initialize_application_entity()
+                    if ae:
+                        self.logger.info(f"Starting DICOM Server on port {port}")
+                        ae.start_server(
+                            (self.ip, port),
+                            evt_handlers=handlers,
+                            block=False 
+                        )
+                        self.logger.info(f"Successfully started DICOM Server on port {port}")
+                else:
+                    self.logger.warning(f"Port {port} is already in use")
+            
+        
+            self.logger.info("All DICOM servers started successfully")
+           
+            while True:
+                time.sleep(1)
         except Exception:
             self.exceptions_logger.exception(
                 "Unexpected error starting the application"
@@ -118,9 +132,7 @@ class DicomStarter:
             self.exceptions_logger.exception(
                 "Unexpected error while initializing the application entity object"
             )
-
-    # Ensure the presentation context used when initializing the server can act as SCU to handle STORE operation
-
+            
     def initialize_storage_contexts(self, StoragePresentationContexts):
         """
         Configure the roles (SCP/SCU) for each Storage Presentation Context.
@@ -132,6 +144,6 @@ class DicomStarter:
             context.scp_role = True
             context.scu_role = True
 
-    def is_port_in_use(self):
+    def is_port_in_use(self, port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex((self.ip, self.port)) == 0
+            return s.connect_ex((self.ip, port)) == 0
