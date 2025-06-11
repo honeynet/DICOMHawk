@@ -21,3 +21,6 @@ __pycache__/
 *.pyo
 *.pyd
 *.so 
+
+# Node.js
+node_modules/ 
