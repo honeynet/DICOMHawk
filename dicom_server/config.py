@@ -42,6 +42,7 @@ DICOM server:
 * PROD (environment will be production if this constant is true and development if it is false)
 * DICOM_STORAGE_DIR
 * C_STORE_STORAGE
+* DICOM_PORTS
 * DICOM_PORT
 * DICOM_SERVER_HOST
 * REDIS_HOST
@@ -76,14 +77,17 @@ C_STORE_STORAGE = "./storage/c_store_files"
 
 """DICOM server port configuration"""
 try:
-    DICOM_PORTS = json.loads(os.getenv("ALL_PORTS", "[11112, 104, 4242, 3702]"))
+    DICOM_PORTS = json.loads(os.getenv("DICOM_PORTS", "[11112, 104, 4242, 2761, 2762]"))
 except json.JSONDecodeError:
-    DICOM_PORTS = [11112, 104, 4242, 3702] 
+    DICOM_PORTS = [11112, 104, 4242, 2761, 2762]
 
 DICOM_PORT = DICOM_PORTS[0] if DICOM_PORTS else 11112
 
-"""DICOM server host ip configuration"""
+# DICOM Implementation Name 
+IMPLEMENTATION_NAME = os.getenv("DICOM_IMPLEMENTATION_NAME", "ORTHANC_2020")
+IMPLEMENTATION_UID = os.getenv("DICOM_IMPLEMENTATION_UID", "1.2.826.0.1.3680043.9.3811.2.0.1")
 
+"""DICOM server host ip configuration"""
 DICOM_SERVER_HOST = "172.29.0.3" if DOCKER else "0.0.0.0"
 
 

@@ -17,5 +17,5 @@ COPY ./pydicom_and_pynetdicom_libs/service_class.py   /usr/local/lib/python3.9/s
 COPY ./pydicom_and_pynetdicom_libs/db.py /usr/local/lib/python3.9/site-packages/pynetdicom/apps/qrscp/db.py
 COPY ./pydicom_and_pynetdicom_libs/valuerep.py /usr/local/lib/python3.9/site-packages/pydicom/valuerep.py
 
-EXPOSE 11112 4242 3702
+EXPOSE 11112 4242 3702 8080 3333 4444 1104 8042
 CMD ["python","-u" ,"main.py"]

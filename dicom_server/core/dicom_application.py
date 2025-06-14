@@ -24,6 +24,7 @@ from pynetdicom import (
     StoragePresentationContexts,
 )
 
+from config import IMPLEMENTATION_NAME, IMPLEMENTATION_UID
 
 class DicomStarter:
 
@@ -116,6 +117,8 @@ class DicomStarter:
         """
         try:
             ae = AE()
+            ae.implementation_version_name = IMPLEMENTATION_NAME
+            ae.implementation_class_uid = IMPLEMENTATION_UID
             ae.supported_contexts = AllStoragePresentationContexts
             ae.requested_contexts = StoragePresentationContexts
             ae.add_supported_context(PatientRootQueryRetrieveInformationModelFind)

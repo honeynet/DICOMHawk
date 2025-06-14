@@ -15,6 +15,7 @@ dicom_server/**/__pycache__/
 
 # Environment files
 API/.env
+.env
 
 # Python specific generated files
 __pycache__/ 
