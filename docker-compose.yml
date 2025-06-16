@@ -77,11 +77,9 @@ services:
     volumes:
       - shared_data:/app
     ports:
-      - "104:11112"     # Standard DICOM
-      - "11112:11112"   # Standard DICOM
-      - "4242:4242"     # Orthanc DICOM
-      - "2761:2761"     # DICOM
-      - "2762:2762"     # DICOM
+      - "104:11112" # Standard DICOM
+      - "11112:11112" # Standard DICOM
+      - "4242:4242" # Orthanc DICOM
     depends_on:
       - redis
     networks:
