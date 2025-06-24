@@ -43,7 +43,6 @@ DICOM server:
 * DICOM_STORAGE_DIR
 * C_STORE_STORAGE
 * DICOM_PORTS
-* DICOM_PORT
 * DICOM_SERVER_HOST
 * REDIS_HOST
 * DICOM_DATABASE
@@ -77,13 +76,11 @@ C_STORE_STORAGE = "./storage/c_store_files"
 
 """DICOM server port configuration"""
 try:
-    DICOM_PORTS = json.loads(os.getenv("DICOM_PORTS", "[11112, 104, 4242]"))
+    DICOM_PORTS = json.loads(os.getenv("DICOM_PORTS", "[11112]"))
 except json.JSONDecodeError:
-    DICOM_PORTS = [11112, 104, 4242]
+    DICOM_PORTS = [11112]
 
-DICOM_PORT = DICOM_PORTS[0] if DICOM_PORTS else 11112
-
-# DICOM Implementation Name 
+# DICOM Implementation Name
 IMPLEMENTATION_NAME = os.getenv("DICOM_IMPLEMENTATION_NAME", "ORTHANC")
 IMPLEMENTATION_UID = os.getenv("DICOM_IMPLEMENTATION_UID", "1.2.826.0.1.3680043.9.3811.2.0.1")
 
