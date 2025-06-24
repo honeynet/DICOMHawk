@@ -14,6 +14,7 @@ class Sessionkeys(Enum):
     VERSION = "version", "N/A"
     IP = "ip", "N/A"
     PORT = "port", "N/A"
+    LOCAL_PORT = "local_port", "N/A"
     KNOWN_SCANNER = "known_scanner", "N/A"
     MATCHES = "matches", "N/A"
     STATUS = "status", "N/A"

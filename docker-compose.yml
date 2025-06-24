@@ -1,41 +1,53 @@
 services:
+  # Main Stack Services (profile: main)
   logserver:
+    profiles: ["main"]
     build: ./flask_logging_server/.
     volumes:
+      - ./flask_logging_server/templates:/log_server/templates
+      - ./flask_logging_server/static:/log_server/static
       - shared_data:/app
     environment:
       - Docker_ENV=True
     networks:
-      host:
+      main_network:
         ipv4_address: 172.29.0.5
     ports:
       - "5000:5000"
 
   api:
+    profiles: ["main"]
     build: ./API/.
     volumes:
       - shared_data:/app
     networks:
-      host:
+      main_network:
         ipv4_address: 172.29.0.2
     ports:
-      - "3000:3000"
+      - "3702:3702"
     environment:
       - Docker_ENV=True
-      - ABUSE_IP_API_KEY= APIKEY
-      - IP_QUALITY_SCORE_API_KEY= APIKEY
-      - VIRUS_TOTAL_API_KEY= APIKEY
+      - ABUSE_IP_API_KEY=APIKEY
+      - IP_QUALITY_SCORE_API_KEY=APIKEY
+      - VIRUS_TOTAL_API_KEY=APIKEY
+      - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
+      - ADMIN_SECRET=${ADMIN_SECRET}
+      - ADMIN_REFRESH_TOKEN_SECRET=${ADMIN_REFRESH_TOKEN_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - API_PORT=${API_PORT}
 
   redis:
-      image: redis
-      ports:
-        - "6379:6379"
-      networks:
-        host:
-          ipv4_address: 172.29.0.4
+    profiles: ["main"]
+    image: redis
+    ports:
+      - "6379:6379"
+    networks:
+      main_network:
+        ipv4_address: 172.29.0.4
 
-          
   dicom_server:
+    profiles: ["main"]
     environment:
       - PROD=yes
       - FLASK_ACTIVATED=yes
@@ -57,25 +69,70 @@ services:
       - TCIA_STUDIES_PER_MODALITY=10
       - DOCKER=yes
       - HONEY_URL="https://[YOURHONEYURL]"
+      - DICOM_PORTS=${DICOM_PORTS}
+      - DICOM_IMPLEMENTATION_NAME=${DICOM_IMPLEMENTATION_NAME}
+      - DICOM_IMPLEMENTATION_UID=${DICOM_IMPLEMENTATION_UID}
+
     build: ./dicom_server/.
     volumes:
       - shared_data:/app
     ports:
-      - "104:11112"
+      - "11112:11112"
     depends_on:
       - redis
     networks:
-      host:
+      main_network:
         ipv4_address: 172.29.0.3
-  
+
+  # Monitoring Stack Services (profile: monitoring)
+  logstash:
+    profiles: ["monitoring"]
+    image: 6711/logstash3:1.0.0
+    environment:
+      REDIS_HOST: "172.29.0.4"
+    entrypoint: ["/bin/bash", "/sub.sh"]
+    depends_on:
+      - elastiksearch
+    networks:
+      monitoring_network:
+        ipv4_address: 172.18.0.2
+      main_network:
+        ipv4_address: 172.29.0.6
+
+  elastiksearch:
+    profiles: ["monitoring"]
+    image: 6711/elasticsearch
+    entrypoint: ["/bin/bash", "/entry.sh"]
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      monitoring_network:
+        ipv4_address: 172.18.0.3
+
+  kibana:
+    profiles: ["monitoring"]
+    image: 6711/kibana
+    depends_on:
+      - elastiksearch
+    ports:
+      - "5601:5601"
+    networks:
+      monitoring_network:
+        ipv4_address: 172.18.0.4
 
 volumes:
   shared_data:
     driver: local
 
 networks:
-  host:
+  main_network:
     ipam:
       config:
         - subnet: 172.29.0.0/16
           gateway: 172.29.0.1
+  monitoring_network:
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1

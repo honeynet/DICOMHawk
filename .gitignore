@@ -1,0 +1,27 @@
+# IDE 
+.vscode/ 
+
+# Flask logging server logs 
+flask_logging_server/logs/simplified/*
+flask_logging_server/logs/pynetdicom/*
+flask_logging_server/logs/exceptions/*
+
+# DICOM server logs 
+dicom_server/exceptions/*.log
+
+# Python cache files
+dicom_server/**/__pycache__/
+*.pyc
+
+# Environment files
+API/.env
+.env
+
+# Python specific generated files
+__pycache__/ 
+*.pyo
+*.pyd
+*.so 
+
+# Node.js
+node_modules/ 

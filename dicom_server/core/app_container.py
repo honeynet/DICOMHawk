@@ -197,7 +197,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
         DicomStarter,
         app_logger,
         exceptions_logger,
-        config.DICOM_PORT,
+        config.DICOM_PORTS,
         config.DICOM_SERVER_HOST,
         dicom_handlers,
     )

@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'static')));
 
 //const
-const port = 3000;
+const port = process.env.API_PORT || 3702;
 
 //authentication
 const cookieParser = require("cookie-parser");

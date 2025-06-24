@@ -18,7 +18,7 @@ class SessionCollector(ISessionCollector):
         redis_handler: IRedisService = None,
         threat_intelligence: IThreatIntelligence = None,
     ):
-
+        
         self.session_info = {key.key: key.default for key in sk}
         self.redis_data = {}
         self.redis_handler = redis_handler or IRedisService()
@@ -176,3 +176,4 @@ class SessionCollector(ISessionCollector):
 
     def set_session_id(self, s_id):
         self.session_info[sk.SESSION_ID.key] = s_id
+        

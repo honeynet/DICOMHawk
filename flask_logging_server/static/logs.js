@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 function addConnectionHeader() {
                     connectionCount++; // Increment connection count on new header
                     const cell = document.createElement('td');
-                    cell.setAttribute('colspan', '11');
+                    cell.setAttribute('colspan', '12');
                     cell.style.fontWeight = 'bold';
                     cell.textContent = `Connection ${connectionCount}`;
                     tbody.appendChild(cell);
@@ -24,10 +24,10 @@ document.addEventListener("DOMContentLoaded", function () {
                     }
 
                     const row = document.createElement("tr");
-                    const logFields = [
-                        log.session_id, log.ip, log.port, log.version, log.request_type,
-                        log.session_parameters, log.matches, log.status, log.log_level,
-                        log.query_level, log.timestamp
+                    const logFields = [ 
+                      log.session_id, log.ip, log.port, log.local_port, log.version, log.request_type,
+                      log.session_parameters, log.matches, log.status, log.log_level,
+                      log.query_level, log.timestamp
                     ];
 
                     // Create and append cells for each field
@@ -39,7 +39,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     tbody.appendChild(row);
                 });
-
             })
             .catch(error => console.error('Error fetching simplified logs:', error));
     }
