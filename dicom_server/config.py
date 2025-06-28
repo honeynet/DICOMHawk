@@ -13,6 +13,17 @@ TCIA Serviceconstants:
 * MINIMUM_TCIA_FILES_IN_SERIE
 * MAXIMUM_TCIA_FILES_IN_SERIE
 * TCIA_STUDIES_PER_MODALITY
+* FAKER_LOCALE
+
+OpenStreetMap Integration:
+---------------------
+* OSM_ENABLED
+* OSM_COUNTRY
+* OSM_CITY
+* OSM_CACHE_DURATION
+* OSM_MAX_INSTITUTIONS
+* OSM_TIMEOUT
+* OSM_FALLBACK_INSTITUTIONS
 
 Logging Server:
 ---------------------
@@ -167,3 +178,31 @@ INTEGRITY_CHECK = os.getenv("INTEGRITY_CHECK", "True").lower() in TRUE_LIST
 
 """Integrity checker file storage path"""
 HASH_STORAGE_PATH = "./storage/hash_store.json"
+
+"""Faker locale for generating patient names and data"""
+FAKER_LOCALE = os.getenv("FAKER_LOCALE", "en_US")
+
+"""OpenStreetMap Integration Configuration"""
+OSM_ENABLED = os.getenv("OSM_ENABLED", "True").lower() in TRUE_LIST
+
+"""Country to search for medical institutions (ISO 3166-1 alpha-2 code)"""
+OSM_COUNTRY = os.getenv("OSM_COUNTRY", "DK")
+
+"""City to search for medical institutions (optional, searches entire country if not specified)"""
+OSM_CITY = os.getenv("OSM_CITY", "")
+
+"""Cache duration for OSM data in hours"""
+OSM_CACHE_DURATION = int(os.getenv("OSM_CACHE_DURATION", 24))
+
+"""Maximum number of institutions to fetch from OSM"""
+OSM_MAX_INSTITUTIONS = int(os.getenv("OSM_MAX_INSTITUTIONS", 50))
+
+"""Timeout for OSM API requests in seconds"""
+OSM_TIMEOUT = int(os.getenv("OSM_TIMEOUT", 30))
+
+"""Fallback institutions when OSM is disabled or fails"""
+OSM_FALLBACK_INSTITUTIONS = json.loads(os.getenv("OSM_FALLBACK_INSTITUTIONS", 
+    '["Københavns Sundhedscenter", "Aarhus Kliniken", "Odense Patienthus", "Nordjylland Med Institut"]'))
+
+"""OSM cache file path"""
+OSM_CACHE_FILE = "./storage/osm_institutions_cache.json"

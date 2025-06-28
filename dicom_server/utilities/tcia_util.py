@@ -8,9 +8,9 @@ from faker import Faker
 import random
 from pydicom import dcmread
 import shutil
+import config
 
-
-fake = Faker("da_DK")
+fake = Faker(config.FAKER_LOCALE);
 
 exceptions_logger = logging.getLogger("exceptions")
 
@@ -106,15 +106,20 @@ def satisfies_series_count_per_study(image_count, minimum_files, maximum_files):
     return minimum_files <= image_count <= maximum_files
 
 
-def get_random_institution():
-    medical_institutions = [
-        "Københavns Sundhedscenter",
-        "Aarhus Kliniken",
-        "Odense Patienthus",
-        "Nordjylland Med Institut",
-    ]
-
-    return random.choice(medical_institutions)
+def get_random_institution(osm_service=None):
+    """
+    Get a random medical institution name 
+    """
+    if osm_service and config.OSM_ENABLED:
+        try:
+            institutions = osm_service.get_medical_institutions()
+            if institutions:
+                return random.choice(institutions)
+        except Exception:
+            exceptions_logger.exception("Error getting institution from OSM service, using fallback")
+    
+    # Fallback to original hardcoded institutions
+    return random.choice(config.OSM_FALLBACK_INSTITUTIONS)
 
 
 def store_retrieved_file(

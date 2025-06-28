@@ -8,8 +8,10 @@ from services.dicom_database_service import IDicomDatabase
 from services.tci_services import ITCIAAPI
 from services.tci_services import ITCIAScheduler
 from services.tci_services import ITCIAManager
+from services.osm_service import IOSMService
 from dependency_injector.wiring import inject
 import logging
+import time
 
 
 class TCIAScheduler(threading.Thread, ITCIAScheduler):
@@ -34,8 +36,12 @@ class TCIAScheduler(threading.Thread, ITCIAScheduler):
     def run(self):
         self.schedule_files_retrieval()
         self.logger.info(
-            f"TCIA retrieving schedule is started, DICOM files storage and database will be directly updated from The Cancer Imaging Archeive each {self.period} {self.period_unit}"
+            f"TCIA retrieving schedule is started, DICOM files storage and database will be directly updated from The Cancer Imaging Archive each {self.period} {self.period_unit}"
         )
+        
+        while True:
+            schedule.run_pending()
+            time.sleep(10)  
 
     def schedule_files_retrieval(self):
         try:
@@ -61,6 +67,7 @@ class TCIAManager(ITCIAManager):
         dicomdb: IDicomDatabase = None,
         redis_handler: IRedisService = None,
         tcia_api: ITCIAAPI = None,
+        osm_service: IOSMService = None,
     ):
         self.honeytoken_url = honeytoken_url
         self.tcia_dir = tcia_dir
@@ -68,6 +75,7 @@ class TCIAManager(ITCIAManager):
         self.storage_directory = storage_directory
         self.dicomdb = dicomdb or IDicomDatabase()
         self.redis_handler = redis_handler or IRedisService()
+        self.osm_service = osm_service
         self.exceptions_logger = exceptions_logger
         self.logger = app_logger
 
@@ -145,7 +153,7 @@ class TCIAManager(ITCIAManager):
                     study_date,
                     accession_number,
                 ) = tcia_util.generate_patient_info()
-                institution = tcia_util.get_random_institution()
+                institution = tcia_util.get_random_institution(self.osm_service)
                 for se_uid in tcia_util.get_downloaded_series_per_study(
                     modality, study_uid, self.tcia_dir
                 ):
