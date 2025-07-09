@@ -96,9 +96,10 @@ services:
   logstash:
     profiles: ["monitoring"]
     image: 6711/logstash3:1.0.0
-    environment:
-      REDIS_HOST: "172.29.0.4"
     entrypoint: ["/bin/bash", "/sub.sh"]
+    volumes:
+      - shared_data:/app
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     depends_on:
       - elastiksearch
     networks:
