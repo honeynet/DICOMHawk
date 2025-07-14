@@ -13,3 +13,4 @@ dependency-injector
 aenum
 pytest
 pytz
+overpy
