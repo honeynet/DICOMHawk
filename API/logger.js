@@ -3,7 +3,7 @@ const path = require("path");
 const threat_intelligence = require("./threatIntelligence");
 
 const getLogsDir = () => {
-  return process.env.Docker_ENV === "True" ? "/app/logs" : path.join(__dirname, "logs");
+  return process.env.Docker_ENV === "True" ? "/var/log/dicomhawk" : path.join(__dirname, "logs");
 };
 
 function getClientIp(req) {

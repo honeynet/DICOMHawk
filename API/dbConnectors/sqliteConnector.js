@@ -2,7 +2,7 @@
 const sqlite3 = require('sqlite3').verbose();
 var databasePath = "./../dicom_server/storage/db.db"
 if (process.env.Docker_ENV=="True") {
-    databasePath = '/app/db.db'
+    databasePath = '/opt/dicomhawk/db/db.db'
 }
 
 // Connect to the SQLite database

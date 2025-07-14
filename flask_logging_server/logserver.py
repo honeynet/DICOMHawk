@@ -8,7 +8,7 @@ Docker_ENV = os.getenv("Docker_ENV", "false")
 
 
 log_directory, simplified_log_directory, host = (
-    ("/app/logs", "/app/logs", "172.29.0.5")
+    ("/var/log/dicomhawk", "/var/log/dicomhawk", "172.29.0.5")
     if Docker_ENV == "True"
     else ("./logs", "./logs", "0.0.0.0")
 )

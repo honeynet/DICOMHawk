@@ -332,7 +332,7 @@ When the DICOM server periodically removes old DICOM files and retrieves new one
 
 Canary PDF files are files that serve as monitored tokens within the DICOM files.
 
-To modify the canary PDF token used, replace the existing **can.pdf** file in the `dicom_server/storage/can.pdf` directory. The server uses this file as a template for generating canary PDFs injected into new DICOM files retrieved from TCIA. Make sure the updated PDF is named **can.pdf** to ensure it is properly recognized and utilized by the system.
+To modify the canary PDF token used, replace the existing **can.pdf** file in the `dicom_server/storage/can.pdf` directory (which maps to `/opt/dicomhawk/storage/can.pdf` inside the container). The server uses this file as a template for generating canary PDFs injected into new DICOM files retrieved from TCIA. Make sure the updated PDF is named **can.pdf** to ensure it is properly recognized and utilized by the system.
 
 ### HoneyURLs
 

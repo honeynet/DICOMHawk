@@ -6,7 +6,7 @@ services:
     volumes:
       - ./flask_logging_server/templates:/log_server/templates
       - ./flask_logging_server/static:/log_server/static
-      - shared_data:/app
+      - ./data/dicomhawk/logs:/var/log/dicomhawk
     environment:
       - Docker_ENV=True
     networks:
@@ -19,7 +19,8 @@ services:
     profiles: ["main"]
     build: ./API/.
     volumes:
-      - shared_data:/app
+      - ./data/dicomhawk/logs:/var/log/dicomhawk
+      - ./data/dicomhawk/db:/opt/dicomhawk/db
     networks:
       main_network:
         ipv4_address: 172.29.0.2
@@ -54,7 +55,7 @@ services:
       - BLOCK_SCANNERS=no
       - INTEGRITY_CHECK=yes
       - TCIA_ACTIVATED=yes
-      - BLACKHOLE_FILE_PATH=./storage/blackhole_list.txt
+      - BLACKHOLE_FILE_PATH=/opt/dicomhawk/storage/blackhole_list.txt
       - REDIS_HOST=172.29.0.4
       - TCIA_USER_NAME=${TCIA_USER_NAME}
       - TCIA_PASSWORD=${TCIA_PASSWORD}
@@ -83,7 +84,11 @@ services:
 
     build: ./dicom_server/.
     volumes:
-      - shared_data:/app
+      - ./data/dicomhawk/logs:/var/log/dicomhawk
+      - ./data/dicomhawk/db:/opt/dicomhawk/db
+      - ./dicom_server/storage:/opt/dicomhawk/storage
+      - ./dicom_server/storage/tcia_data:/opt/dicomhawk/tcia/data
+      - ./dicom_server/storage/stagger:/opt/dicomhawk/tcia/stagger
     ports:
       - "11112:11112"
     depends_on:
@@ -98,7 +103,7 @@ services:
     image: 6711/logstash3:1.0.0
     entrypoint: ["/bin/bash", "/sub.sh"]
     volumes:
-      - shared_data:/app
+      - ./data:/data
       - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     depends_on:
       - elastiksearch
