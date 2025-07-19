@@ -97,6 +97,19 @@ services:
       main_network:
         ipv4_address: 172.29.0.3
 
+  dicomhawkinit:
+    profiles: ["main"]
+    container_name: dicomhawkinit
+    build: ./dicomhawkinit/.
+    restart: always
+    environment:
+      - PERSISTENCE_CYCLES=30
+    volumes:
+      - ./data:/data
+    networks:
+      main_network:
+        ipv4_address: 172.29.0.7
+
   # Monitoring Stack Services (profile: monitoring)
   logstash:
     profiles: ["monitoring"]

@@ -1,5 +1,4 @@
 import os, logging, json, sys
-from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from services.loggers_service import ILoggers
 import traceback
@@ -88,22 +87,18 @@ class Loggers(ILoggers):
         self.is_production = is_production
         self.app_logger = self.setup_logger("app_logger", None)
         self.main_logger = self.setup_logger(
-            "pynetdicom", main_logger_directory, logging.DEBUG, "midnight", 1, None
+            "pynetdicom", main_logger_directory, logging.DEBUG, None
         )
         self.simplified_logger = self.setup_logger(
             "simplified_logger",
             simplified_log_directory,
             logging.INFO,
-            "midnight",
-            1,
             SimplifiedLogsFormatter(is_production),
         )
         self.exceptions_logger = self.setup_logger(
             "exceptions",
             exception_log_directory,
             logging.ERROR,
-            "midnight",
-            1,
             ExceptionFormatter(is_production, self.app_logger),
         )
 
@@ -112,15 +107,12 @@ class Loggers(ILoggers):
         name,
         log_directory,
         level=logging.INFO,
-        when="midnight",
-        interval=1,
         formatter=None,
     ):
         if name != "app_logger":
-            handler = TimedRotatingFileHandler(
-                os.path.join(log_directory, name + ".log"), when=when, interval=interval
+            handler = logging.FileHandler(
+                os.path.join(log_directory, name + ".log")
             )
-            handler.suffix = "%Y-%m-%d"
             handler.setFormatter(formatter)
             stream_handler = logging.StreamHandler(stream=sys.stdout)
             logger = logging.getLogger(name)
