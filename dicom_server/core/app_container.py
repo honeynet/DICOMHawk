@@ -69,6 +69,8 @@ from custom_units.tcia_management import TCIAAPI
 from custom_units.tcia_management import TCIAManager
 from custom_units.tcia_management import TCIAScheduler
 from custom_units.network_manager import Blackhole
+from custom_units.osm_institutions import OSMInstitutionsService
+
 
 
 class ApplicationContainer(containers.DeclarativeContainer):
@@ -112,6 +114,13 @@ class ApplicationContainer(containers.DeclarativeContainer):
         RedisClient, app_logger, exceptions_logger, redis_client
     )
 
+    # OSM provider
+    osm_service = providers.Singleton(
+        OSMInstitutionsService,
+        app_logger,
+        exceptions_logger,
+    )
+
     # TCIA providers
 
     tcia_api = providers.Factory(
@@ -137,6 +146,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
         dicom_db,
         redis_handler,
         tcia_api,
+        osm_service,
     )
 
     tcia_scheduler = providers.Singleton(
