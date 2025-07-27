@@ -18,7 +18,12 @@ setup_logrotate_conf() {
 }
 
 setup_directories() {
-    mkdir -p /data/dicomhawk/logs/{pynetdicom,simplified,exceptions}
+    mkdir -p /data/dicomhawk/logs/pynetdicom
+    mkdir -p /data/dicomhawk/logs/simplified
+    mkdir -p /data/dicomhawk/logs/exceptions
+    mkdir -p /data/dicomhawk/logs/api_logs
+    mkdir -p /data/dicomhawk/logs/reputation
+    mkdir -p /data/dicomhawk/logs/scanned_ips
     chmod 770 /data/dicomhawk/logs -R
 
     mkdir -p /data/dicomhawk/etc/logrotate

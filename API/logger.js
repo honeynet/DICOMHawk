@@ -17,7 +17,11 @@ function getClientIp(req) {
 
 async function isIpScanned(ip) {
   try {
-    const logPath = path.join(getLogsDir(), "scanned_ips.log");
+    const scannedIpsDir = path.join(getLogsDir(), "scanned_ips");
+    if (!fs.existsSync(scannedIpsDir)) {
+      fs.mkdirSync(scannedIpsDir, { recursive: true });
+    }
+    const logPath = path.join(scannedIpsDir, "scanned_ips.log");
     if (!fs.existsSync(logPath)) {
       fs.writeFileSync(logPath, "");
     }
@@ -34,6 +38,20 @@ async function logEvent(event, req, parameter = "N/A") {
     const logsDir = getLogsDir();
     if (!fs.existsSync(logsDir)) {
       fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    const apiLogsDir = path.join(logsDir, "api_logs");
+    const reputationDir = path.join(logsDir, "reputation");
+    const scannedIpsDir = path.join(logsDir, "scanned_ips");
+    
+    if (!fs.existsSync(apiLogsDir)) {
+      fs.mkdirSync(apiLogsDir, { recursive: true });
+    }
+    if (!fs.existsSync(reputationDir)) {
+      fs.mkdirSync(reputationDir, { recursive: true });
+    }
+    if (!fs.existsSync(scannedIpsDir)) {
+      fs.mkdirSync(scannedIpsDir, { recursive: true });
     }
 
     var ip = "";
@@ -54,7 +72,7 @@ async function logEvent(event, req, parameter = "N/A") {
         let repu = await threat_intelligence.getReputationData(ip);
         if (repu) {
           fs.appendFileSync(
-            path.join(logsDir, "reputation.log"),
+            path.join(reputationDir, "reputation.log"),
             JSON.stringify(repu) + "\n"
           );
         }
@@ -62,7 +80,7 @@ async function logEvent(event, req, parameter = "N/A") {
         console.error("Error getting reputation data:", error);
       }
       fs.appendFileSync(
-        path.join(logsDir, "scanned_ips.log"),
+        path.join(scannedIpsDir, "scanned_ips.log"),
         ip + "\n"
       );
     }
@@ -81,7 +99,7 @@ async function logEvent(event, req, parameter = "N/A") {
 
     const jsonString = JSON.stringify(jsonObject);
     fs.appendFileSync(
-      path.join(logsDir, "api_logs.log"),
+      path.join(apiLogsDir, "api_logs.log"),
       jsonString + "\n"
     );
   } catch (error) {

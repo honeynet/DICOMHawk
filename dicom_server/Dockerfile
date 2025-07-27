@@ -4,6 +4,9 @@ USER root
 RUN mkdir -p /var/log/dicomhawk/pynetdicom \
              /var/log/dicomhawk/simplified \
              /var/log/dicomhawk/exceptions \
+             /var/log/dicomhawk/api_logs \
+             /var/log/dicomhawk/reputation \
+             /var/log/dicomhawk/scanned_ips \
              /opt/dicomhawk/db \
              /opt/dicomhawk/storage/dicom_storage \
              /opt/dicomhawk/storage/c_store_files \
@@ -15,7 +18,10 @@ COPY ./storage/db.db /opt/dicomhawk/db/
 
 RUN touch /var/log/dicomhawk/pynetdicom/pynetdicom.log \
           /var/log/dicomhawk/simplified/simplified_logger.log \
-          /var/log/dicomhawk/exceptions/exceptions.log
+          /var/log/dicomhawk/exceptions/exceptions.log \
+          /var/log/dicomhawk/api_logs/api_logs.log \
+          /var/log/dicomhawk/reputation/reputation.log \
+          /var/log/dicomhawk/scanned_ips/scanned_ips.log
 
 COPY . dicom_server/
 
