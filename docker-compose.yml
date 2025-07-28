@@ -20,7 +20,7 @@ services:
     build: ./API/.
     volumes:
       - ./data/dicomhawk/logs:/var/log/dicomhawk
-      - ./data/dicomhawk/db:/opt/dicomhawk/db
+      - ./dicom_server/storage:/opt/dicomhawk/storage
     networks:
       main_network:
         ipv4_address: 172.29.0.2
@@ -59,7 +59,7 @@ services:
       - REDIS_HOST=172.29.0.4
       - TCIA_USER_NAME=${TCIA_USER_NAME}
       - TCIA_PASSWORD=${TCIA_PASSWORD}
-      - TCIA_PERIOD_UNIT=week
+      - TCIA_PERIOD_UNIT=minutes
       - TCIA_PERIOD=1
       - FAKER_LOCALE=${FAKER_LOCALE}
       - OSM_ENABLED=${OSM_ENABLED:-true}

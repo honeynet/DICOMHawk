@@ -59,18 +59,17 @@ router.get('/patients', async (req, res) => {
 
   db.all('SELECT * FROM patient', (err, rows) => {
     try {
-      if (rows.length === 0) {
-        return res.status(200).json({ message: "No data found" });
-      }
       if (err) {
-        // console.log("the prob with db")
         console.log(err);
         return res.status(500).json({ message: "Internal server error" });
-
+      }
+      if (!rows || rows.length === 0) {
+        return res.status(200).json({ message: "No data found" });
       }
       return res.json(rows);
     } catch (e) {
       console.log(e)
+      return res.status(500).json({ message: "Internal server error" });
     }
   });
 });
@@ -85,11 +84,11 @@ router.get('/images', authMiddleware.authenticate, async (req, res) => {
 
 
   db.all('SELECT * FROM image', (err, rows) => {
-    if (rows.length === 0) {
-      return res.status(200).json({ message: "No data found" });
-    }
     if (err) {
       return res.status(500).json({ message: "Internal server error" });
+    }
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ message: "No data found" });
     }
     return res.json(rows);
   });
@@ -108,11 +107,11 @@ router.get('/instances', authMiddleware.authenticate, async (req, res) => {
   logger.logEvent('Search all instances', req)
 
   db.all('SELECT * FROM instance', (err, rows) => {
-    if (rows.length === 0) {
-      return res.status(200).json({ message: "No data found" });
-    }
     if (err) {
       return res.status(500).json({ message: "Internal server error" });
+    }
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ message: "No data found" });
     }
     return res.json(rows);
   });

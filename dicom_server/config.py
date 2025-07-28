@@ -114,7 +114,7 @@ MAIN_LOG_DIRECTORY, SIMPLIFIED_LOG_DIRECTORY, EXCEPTIONS_LOG_DIRECTORY = (
 )
 
 """The sqlite file path"""
-DICOM_DATABASE = "/opt/dicomhawk/db/db.db" if DOCKER else "./storage/db.db"
+DICOM_DATABASE = "/opt/dicomhawk/storage/db.db" if DOCKER else "./storage/db.db"
 
 """TCIA username and password to use it in API calls"""
 TCIA_USER_NAME = os.getenv("TCIA_USER_NAME", "user")

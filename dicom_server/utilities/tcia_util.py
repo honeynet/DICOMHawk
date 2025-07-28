@@ -195,11 +195,16 @@ def stage_old_files(storage_dir, tcia_dir, stagger_dir):
         for filename in os.listdir(storage_dir):
             full_file_path = os.path.join(storage_dir, filename)
             if os.path.isfile(full_file_path):
-
+                dest_path = os.path.join(stagger_dir, "DICOM", filename)
+                if os.path.exists(dest_path):
+                    os.remove(dest_path)
                 shutil.move(full_file_path, os.path.join(stagger_dir, "DICOM"))
         for folder in os.listdir(tcia_dir):
             full_folder_path = os.path.join(tcia_dir, folder)
             if os.path.isdir(full_folder_path):
+                dest_path = os.path.join(stagger_dir, "TCIA", folder)
+                if os.path.exists(dest_path):
+                    shutil.rmtree(dest_path)
                 shutil.move(full_folder_path, os.path.join(stagger_dir, "TCIA"))
     except Exception:
         exceptions_logger.exception("Unexpected error while stagging files")
@@ -212,10 +217,16 @@ def restore_old_files(storage_dir, tcia_dir, stagger_dir):
 
             full_file_path = os.path.join(stagger_dir, "DICOM", filename)
             if os.path.isfile(full_file_path):
+                dest_path = os.path.join(storage_dir, filename)
+                if os.path.exists(dest_path):
+                    os.remove(dest_path)
                 shutil.move(full_file_path, storage_dir)
         for folder in os.listdir((os.path.join(stagger_dir, "TCIA"))):
             full_folder_path = os.path.join(stagger_dir, "TCIA", folder)
             if os.path.isdir(full_folder_path):
+                dest_path = os.path.join(tcia_dir, folder)
+                if os.path.exists(dest_path):
+                    shutil.rmtree(dest_path)
                 shutil.move(full_folder_path, tcia_dir)
     except Exception:
         exceptions_logger.exception("Unexpected error while restoring files")
