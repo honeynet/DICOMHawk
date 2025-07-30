@@ -1,4 +1,16 @@
 services:
+  # Configuration Customizer (runs first)
+  customizer:
+    profiles: ["main"]
+    build: ./customizer/.
+    volumes:
+      - .:/workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      main_network:
+        ipv4_address: 172.29.0.8
+
   # Main Stack Services (profile: main)
   logserver:
     profiles: ["main"]
@@ -18,6 +30,8 @@ services:
   api:
     profiles: ["main"]
     build: ./API/.
+    depends_on:
+      - customizer
     volumes:
       - ./data/dicomhawk/logs:/var/log/dicomhawk
       - ./dicom_server/storage:/opt/dicomhawk/storage
@@ -49,6 +63,8 @@ services:
 
   dicom_server:
     profiles: ["main"]
+    depends_on:
+      - customizer
     environment:
       - PROD=yes
       - FLASK_ACTIVATED=yes
@@ -59,12 +75,12 @@ services:
       - REDIS_HOST=172.29.0.4
       - TCIA_USER_NAME=${TCIA_USER_NAME}
       - TCIA_PASSWORD=${TCIA_PASSWORD}
-      - TCIA_PERIOD_UNIT=minutes
-      - TCIA_PERIOD=1
+      - TCIA_PERIOD_UNIT=${TCIA_PERIOD_UNIT}
+      - TCIA_PERIOD=${TCIA_PERIOD}
       - FAKER_LOCALE=${FAKER_LOCALE}
       - OSM_ENABLED=${OSM_ENABLED:-true}
-      - OSM_COUNTRY=${OSM_COUNTRY:-DK}
-      - OSM_CITY=${OSM_CITY:-}
+      - OSM_COUNTRY=${OSM_COUNTRY}
+      - OSM_CITY=${OSM_CITY}
       - OSM_CACHE_DURATION=${OSM_CACHE_DURATION:-24}
       - OSM_MAX_INSTITUTIONS=${OSM_MAX_INSTITUTIONS:-50}
       - OSM_TIMEOUT=${OSM_TIMEOUT:-30}
@@ -91,8 +107,6 @@ services:
       - ./dicom_server/storage/stagger:/opt/dicomhawk/tcia/stagger
     ports:
       - "11112:11112"
-    depends_on:
-      - redis
     networks:
       main_network:
         ipv4_address: 172.29.0.3
