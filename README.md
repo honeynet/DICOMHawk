@@ -1,459 +1,542 @@
 # DICOMHawk
 
-![DICOMHawk Logo](cover_images/dicomhawk_logo.png)
+[![DICOMHawk Logo](cover_images/dicomhawk_logo.png)](cover_images/dicomhawk_logo.png)
 
-DICOMHawk is a powerful and efficient honeypot for DICOM servers, designed to attract and log unauthorized access attempts and interactions. Built using Flask and pynetdicom, DICOMHawk offers a streamlined web interface for monitoring and managing DICOM interactions in real-time.
+> **A powerful and efficient honeypot for DICOM servers, designed to attract and log unauthorized access attempts and interactions in healthcare environments.**
 
-## Key Features
+DICOMHawk is a sophisticated cybersecurity tool built using Flask and pynetdicom that offers a streamlined web interface for monitoring and managing DICOM interactions in real-time. It serves as an advanced deception technology specifically designed for medical imaging environments, helping security teams detect, analyze, and respond to potential threats targeting DICOM infrastructure.
 
-- DICOMHawk enables potential attackers to perform DICOM operations on the two standard DICOM information models (STUDYROOT and PATIENTROOT) through its DICOM port.
-- DICOMHawk provides an API service enabling attackers to interact with the DICOM server content. Using the API endpoints, an attacker can search and download studies, series, patient and images data. Moreover, they can upload files to the Web API server.
-- DICOMHawk stores real DICOM files that are updated periodically through "The Cancer Imaging Archive (TCIA)" API, which metadata as PHI is modified to resemble real patient data of Danish citizens in the Danish settings.
-- DICOMHawk supports a dynamic data rotation mechanism that automatically replaces the stored DICOM files with the ones downloaded from TCIA.
-- DICOMHawk employs different types of honeytokens in both the DICOM server and the Web API including encapsulated PDF canary tokens, honeyURLs (fake URLs that are seeded into the DICOM datasets), credential honeytokens, hidden endpoints and hidden credentials in the source code.
-- DICOMHawk provides automatic threat intelligence checks on each unique IP address that interacts with honeypot.
-- An optional Blackhole service is integrated to DICOMHawk blocking traffic on kernel level for the known mass-scanner services. To enable it, see _DICOMHawk configuration_.
-- DICOMHawk uses centralized monitoring to track attacker activities. It employs an Elastic Stack where Logstash only needs the honeypot's IP address to retrieve staged data from the Redis server for logging and monitoring.
+## 🚀 Key Features
 
-## DICOMHawk Monitoring System
+### Core DICOM Functionality
+- **Full DICOM Protocol Support**: Enables potential attackers to perform DICOM operations on both standard DICOM information models (STUDYROOT and PATIENTROOT) through its DICOM port
+- **REST API Service**: Provides an API service enabling attackers to interact with the DICOM server content. Using the API endpoints, an attacker can search and download studies, series, patient and images data. Moreover, they can upload files to the Web API server.
+- **Real Medical Data Integration**: Stores real DICOM files that are updated periodically through "The Cancer Imaging Archive (TCIA)" API, which metadata as PHI is modified to resemble real patient data of Danish 
+citizens in the Danish settings.
 
-### Background
+### Advanced Security Features
+- **Comprehensive Honeytoken System**: Multiple types of honeytokens including:
+  - Encapsulated PDF canary tokens
+  - HoneyURLs (fake URLs seeded into DICOM datasets)
+  - Credential honeytokens
+  - Hidden endpoints and credentials in source code
+- **Threat Intelligence Integration**: Automatic reputation checks on each unique IP address interacting with the honeypot
+- **Kernel-Level Protection**: Optional Blackhole service for blocking known mass-scanner services at the kernel level
 
-DICOMHawk implements a centralized security monitoring infrastructure designed to track and analyze attacker behavior. It benefits the cybersecurity teams in healthcare and research settings by enabling them to quickly detect security incidents, analyze usage and interaction patterns. It is useful for better understanding the potential attacker techniques, maintaining detailed logs for forensic analysis and tracing the source and impact of each interaction.
+### Data Localization
+- **Multi-Locale Patient Data**: Offers multi-locale patient data generation with configurable regional setting that support different locales for realistic patient name generation.
 
-![DICOMHawk Monitoring System](cover_images/kibana.png)
+### Monitoring & Management
+- **Centralized Security Monitoring**: Elastic Stack integration with Logstash for comprehensive attacker activity tracking
+- **Automated Log Management**: Daily rotation and compression with intelligent disk space management
+- **Interactive Configuration**: Command-line setup wizard guiding users through essential configurations
 
-The monitoring system includes summary metrics and detailed analysis for the received DICOM sessions and API requests, represented with multiple visualization types (numbers, tables, pie charts, timelines). It also includes malicious and abuse scoring as an immediate score on each API request or DICOM session.
+## Table of Contents
 
-The monitoring system utilizes several key components:
+- [Quick Start](#quick-start)
+- [Deploying DICOMHawk Using Docker Compose](#deploying-dicomhawk-using-docker-compose)
+- [Running DICOMHawk Locally](#running-dicomhawk-locally)
+- [Configuration](#configuration)
+- [Advanced Configuration](#advanced-configuration)
+- [Usage Examples](#usage-examples)
+- [DICOMHawk Monitoring System](#dicomhawk-monitoring-system)
+- [Honeytokens](#honeytokens)
+- [Log Management](#log-management)
 
-1. Logstash: Collects data from Redis database integrated with the honeypot.
-2. Elasticsearch: Indexes and stores security events.
-3. Kibana: Visualizes the collected data.
+## Quick Start
 
-## Usage Guide
+Get DICOMHawk running quickly with simple installation process.
 
-### DICOMHawk Configuration
+### Prerequisites
 
-`config.py` is the configuration file for the honeypot and is located in the root directory of the project. This file contains constants that can be modified to customize the honeypot. Most of these constants including the API keys can be overridden via environment variables, which can be passed through the docker-compose file.
+Before installing DICOMHawk, ensure you have:
 
-The current method of passing sensitive information such as API keys through the Docker Compose file is used. It is important to note that while this method provides ease of configuration, it may not be the most secure. To enhance this security aspect in future, Docker Secrets, Encrypted Configuration Files and other techniques should be used.
+- **Docker** installed on your system (with Docker Hub access)
+- **Docker Compose** for managing multiple containers
+- **TCIA account** - free credentials from [The Cancer Imaging Archive](https://www.cancerimagingarchive.net/access-data/)
+- **Port availability** - ensure required ports are available (see [Port Requirements](#port-requirements))
 
-To customize the honeypot setup, you can pass environment variables directly through your `docker-compose.yml` file as shown in this example:
+### Docker Daemon Check
 
-```yaml
-services:
-  dicom_server:
-    environment:
-      - PROD=yes
-      - FLASK_ACTIVATED=yes
-      - BLOCK_SCANNERS=no
-      - INTEGRITY_CHECK=yes
-      - TCIA_ACTIVATED=yes
-      - IP_QUALITY_SCORE_API_KEY=APIKEY
-      - VIRUS_TOTAL_API_KEY=APIKEY
+Before proceeding with installation, verify that the Docker daemon is running:
+
+**Linux/macOS:**
+```bash
+sudo systemctl status docker
+# or
+docker info
 ```
 
-### Key Configurable Parameters in `config.py`
-
-The main configurable parameters available in the `config.py` file, along with their possible values are:
-
-#### General Configuration
-
-- **PROD**: Boolean (`yes` or `no`) to specify the environment mode. Setting this to `yes` configures the system for production use with corresponding production settings. If `no` is chosen, the system is set to development mode, which provides debug details, exception details, and more system information.
-
-#### TCIA Service Configuration
-
-TCIA Service should be configured by creating an account for [TCIA](https://www.cancerimagingarchive.net/access-data/) following this link to [create an account](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=23691309). DICOMHawk has a staging mechanism that will update files periodically, when TCIA configurations are enabled. The files retrieved from the archive are retrieved from publicly available repositories and their licence is saved in:
-
-`dicom_server/dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceUID/LICENSE`
-
-- **TCIA_USER_NAME**: Username for TCIA API authentication.
-- **TCIA_PASSWORD**: Password for TCIA API authentication.
-- **TCIA_ACTIVATED**: Boolean (`yes` or `no`) to activate or deactivate TCIA service interaction.
-- **TCIA_PERIOD_UNIT**: Unit of time (`day`, `week`, `hour`, `minutes`) for updating DICOM files periodically.
-- **TCIA_PERIOD**: Frequency of updates, specified numerically. For example, if **TCIA_PERIOD_UNIT** is set to `week` and **TCIA_PERIOD** is `2`, the files will be retrieved twice a week.
-- **MODALITIES**: List of modalities to retrieve, e.g., `["CT", "MR", "US", "DX"]`. This allows you to choose the modalities you are retrieving for the archive.
-- **MINIMUM_TCIA_FILES_IN_SERIE**: Minimum number of files per series.
-- **MAXIMUM_TCIA_FILES_IN_SERIE**: Maximum number of files per series.
-
-#### Logging Configuration
-
-- **FLASK_ACTIVATED**: Boolean to enable (`yes`) or disable (`no`) Flask server logging.
-
-#### Integrity Checks
-
-- **INTEGRITY_CHECK**: Boolean to enable (`yes`) or disable (`no`) periodic integrity checks on dicom files stored in the honeypot.
-
-#### Dicom Implementation Details
-
-- DICOM_IMPLEMENTATION_NAME: Sets the DICOM implementation name (default: ORTHANC_2020)
-
-- DICOM_IMPLEMENTATION_UID: Sets the DICOM implementation UID (default: 1.2.826.0.1.3680043.9.3811.2.0.1)
-
-#### The Web API/Pacs
-
-The Web API service listens on port 3702 by default.  
-To change the API port, add the following to your `.env` file:
-
-```env
-API_PORT=3000
+**Windows:**
+```powershell
+Get-Service docker
+# or
+docker info
 ```
 
-Then, map it to the API service in your `docker-compose.yml`:
-
-```yaml
-api:
-  environment:
-    - API_PORT=${API_PORT}
-    # ... other environment variables ...
-  ports:
-    - 3000:3000
+**macOS (Docker Desktop):**
+```bash
+docker info
 ```
 
-#### DICOM Server and Blackhole Configuration
+If Docker is not running, start it:
 
-DICOMHawk has robust support for running the DICOM server on multiple ports and provides detailed visibility into both client and server port activity.
-
-#### Configuring Multiple DICOM Ports
-
-Multiple DICOM ports can be specified using the `DICOM_PORTS` environment variable.  
-Set this variable in your environment (for example, in a `.env` file or your shell), and ensure the corresponding ports are mapped in your `docker-compose.yml` file.
-
-This configuration allows the DICOM server to listen on several ports simultaneously, supporting a variety of DICOM clients and PACS systems.
-
-- **Default DICOM Port:** If `DICOM_PORTS` is not set, the server listens on port `11112` by default.
-
-**Example `.env` file:**
-
-```env
-DICOM_PORTS=[104,11112,4242]
+**Linux:**
+```bash
+sudo systemctl start docker
 ```
 
-- **DICOM_SERVER_HOST**: IP address or hostname of the DICOM server.
-- **BLOCK_SCANNERS**: Boolean to block (`yes`) or allow (`no`) known mass scanners.
-
-### JWT Token and Session Secrets
-
-To enable secure authentication and session management in the API service, include the following environment variables in your .env file:
-Each variable is used for signing and verifying JWT tokens or managing sessions.
-
-```env
-REFRESH_TOKEN_SECRET=your_actual_refresh_token_secret
-ACCESS_TOKEN_SECRET=your_actual_access_token_secret
-ADMIN_SECRET=your_actual_admin_secret
-ADMIN_REFRESH_TOKEN_SECRET=your_actual_admin_refresh_token_secret
-SESSION_SECRET=your_actual_session_secret
+**Windows:**
+```powershell
+Start-Service docker
 ```
 
-### Threat Intelligence for the DICOM server and the Web API
-
-To enable IP reputation checks for addresses interacting with DICOMHawk, include the following environment variables in your `docker-compose.yml` file.
-
-Each variable corresponds to a threat intelligence service. You must obtain valid API keys from the respective providers before use:
-
-- **`ABUSE_IP_API_KEY`** – [AbuseIPDB](https://www.abuseipdb.com/)
-- **`IP_QUALITY_SCORE_API_KEY`** – [IPQualityScore](https://www.ipqualityscore.com/)
-- **`VIRUS_TOTAL_API_KEY`** – [VirusTotal](https://www.virustotal.com/gui/home/upload)
-
-Replace the `APIKEY` value in the `docker-compose.yml` file with the obtained API keys for each service:
-
-**BEFORE**:
-
-```env
-ABUSE_IP_API_KEY=APIKEY
-IP_QUALITY_SCORE_API_KEY=APIKEY
-VIRUS_TOTAL_API_KEY=APIKEY
+**macOS:**
+Open Docker Desktop application or run:
+```bash
+open -a Docker
 ```
 
-**AFTER**:
+### Quick Installation
 
-```env
-ABUSE_IP_API_KEY=THE_KEY_YOU_OBTAINED
-IP_QUALITY_SCORE_API_KEY=THE_KEY_YOU_OBTAINED
-VIRUS_TOTAL_API_KEY=THE_KEY_YOU_OBTAINED
-```
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/honeynet/DICOMHawk.git
+   cd DICOMHawk
+   ```
+
+2. **Run the Automated Setup**
+   ```bash
+   ./install.sh
+   ```
+
+3. **Follow the Interactive Wizard**
+   - The script guides you through configuration
+   - Accept defaults for most settings
+   - Focus on essential TCIA credentials(Username & Password)
+   - For detailed configuration options, see the [Configuration](#configuration) section
+
+### Access Your DICOMHawk Instance
+
+Once deployed, access your honeypot through:
+
+- **Web Dashboard**: http://localhost:5000
+- **API Service**: http://localhost:3702
+- **DICOM Server**: localhost:11112
 
 ## Deploying DICOMHawk Using Docker Compose
 
-Before deploying DICOMHawk, be sure that the required ports (104, 11112, 3000, 3702, 5000, and 6379) are not in use on your system.
+> **💡 Alternative Deployment Method**: This method can be used as an alternative to the Quick Start installation. However, you'll need to manually create your `.env` file with all required configuration settings before deployment.
 
-**For Linux users:**
+### Docker Daemon Check
 
+Before proceeding with deployment, ensure the Docker daemon is running:
+
+**Linux/macOS:**
 ```bash
-netstat -tuln | grep -E '104|11112|3000|3702|5000|6379'
+sudo systemctl status docker
+# or
+docker info
 ```
 
-**For Windows users:**
-
-```bash
-Get-NetTCPConnection | Where-Object { $_.LocalPort -eq 104 -or $_.LocalPort -eq 11112 -or $_.LocalPort -eq 3000 -or $_.LocalPort -eq 3702 -or $_.LocalPort -eq 5000 -or $_.LocalPort -eq 6379 } | Format-Table
+**Windows:**
+```powershell
+Get-Service docker
+# or
+docker info
 ```
 
-If any of these ports are in use, you need to make them available or configure DICOMHawk to use different ports.
+**macOS (Docker Desktop):**
+```bash
+docker info
+```
+
+If Docker is not running, start it:
+
+**Linux:**
+```bash
+sudo systemctl start docker
+```
+
+**Windows:**
+```powershell
+Start-Service docker
+```
+
+**macOS:**
+Open Docker Desktop application or run:
+```bash
+open -a Docker
+```
+
+### Port Requirements
+
+Before deployment, ensure these ports are available:
+
+| Service           | Port       | Purpose                                |
+|-------------------|------------|----------------------------------------|
+| **Web Dashboard** | 5000       | Main web interface for monitoring      |
+| **API Service**   | 3702       | REST API for programmatic access       |
+| **DICOM Server**  | 11112      | Medical imaging protocol server        |
+| **Redis**         | 6379       | Fast data storage (internal)           |
+| **Elasticsearch** | 9200, 9300 | Search and analytics (monitoring mode) |
+| **Kibana**        | 5601       | Data visualization (monitoring mode)   |
+
+### Port Availability Check
+
+**Linux:**
+```bash
+netstat -tuln | grep -E '11112|5601|3702|5000|6379'
+```
+
+**Windows:**
+```powershell
+Get-NetTCPConnection | Where-Object { $_.LocalPort -eq 11112 -or $_.LocalPort -eq 3702 -or $_.LocalPort -eq 5000 -or $_.LocalPort -eq 6379 } | Format-Table
+```
 
 ### Deployment Architecture
 
-An overview of the deployment process is shown below.
-
 ![DICOMHawk Deployment Architecture](cover_images/deployment.png)
 
-To deploy DICOMHawk using Docker Compose, use the following command which clones the repository, navigates to the project directory, and launches the required services. Note that cloning the repository may take a significant amount of time due to the large size of the real DICOM files.
+### Service Profiles
+
+DICOMHawk uses Docker Compose profiles for flexible deployment:
+
+| Profile    | Services Included                    | Use Case                    |
+|------------|-------------------------------------|----------------------------|
+| **main**   | DICOM server, API, Redis, log server | Core honeypot functionality |
+| **monitoring** | Elasticsearch, Kibana, Logstash | Advanced monitoring stack  |
+
+### Available Interfaces
+
+| Interface | URL | Purpose |
+|-----------|-----|---------|
+| **Kibana Dashboard** | http://localhost:5601/app/dashboards | Advanced monitoring and visualization |
+| **Simplified Logging Server** | http://localhost:5000 | Basic log viewing and management |
+| **Web API User Interface** | http://localhost:3000 | API interaction and testing |
+
+
+### Default Credentials of API Interface
+- **Username**: `test`
+- **Password**: `test`
+
+> **Note**: These are honey credentials designed to detect unauthorized access attempts.
+### Deployment Commands
 
 ```bash
+# Clone repository (may take time due to large DICOM files)
 git clone https://github.com/honeynet/DICOMHawk.git
 cd ./DICOMHawk
-```
 
-DICOMHawk uses service profiles to manage the services. To provide flexibility, services are organized into two Docker Compose profiles:
-
-- **main**: Core services (DICOM server, API, Redis, log server)
-- **monitoring**: Monitoring stack (Elasticsearch, Kibana, Logstash)
-
-**Start only core services (main profile):**
-
-```bash
+# Start core services only
 docker compose --profile main up -d
-```
 
-**Start monitoring services (monitoring profile):**
-
-```bash
+# Start monitoring services only
 docker compose --profile monitoring up -d
-```
 
-**Start all services (both profiles):**
-
-```bash
+# Start all services
 docker compose --profile main --profile monitoring up -d
 ```
 
-| Profile    | Services Included                    |
-| ---------- | ------------------------------------ |
-| main       | DICOM server, API, Redis, log server |
-| monitoring | Elasticsearch, Kibana, Logstash      |
-
 ## Running DICOMHawk Locally
 
-To run DICOMHawk locally, each service should be run separately in its directory. It is important to ensure that a Redis service is running on port 6379 before starting the other services.
+> **💡 Development/Testing Deployment Method**: This method is ideal for development, testing, or when you need full control over individual services. It requires manual setup of each component and configuration management.
 
-### Pre-requisites
+### Prerequisites
 
-- **Redis Service**: Ensure that Redis is running on port 6379. You can start Redis using the following command if you have Redis installed:
+**Port availability** - ensure required ports are available (see [Port Requirements](#port-requirements))
 
-  ```bash
-  redis-server --port 6379
-  ```
+#### Redis Service
+**Ensure Redis is running on port 6379. You can start Redis using the following command if you have Redis installed:**
 
-  If you do not have Redis installed, you can easily run a Redis instance using Docker with the following command:
+```bash
+redis-server --port 6379
+```
 
-  ```bash
-  docker run -p 6379:6379 --name redis-db -d redis
-  ```
+**If you do not have Redis installed, you can easily run a Redis instance using Docker with the following command:**
+```bash
+docker run -p 6379:6379 --name redis-db -d redis
+```
 
-- **Installing Packages:**
+#### Installing Packages
+```bash
+cd ./dicom_server
+pip install -r requirements.txt
+```
 
-  ```bash
-  cd ./dicom_server
-  pip install -r requirements.txt
-  ```
-
-### Starting Each Service
+### Service Startup
 
 #### DICOM Server
+```bash
+cd ./dicom_server
+python main.py  # Use python3 main.py if your environment defaults to Python 3
+```
 
-- Navigate to the DICOM server directory from the project root:
-
-  ```bash
-  cd ./dicom_server
-  ```
-
-- Run the DICOM server using Python:
-
-  ```bash
-  python main.py  # Use python3 main.py if your environment defaults to Python 3
-  ```
-
-#### API Service
-
-- Navigate to the API service directory from the project root:
-
-  ```bash
-  cd ./API
-  ```
-
-- Run the API using Node.js:
-
-  ```bash
-  node app.js
-  ```
+#### Run the API using Node.js:
+```bash
+cd ./API
+node app.js
+```
 
 #### Flask Logging Server
-
-- Navigate to the Flask logging server directory from the project root:
-
-  ```bash
-  cd ./flask_logging_server
-  ```
-
-- Start the logging server:
-
-  ```bash
-  python logserver.py  # Use python3 logserver.py if your environment defaults to Python 3
-  ```
-
-### Running the Monitoring Stack
-
-Before deploying the monitoring stack, be sure that the required ports (5601, 9200, 9300) are not in use on your system. Follow the same steps to check the DICOMHawk ports and make them available in case they are in use or configure the monitoring stack to use different ports.
-
-**For Linux users:**
-
 ```bash
-netstat -tuln | grep -E '5601|9200|9300'
+cd ./flask_logging_server
+python logserver.py  # Use python3 logserver.py if your environment defaults to Python 3
 ```
 
-**For Windows users:**
+### Monitoring Stack
 
+To deploy the monitoring stack, navigate to the root directory and run the Docker Compose file which contains the monitoring stack's configurations.
 ```bash
-Get-NetTCPConnection | Where-Object { $_.LocalPort -eq 5601 -or $_.LocalPort -eq 9200 -or $_.LocalPort -eq 9300 } | Format-Table
+cd monitoring_stack/
+docker compose --profile main up -d
 ```
 
-# Honeytokens
+## Configuration
+
+### Essential Configuration (Required)
+
+#### [1] TCIA Credentials
+**Required for downloading real medical images**
+
+DICOMHawk integrates with The Cancer Imaging Archive (TCIA) to provide authentic medical imaging data:
+
+- **TCIA Account Setup**: Create a free account at [TCIA](https://www.cancerimagingarchive.net/access-data/) following the [account creation guide](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=23691309)
+- **Automatic Updates**: Files are retrieved from publicly available repositories with licenses saved in:
+  ```
+  dicom_server/dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceUID/LICENSE
+  ```
+
+**Configuration Parameters:**
+- `TCIA_USER_NAME`: Username for TCIA API authentication
+- `TCIA_PASSWORD`: Password for TCIA API authentication
+- `TCIA_ACTIVATED`: Boolean (`yes`/`no`) to activate/deactivate TCIA service
+- `TCIA_PERIOD_UNIT`: Time unit (`day`, `week`, `hour`, `minutes`) for update frequency
+- `TCIA_PERIOD`: Numerical frequency value (e.g., `2` weeks = updates twice weekly)
+- `MODALITIES`: Array of modalities to retrieve (e.g., `["CT", "MR", "US", "DX"]`)
+- `MINIMUM_TCIA_FILES_IN_SERIE`: Minimum files per series
+- `MAXIMUM_TCIA_FILES_IN_SERIE`: Maximum files per series
+
+### Optional Configuration
+
+#### [2] Security Settings
+**Auto-generated for production use**
+
+JWT and session management secrets for secure authentication:
+
+- **Access Token Secret**: JWT authentication signing
+- **Refresh Token Secret**: Session refresh token signing
+- **Admin Secret**: Admin authentication signing
+- **Admin Refresh Token Secret**: Admin session refresh
+- **Session Secret**: User session management
+
+#### [3] API Settings
+**Web API configuration**
+
+- **API Port**: REST API service port (default: 3702)
+
+> **⚠️ Important**: If changing the API port, update both `docker-compose.yml` and `API/Dockerfile` accordingly.
+
+**Example**: If you change API port to 8080, update:
+
+- [`docker-compose.yml`](docker-compose.yml#L42) → `api` service: `"3702:3702"` → `"8080:8080"`
+- [`API/Dockerfile`](API/Dockerfile#L8): `EXPOSE 3702` → `EXPOSE 8080`
+
+#### [4] Threat Intelligence APIs
+**Enhanced security detection (optional)**
+
+Integrate with external threat intelligence services:
+
+- **[AbuseIPDB](https://www.abuseipdb.com/)**: IP reputation checking
+- **[IPQualityScore](https://www.ipqualityscore.com/)**: Enhanced IP analysis
+- **[VirusTotal](https://www.virustotal.com/gui/home/upload)**: Malware detection
+
+#### [5] DICOM Settings
+**Multi-port DICOM server configuration**
+
+- **DICOM Ports**: Server listening ports (default: 11112)
+- **DICOM_IMPLEMENTATION_NAME**: Server identification (default: ORTHANC)
+- **DICOM_IMPLEMENTATION_UID**: Unique server identifier
+
+> **⚠️ Important**: Port changes require updates to `docker-compose.yml` and `dicom_server/Dockerfile`.
+
+**Example**: If you change DICOM port to 104, update:
+
+- [`docker-compose.yml`](docker-compose.yml#L109) → `dicom_server` service: `"11112:11112"` → `"104:104"`
+- [`dicom_server/Dockerfile`](dicom_server/Dockerfile#L37): `EXPOSE 11112` → `EXPOSE 104`
+
+#### [6] Regional Settings
+**Patient data localization**
+
+- **Faker Locale**: Language for patient names (default: en_US)
+- **OSM Enabled**: Location services (default: true)
+- **OSM Country Code**: Country for location data (default: DK)
+- **OSM City**: Specific city (optional)
+
+#### [7] Honeypot Settings
+**Decoy configuration for intrusion detection**
+
+- **Honey URL**: Fake URL that triggers alerts when accessed
+
+## Advanced Configuration
+
+### DICOMHawk Configuration File
+
+`config.py` contains the main configuration constants and is located in the project root. These settings can be overridden via environment variables in docker compose file.
+
+### Key Configurable Parameters
+
+#### General Configuration
+- **PROD**: Environment mode (`yes`/`no`)
+  - `yes`: Production mode with optimized settings
+  - `no`: Development mode with debug details and system information
+
+#### Logging Configuration
+- **FLASK_ACTIVATED**: Flask server logging (`yes`/`no`)
+
+#### Integrity Checks
+- **INTEGRITY_CHECK**: Periodic DICOM file integrity verification (`yes`/`no`)
+
+#### DICOM Server and Blackhole Configuration
+- **DICOM_SERVER_HOST**: DICOM server IP address or hostname
+- **BLOCK_SCANNERS**: Mass scanner blocking (`yes`/`no`)
+
+## Usage Examples
+
+### DICOM Protocol Interaction
+
+Users can interact with the DICOM server using standard DCMTK tools:
+
+#### Connection Verification
+```bash
+echoscu localhost 11112
+```
+
+#### Patient Queries
+```bash
+findscu -v -S -k QueryRetrieveLevel=PATIENT localhost 11112
+```
+
+#### Study Queries
+```bash
+findscu -v -S -k QueryRetrieveLevel=STUDY localhost 11112
+```
+
+#### File Storage
+```bash
+storescu -v -d localhost 11112 [Path to your DICOM file]
+```
+
+### DICOM Client Applications
+
+DICOMHawk is compatible with various DICOM client applications:
+
+- **Sante DICOM Viewer**: [Download here](https://santesoft.com/win/sante-dicom-viewer-lite/sante-dicom-viewer-lite.html)
+- **Other DICOM viewers**: Any DICOM-compliant client application
+
+## DICOMHawk Monitoring System
+
+### Overview
+
+DICOMHawk implements a centralized security monitoring infrastructure designed to track and analyze attacker behavior in healthcare environments. This system enables cybersecurity teams to:
+
+- **Quick Detection**: Rapidly identify security incidents
+- **Pattern Analysis**: Understand attacker techniques and interaction patterns
+- **Forensic Capabilities**: Maintain detailed logs for comprehensive analysis
+- **Impact Assessment**: Trace the source and impact of each interaction
+
+![DICOMHawk Monitoring System](cover_images/kibana.png)
+
+### Monitoring Components
+
+The monitoring system provides:
+
+- **Real-time Metrics**: Summary statistics and detailed analysis
+- **Multi-format Visualizations**: Numbers, tables, pie charts, and timelines
+- **Threat Scoring**: Immediate malicious and abuse scoring for each interaction
+- **Comprehensive Logging**: Detailed tracking of DICOM sessions and API requests
+
+### Architecture
+
+The monitoring system utilizes the Elastic Stack:
+
+1. **Logstash**: Collects data from log files integrated with the honeypot
+2. **Elasticsearch**: Indexes and stores security events for analysis
+3. **Kibana**: Provides powerful data visualization and dashboard capabilities
+
+## Honeytokens
 
 Honeytokens (canary PDFs and honeyURLs) are security measures used to detect and alert on unauthorized access or potential breaches.
 
-## DICOM Server
+### DICOM Server Honeytokens
 
 The DICOM server in DICOMHawk is designed to automatically update its DICOM file repository periodically, pulling new files from The Cancer Imaging Archive (TCIA). During this update process, the system injects selected DICOM files with honeytokens, specifically canary PDFs and honeyURLs, as part of its enhanced security measures.
 
 When the DICOM server periodically removes old DICOM files and retrieves new ones from TCIA, the updated canary PDF and honeyURL are automatically injected into some of these new files. This ensures that the security features are consistently refreshed and tailored to current monitoring and security needs.
 
-### Canary PDFs
+#### Canary PDFs
+Canary PDF files serve as monitored tokens within DICOM files.
 
-Canary PDF files are files that serve as monitored tokens within the DICOM files.
+- **Location**: `dicom_server/storage/can.pdf` (maps to `/opt/dicomhawk/storage/can.pdf` in container)
+-  The server uses this file as a template for generating canary PDFs injected into new DICOM files retrieved from TCIA. Make sure the updated PDF is named can.pdf to ensure it is properly recognized and utilized by the system.
 
-To modify the canary PDF token used, replace the existing **can.pdf** file in the `dicom_server/storage/can.pdf` directory (which maps to `/opt/dicomhawk/storage/can.pdf` inside the container). The server uses this file as a template for generating canary PDFs injected into new DICOM files retrieved from TCIA. Make sure the updated PDF is named **can.pdf** to ensure it is properly recognized and utilized by the system.
-
-### HoneyURLs
-
+#### HoneyURLs
 HoneyURLs are URLs embedded within DICOM data. When accessed, they indicate potential unauthorized interactions.
 
-The HoneyURL injected into DICOM files can be changed by updating the environment variable **HONEY_URL** in the `docker-compose.yml` file. Replace `[YOURHONEYURL]` with the URL for your own HoneyURL.
+```bash
+HONEY_URL="https://[YOURHONEYURL]"
+```
+- Replace `[YOURHONEYURL]` with your desired honey URL
 
-## Web API
+- This change in the environment variable ensures that any new DICOM files automatically fetched and updated by the server will include the new honeyURL.
+
+### Web API Honeytokens
 
 The Web API has also employed four honeytoken types to detect different attack vectors.
 
-### robots.txt File and Hidden Endpoints
+#### robots.txt and Hidden Endpoints
+- Allows an attacker to be misguided and mislead to, for example, the endpoints called: "/admin", "/admin-config", "/secure" and "/ensurance_data".
+- The purpose of this file is to make the attackers curious to explore the Web API and think of ways to get access to those protected resources. In this way, more meaningful information on attackers' actions can be collected. 
+- If someone accesses the "robots.txt" file, the interaction is immediately logged and visualized within the visualization dashboard which helps identifying potential crawling or scraping activities.
+- When for example, the "/admin" endpoint is accessed a fake admin access token is generated, which is not differing in size from the original access token. This is meant to provide inspiration for the potential adversaries.
 
-The `robots.txt` file is served dynamically at the `/robots.txt` endpoint by the API service. It disallows access to several hidden endpoints such as `/admin`, `/admin-config`, `/secure`, and `/ensurance_data`. If someone accesses the `robots.txt` file, the interaction is immediately logged and visualized within the visualization dashboard, which helps identify potential crawling or scraping activities.
+#### Honey Credentials
 
-When, for example, the `/admin` endpoint is accessed, a fake admin access token is generated, which is not differing in size from the original access token. This is meant to provide inspiration for potential adversaries. Accessing these endpoints will always result in an "Unauthorized" page, and the attempt will be logged for security analysis. No real admin functionality is exposed at these endpoints.
+- Fake credentials appear to be "leaked" in the login page of the Web API. They are to be found in the raw html source. If these credentials are used by a potential adversary, they are taken to an "Under development" screen. 
+- Moreover, in order to access the Web API from the very start, the potential adversary has to login into the system.
+- Honey credentials "test" - "test" are used. 
+- The login page is continuously monitored for login attempts and therefore guessing, credential stuffing and brute force attacks can be identified.
 
-### Honey Credentials
+## Log Management
 
-Fake credentials appear to be "leaked" in the login page of the Web API. They are to be found in the raw HTML source. If these credentials are used by a potential adversary, they are taken to an "Under development" screen. Moreover, in order to access the Web API from the very start, the potential adversary has to login into the system. Honey credentials `test` - `test` are used. The login page is continuously monitored for login attempts and therefore guessing, credential stuffing, and brute force attacks can be identified.
+DICOMHawk implements comprehensive automated log management through the `dicomhawkinit` service.
 
-## Usage Examples
+### Features
 
-Users can interact with the DICOM server utilizing DCMTK tools and DICOM client applications such as Sante DICOM Viewer, and others. To download SANTE DICOM viewer: [click on this link](https://santesoft.com/win/sante-dicom-viewer-lite/sante-dicom-viewer-lite.html).
+- **Daily Log Rotation**: Automatic log file rotation
+- **Compression**: Efficient storage using pigz compression
+- **Cleanup**: Automatic removal of logs older than 30 days (configurable)
+- **Organization**: Structured log storage and management
 
-### Example Commands to Interact with the Server Using DCMTK
-
-- Verify the connection to the server using this command:
-
-  ```bash
-  echoscu localhost 11112
-  ```
-
-- Find all patients:
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=PATIENT localhost 11112
-  ```
-
-- Find a specific patient by their name:
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=PATIENT -k PatientName="Jim Madsen" localhost 11112
-  ```
-
-- Find all studies:
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=STUDY  localhost 11112
-  ```
-
-- Find a specific study by its StudyInstanceUID:
-
-  ```bash
-  findscu -v -S -k QueryRetrieveLevel=STUDY -k StudyInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.142460980973539163820236983184  localhost 11112
-  ```
-
-- Get a specific study using its StudyInstanceUID:
-
-  ```bash
-  getscu -v -S -k QueryRetrieveLevel=STUDY -k StudyInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.142460980973539163820236983184  localhost 11112
-  ```
-
-- Get all studies for a specific patient using patient name:
-
-  ```bash
-  getscu -v -S -k QueryRetrieveLevel=STUDY -k PatientName="Jim Madsen"  localhost 11112
-  ```
-
-- Get all studies for a specific SeriesInstanceUID:
-
-  ```bash
-  getscu -v -S -k QueryRetrieveLevel=SERIES -k SeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.6279.6001.140614242738455943374226148817  localhost 11112
-  ```
-
-- Store a DICOM file:
-
-  ```bash
-  storescu -v -d localhost 11112 [Path to your DICOM file]
-  ```
-
-## Accessing the User Interfaces
-
-- **Kibana Dashboard:**
-  - Navigate to [http://localhost:5601/app/dashboards](http://localhost:5601/app/dashboards) and click on DICOMHawk.
-- **Simplified Logging Server:**
-  - Navigate to [http://localhost:5000](http://localhost:5000).
-- **Web API User Interface:**
-  - Navigate to [http://localhost:3000](http://localhost:3000) (or the port you configured) and use username and password `test` - `test`, respectively.
-
-# Log Management
-
-DICOMHawk implements automated log management through the `dicomhawkinit` service. This service handles:
-
-- Log rotation (daily)
-- Log compression (using pigz)
-- Automatic cleanup of old logs (after 30 days by default)
-
-## Log Types and Locations
+DICOMHawk captures detailed information about:
 
 All logs are stored under `/data/dicomhawk/logs/`:
-- `pynetdicom/`: DICOM server communication logs
-- `simplified/`: Simplified DICOM transaction logs
-- `exceptions/`: Error and exception logs
-- API logs: `api_logs.log`, `reputation.log`, `scanned_ips.log`
 
-## Configuration
+| Directory/File | Content | Purpose |
+|----------------|---------|---------|
+| `pynetdicom/` | Raw DICOM protocol messages, association requests/releases, C-FIND/C-GET/C-STORE operations, detailed packet-level communication | Deep protocol analysis and debugging |
+| `simplified/` | Clean DICOM transaction summaries, patient queries, study retrievals, association events with timestamps and IP addresses | Quick event review and monitoring |
+| `exceptions/` | Python exceptions, service errors, configuration issues, startup failures, runtime problems | Troubleshooting and system health monitoring |
+| `api_logs.log` | REST API requests/responses, authentication attempts, file uploads/downloads, user sessions, endpoint access | API usage monitoring and security analysis |
+| `reputation.log` | IP reputation scores, threat intelligence results, abuse scores, geographic data, proxy/VPN detection | Security analysis and threat assessment |
+| `scanned_ips.log` | IP scanning patterns, port scans, connection attempts, attack signatures, frequency analysis | Attack detection and pattern recognition |
 
-The log rotation settings can be customized through environment variables in docker-compose.yml:
+### Configuration
+
+Customize log retention through environment variables:
+
 ```yaml
 dicomhawkinit:
   environment:
-    - PERSISTENCE_CYCLES=30  
+    - PERSISTENCE_CYCLES=30  # Days to retain logs
 ```
-
-## Implementation Details
-
-The log management system is implemented as a separate service (`docker/dicomhawkinit/`) that:
-1. Sets up proper log directories
-2. Configures logrotate
-3. Runs daily log rotation and compression
-4. Automatically removes logs older than the configured retention period
-
-This ensures efficient disk usage while maintaining necessary log history for security and debugging purposes.

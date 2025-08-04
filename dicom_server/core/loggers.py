@@ -110,8 +110,8 @@ class Loggers(ILoggers):
         formatter=None,
     ):
         if name != "app_logger":
-            # if log_directory:
-            #     os.makedirs(log_directory, exist_ok=True)
+            if log_directory:
+                os.makedirs(log_directory, exist_ok=True)
             
             handler = logging.FileHandler(
                 os.path.join(log_directory, name + ".log")
