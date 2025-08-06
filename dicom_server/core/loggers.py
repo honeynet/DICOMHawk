@@ -87,7 +87,7 @@ class Loggers(ILoggers):
         self.is_production = is_production
         self.app_logger = self.setup_logger("app_logger", None)
         self.main_logger = self.setup_logger(
-            "pynetdicom", main_logger_directory, logging.DEBUG, None
+            "dicom_raw_logs", main_logger_directory, logging.DEBUG, None
         )
         self.simplified_logger = self.setup_logger(
             "simplified_logger",

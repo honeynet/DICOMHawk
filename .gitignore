@@ -3,7 +3,7 @@
 
 # Flask logging server logs 
 flask_logging_server/logs/simplified/*
-flask_logging_server/logs/pynetdicom/*
+flask_logging_server/logs/dicom_raw_logs/*
 flask_logging_server/logs/exceptions/*
 
 # DICOM server logs 

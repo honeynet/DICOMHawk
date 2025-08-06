@@ -15,7 +15,7 @@ log_directory, simplified_log_directory, host = (
 
 
 # Set logging files
-log_file_path = os.path.join(log_directory, "pynetdicom/pynetdicom.log")
+log_file_path = os.path.join(log_directory, "dicom_raw_logs/dicom_raw.log")
 
 simplified_log_file_path = os.path.join(
     simplified_log_directory, "simplified/simplified_logger.log"

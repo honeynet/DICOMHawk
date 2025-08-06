@@ -104,10 +104,10 @@ REDIS_HOST = os.getenv("REDIS_HOST", "172.29.0.4") if DOCKER else "localhost"
 
 """Logs directories"""
 MAIN_LOG_DIRECTORY, SIMPLIFIED_LOG_DIRECTORY, EXCEPTIONS_LOG_DIRECTORY = (
-    ("/var/log/dicomhawk/pynetdicom", "/var/log/dicomhawk/simplified", "/var/log/dicomhawk/exceptions")
+            ("/var/log/dicomhawk/dicom_raw_logs", "/var/log/dicomhawk/simplified", "/var/log/dicomhawk/exceptions")
     if DOCKER
     else (
-        "../flask_logging_server/logs/pynetdicom",
+        "../flask_logging_server/logs/dicom_raw_logs",
         "../flask_logging_server/logs/simplified",
         "./exceptions",
     )

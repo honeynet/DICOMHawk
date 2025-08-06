@@ -524,7 +524,7 @@ All logs are stored under `/data/dicomhawk/logs/`:
 
 | Directory/File | Content | Purpose |
 |----------------|---------|---------|
-| `pynetdicom/` | Raw DICOM protocol messages, association requests/releases, C-FIND/C-GET/C-STORE operations, detailed packet-level communication | Deep protocol analysis and debugging |
+| `dicom_raw_logs/` | Raw DICOM protocol messages, association requests/releases, C-FIND/C-GET/C-STORE operations, detailed packet-level communication | Deep protocol analysis and debugging |
 | `simplified/` | Clean DICOM transaction summaries, patient queries, study retrievals, association events with timestamps and IP addresses | Quick event review and monitoring |
 | `exceptions/` | Python exceptions, service errors, configuration issues, startup failures, runtime problems | Troubleshooting and system health monitoring |
 | `api_logs.log` | REST API requests/responses, authentication attempts, file uploads/downloads, user sessions, endpoint access | API usage monitoring and security analysis |
