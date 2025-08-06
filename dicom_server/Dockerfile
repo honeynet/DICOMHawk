@@ -1,8 +1,6 @@
 FROM python:3.9-slim
 USER root
 
-# Create a non-root user
-RUN groupadd -r dicomhawk && useradd -r -g dicomhawk dicomhawk
 
 RUN mkdir -p /var/log/dicomhawk/dicom_raw_logs \
              /var/log/dicomhawk/simplified \
@@ -37,13 +35,6 @@ COPY ./pydicom_and_pynetdicom_libs/service_class.py   /usr/local/lib/python3.9/s
 COPY ./pydicom_and_pynetdicom_libs/db.py /usr/local/lib/python3.9/site-packages/pynetdicom/apps/qrscp/db.py
 COPY ./pydicom_and_pynetdicom_libs/valuerep.py /usr/local/lib/python3.9/site-packages/pydicom/valuerep.py
 
-# Change ownership of directories and files
-RUN chown -R dicomhawk:dicomhawk /var/log/dicomhawk \
-    && chown -R dicomhawk:dicomhawk /opt/dicomhawk \
-    && chown -R dicomhawk:dicomhawk /dicom_server
-
-# Switch to non-root user
-USER dicomhawk
 
 EXPOSE 11112
 CMD ["python","-u" ,"main.py"]
