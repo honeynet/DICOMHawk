@@ -8,14 +8,11 @@ RUN mkdir -p /var/log/dicomhawk/dicom_raw_logs \
              /var/log/dicomhawk/api_logs \
              /var/log/dicomhawk/reputation \
              /var/log/dicomhawk/scanned_ips \
-             /opt/dicomhawk/db \
              /opt/dicomhawk/storage/dicom_storage \
              /opt/dicomhawk/storage/c_store_files \
              /opt/dicomhawk/tcia/data \
              /opt/dicomhawk/tcia/stagger
 
-
-COPY ./storage/db.db /opt/dicomhawk/db/
 
 RUN touch /var/log/dicomhawk/dicom_raw_logs/dicom_raw.log \
           /var/log/dicomhawk/simplified/simplified_logger.log \
