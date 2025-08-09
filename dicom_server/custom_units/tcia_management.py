@@ -3,6 +3,7 @@ from pydicom import uid
 import schedule, requests
 import json
 import utilities.tcia_util as tcia_util
+import utilities.tcia_fallback as tcia_fallback
 from services.redis_service import IRedisService
 from services.dicom_database_service import IDicomDatabase
 from services.tci_services import ITCIAAPI
@@ -82,24 +83,38 @@ class TCIAManager(ITCIAManager):
         self.tcia_api = tcia_api
         self.pdf_canary_path = pdf_canary_path
         self.change_dicom_files_called = False
-
+        
     def change_dicom_files(self):
         # to be used in unit testing
         self.change_dicom_files_called = True
 
         self.logger.info("Scheduled change of dicom files started")
+        
+        tcia_username = getattr(self.tcia_api, 'username', 'user') if self.tcia_api else 'user'
+        tcia_password = getattr(self.tcia_api, 'password', 'pass') if self.tcia_api else 'pass'
+        
         try:
+            # Ensure storage directory exists before staging
+            tcia_util.initialize_dicom_directory_if_not_exist(self.storage_directory)
+            
             self.logger.debug("Stagging existing files")
             tcia_util.stage_old_files(
                 self.storage_directory, self.tcia_dir, self.stagger_dir
             )
-            self.logger.debug("Getting access token from TCIA")
-            self.tcia_api.get_access_token()
+            
+            if tcia_fallback.should_use_fallback(tcia_username, tcia_password):
+                self.logger.info("Using fallback mode - copying sample TCIA files")
+                files_copied = tcia_fallback.copy_sample_files_to_tcia_directory(self.tcia_dir)
+                if files_copied == 0:
+                    raise Exception("Failed to copy sample files")
+            else:
+                self.logger.debug("Getting access token from TCIA")
+                self.tcia_api.get_access_token()
 
-            self.logger.debug("New files retrieval")
-            exist_studies = self.redis_handler.get_TCI_existing_studies()
+                self.logger.debug("New files retrieval")
+                exist_studies = self.redis_handler.get_TCI_existing_studies()
 
-            self.tcia_api.get_new_files(exist_studies, self.tcia_dir)
+                self.tcia_api.get_new_files(exist_studies, self.tcia_dir)
 
             self.logger.debug("Organizing downloaded files")
             self.organize_downloaded_files()
@@ -110,12 +125,15 @@ class TCIAManager(ITCIAManager):
             self.logger.debug("Updating DICOM database")
             self.dicomdb.initialize_database()
 
-        except Exception:
+        except Exception as e:
             self.exceptions_logger.exception(
-                "Changing Dicom files with TCIA files failed: Rolling back changes"
+                "Changing Dicom files failed: Rolling back changes"
             )
-
-            self.roll_back_changes()
+            # Only rollback if not in fallback mode to avoid rollback errors
+            if not tcia_fallback.should_use_fallback(tcia_username, tcia_password):
+                self.roll_back_changes()
+            else:
+                self.logger.warning("Skipping rollback in fallback mode due to error: " + str(e))
 
     def roll_back_changes(self):
         self.logger.debug("Roll-back: Deleting downloaded files")

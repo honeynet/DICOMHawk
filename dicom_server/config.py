@@ -156,6 +156,9 @@ CANARY_PDF_PATH = "/opt/dicomhawk/storage/can.pdf" if DOCKER else "./storage/can
 """TCIA activated"""
 TCIA_ACTIVATED = os.getenv("TCIA_ACTIVATED", "True").lower() in TRUE_LIST
 
+"""TCIA fallback mode - use sample files when TCIA is unavailable"""
+TCIA_FALLBACK_MODE = os.getenv("TCIA_FALLBACK_MODE", "True").lower() in TRUE_LIST
+
 
 """ Modalities of the studies should be retrieved from TCIA """
 MODALITIES = json.loads(os.getenv("MODALITIES", '["CT", "MR", "US", "DX"]'))

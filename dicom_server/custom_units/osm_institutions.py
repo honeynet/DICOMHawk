@@ -60,11 +60,13 @@ class OSMInstitutionsService(IOSMService):
                 return institutions
             else:
                 self.logger.warning("No institutions found from OSM, using fallback")
+                self._save_to_cache(self.fallback_institutions)
                 return self.fallback_institutions
 
         except Exception as e:
             self.exceptions_logger.exception("Error getting medical institutions")
             self.logger.warning("Failed to get institutions from OSM, using fallback")
+            self._save_to_cache(self.fallback_institutions)
             return self.fallback_institutions
 
     def refresh_cache(self) -> bool:

@@ -87,7 +87,7 @@ class Loggers(ILoggers):
         self.is_production = is_production
         self.app_logger = self.setup_logger("app_logger", None)
         self.main_logger = self.setup_logger(
-            "dicom_raw_logs", main_logger_directory, logging.DEBUG, None
+            "pynetdicom", main_logger_directory, logging.DEBUG, None
         )
         self.simplified_logger = self.setup_logger(
             "simplified_logger",
@@ -113,8 +113,9 @@ class Loggers(ILoggers):
             if log_directory:
                 os.makedirs(log_directory, exist_ok=True)
             
+            file_basename = "dicom_raw" if name == "pynetdicom" else name
             handler = logging.FileHandler(
-                os.path.join(log_directory, name + ".log")
+                os.path.join(log_directory, file_basename + ".log")
             )
             handler.setFormatter(formatter)
             stream_handler = logging.StreamHandler(stream=sys.stdout)
