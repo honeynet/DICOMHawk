@@ -1,5 +1,8 @@
 FROM python:3.8-slim
 
+ARG APP_UID=2000
+ARG APP_GID=2000
+
 # Set the working directory in the container to /app
 WORKDIR /log_server
 
@@ -13,13 +16,18 @@ RUN apt-get update && apt-get install -y \
 COPY . /log_server
 
 # Install any needed packages specified in requirements.txt
-RUN pip install flask uwsgi
+RUN pip install flask uwsgi \
+    && groupadd -g ${APP_GID} dicom \
+    && useradd -m -u ${APP_UID} -g ${APP_GID} -s /usr/sbin/nologin dicom \
+    && chown -R ${APP_UID}:${APP_GID}  /var/log
 
 # Make port 5000 available to the world outside this container
 EXPOSE 5000
 
 # Define environment variable
 ENV NAME World
+
+USER ${APP_UID}:${APP_GID}
 
 # Run uWSGI with the configuration
 CMD ["uwsgi", "--http", "0.0.0.0:5000", "--module", "logserver:app", "--processes", "1", "--threads", "8"]
