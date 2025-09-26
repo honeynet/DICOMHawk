@@ -37,8 +37,7 @@ RUN groupadd -g ${APP_GID} dicom \
     && useradd -m -u ${APP_UID} -g ${APP_GID} -s /usr/sbin/nologin dicom \
     && chown -R ${APP_UID}:${APP_GID} \
            /var/log/dicomhawk \
-           /opt/dicomhawk \
-
+           /opt/dicomhawk \           
 EXPOSE 11112
 USER ${APP_UID}:${APP_GID}
 CMD ["python","-u","main.py"]

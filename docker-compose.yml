@@ -129,6 +129,9 @@ services:
       - /tmp:uid=2000,gid=2000
     volumes:
       - ./data:/data:uid=2000,gid=2000
+    networks:
+      main_network:
+        ipv4_address: 172.29.0.7
 
   # Monitoring Stack Services (profile: monitoring)
   logstash:
@@ -151,8 +154,19 @@ services:
     profiles: ["monitoring"]
     image: 6711/elasticsearch
     entrypoint: ["/bin/bash", "/entry.sh"]
-    mem_limit: 1.5g
-    memswap_limit: 1.5g
+    mem_limit: 2g
+    memswap_limit: 2g
+    environment:
+    - "ES_JAVA_OPTS=-Xms512m -Xmx512m"  # Reduce to 512MB heap
+    - "xpack.security.enabled=false"
+    - "cluster.routing.allocation.disk.threshold_enabled=false"
+    - "logger.level=ERROR"               # Reduce logging to ERROR only
+    - "bootstrap.memory_lock=false"      # Disable memory locking to avoid issues
+    - "indices.memory.index_buffer_size=10%"  # Limit index buffer
+    - "indices.queries.cache.size=10%"        # Limit query cache
+    - "indices.fielddata.cache.size=10%"      # Limit fielddata cache
+    - "node.name=elasticsearch-single" 
+    - "cluster.name=docker-cluster"    
     ports:
       - "9200:9200"
       - "9300:9300"
