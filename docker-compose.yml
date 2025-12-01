@@ -101,7 +101,6 @@ services:
     build: ./dicom_server/.
     volumes:
       - ./data/dicomhawk/logs:/var/log/dicomhawk
-      - ./data/dicomhawk/db:/opt/dicomhawk/db
       - ./dicom_server/storage:/opt/dicomhawk/storage
       - ./dicom_server/storage/tcia_data:/opt/dicomhawk/tcia/data
       - ./dicom_server/storage/stagger:/opt/dicomhawk/tcia/stagger

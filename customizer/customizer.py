@@ -131,13 +131,15 @@ def main():
     
     print(f"\n{Colors.OKBLUE}Step 3: TCIA Configuration{Colors.ENDC}")
     print("-" * 40)
-    print("TCIA (The Cancer Imaging Archive) credentials are required for downloading DICOM files.")
-    print("You can get free credentials at: https://www.cancerimagingarchive.net/")
+    print("TCIA credentials are optional. Leave blank to use sample DICOM files (fallback is automatic).")
+    print("Get free credentials: https://www.cancerimagingarchive.net/")
     
-    TCIA_USER_NAME = get_input("TCIA Username", "", required=True)
-    TCIA_PASSWORD = get_input("TCIA Password", "", required=True, secret=True)
+    TCIA_USER_NAME = get_input("TCIA Username (optional)")
+    TCIA_PASSWORD = get_input("TCIA Password (optional)", secret=True)
     TCIA_PERIOD_UNIT = get_input("TCIA Period Unit (minutes/hours/days)", "minutes")
     TCIA_PERIOD = get_input("TCIA Period (frequency of downloads)", "1")
+    # Always enable fallback mode; it will automatically be used when credentials are missing or TCIA is disabled
+    TCIA_FALLBACK_MODE = "true"
     
     print(f"\n{Colors.OKBLUE}Step 4: Threat Intelligence APIs (Optional){Colors.ENDC}")
     print("-" * 40)
@@ -186,6 +188,7 @@ TCIA_USER_NAME={TCIA_USER_NAME}
 TCIA_PASSWORD={TCIA_PASSWORD}
 TCIA_PERIOD_UNIT={TCIA_PERIOD_UNIT}
 TCIA_PERIOD={TCIA_PERIOD}
+TCIA_FALLBACK_MODE={TCIA_FALLBACK_MODE}
 
 # Threat Intelligence APIs
 ABUSE_IP_API_KEY={ABUSE_IP_API_KEY}
@@ -221,7 +224,9 @@ HONEY_URL={HONEY_URL}
     print("4. Access the API at: http://localhost:3702")
     print()
     print(f"{Colors.WARNING}Important:{Colors.ENDC}")
+    print("- TCIA credentials are optional - the system will use sample files if not provided")
     print("- Update your TCIA credentials if they expire")
+    print("- The fallback system ensures the honeypot always has realistic DICOM data")
 
 if __name__ == "__main__":
     try:

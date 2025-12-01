@@ -18,7 +18,7 @@ setup_logrotate_conf() {
 }
 
 setup_directories() {
-    mkdir -p /data/dicomhawk/logs/pynetdicom
+    mkdir -p /data/dicomhawk/logs/dicom_raw_logs
     mkdir -p /data/dicomhawk/logs/simplified
     mkdir -p /data/dicomhawk/logs/exceptions
     mkdir -p /data/dicomhawk/logs/api_logs

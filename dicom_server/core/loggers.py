@@ -110,11 +110,12 @@ class Loggers(ILoggers):
         formatter=None,
     ):
         if name != "app_logger":
-            # if log_directory:
-            #     os.makedirs(log_directory, exist_ok=True)
+            if log_directory:
+                os.makedirs(log_directory, exist_ok=True)
             
+            file_basename = "dicom_raw" if name == "pynetdicom" else name
             handler = logging.FileHandler(
-                os.path.join(log_directory, name + ".log")
+                os.path.join(log_directory, file_basename + ".log")
             )
             handler.setFormatter(formatter)
             stream_handler = logging.StreamHandler(stream=sys.stdout)

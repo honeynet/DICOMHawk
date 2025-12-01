@@ -61,7 +61,6 @@ create_directories() {
     print_status "Creating necessary directories..."
     
     mkdir -p data/dicomhawk/logs
-    mkdir -p data/dicomhawk/db
     mkdir -p dicom_server/storage/dicom_storage
     mkdir -p dicom_server/storage/c_store_files
     mkdir -p dicom_server/storage/tcia_data
