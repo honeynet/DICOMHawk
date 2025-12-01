@@ -9,6 +9,9 @@ flask_logging_server/logs/exceptions/*
 # DICOM server logs 
 dicom_server/exceptions/*.log
 
+# API logs
+API/logs/*.log
+
 # Python cache files
 dicom_server/**/__pycache__/
 *.pyc
@@ -25,3 +28,8 @@ __pycache__/
 
 # Node.js
 node_modules/ 
+
+data/
+
+
+

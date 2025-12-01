@@ -332,7 +332,7 @@ When the DICOM server periodically removes old DICOM files and retrieves new one
 
 Canary PDF files are files that serve as monitored tokens within the DICOM files.
 
-To modify the canary PDF token used, replace the existing **can.pdf** file in the `dicom_server/storage/can.pdf` directory. The server uses this file as a template for generating canary PDFs injected into new DICOM files retrieved from TCIA. Make sure the updated PDF is named **can.pdf** to ensure it is properly recognized and utilized by the system.
+To modify the canary PDF token used, replace the existing **can.pdf** file in the `dicom_server/storage/can.pdf` directory (which maps to `/opt/dicomhawk/storage/can.pdf` inside the container). The server uses this file as a template for generating canary PDFs injected into new DICOM files retrieved from TCIA. Make sure the updated PDF is named **can.pdf** to ensure it is properly recognized and utilized by the system.
 
 ### HoneyURLs
 
@@ -422,3 +422,38 @@ Users can interact with the DICOM server utilizing DCMTK tools and DICOM client 
   - Navigate to [http://localhost:5000](http://localhost:5000).
 - **Web API User Interface:**
   - Navigate to [http://localhost:3000](http://localhost:3000) (or the port you configured) and use username and password `test` - `test`, respectively.
+
+# Log Management
+
+DICOMHawk implements automated log management through the `dicomhawkinit` service. This service handles:
+
+- Log rotation (daily)
+- Log compression (using pigz)
+- Automatic cleanup of old logs (after 30 days by default)
+
+## Log Types and Locations
+
+All logs are stored under `/data/dicomhawk/logs/`:
+- `pynetdicom/`: DICOM server communication logs
+- `simplified/`: Simplified DICOM transaction logs
+- `exceptions/`: Error and exception logs
+- API logs: `api_logs.log`, `reputation.log`, `scanned_ips.log`
+
+## Configuration
+
+The log rotation settings can be customized through environment variables in docker-compose.yml:
+```yaml
+dicomhawkinit:
+  environment:
+    - PERSISTENCE_CYCLES=30  
+```
+
+## Implementation Details
+
+The log management system is implemented as a separate service (`docker/dicomhawkinit/`) that:
+1. Sets up proper log directories
+2. Configures logrotate
+3. Runs daily log rotation and compression
+4. Automatically removes logs older than the configured retention period
+
+This ensures efficient disk usage while maintaining necessary log history for security and debugging purposes.

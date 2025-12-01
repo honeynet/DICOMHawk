@@ -75,15 +75,15 @@ FLASK_ACTIVATED = os.getenv("FLASK_ACTIVATED", "True").lower() in TRUE_LIST
 BLOCK_SCANNERS = os.getenv("BLOCK_SCANNERS", "False").lower() in TRUE_LIST
 
 """Blackhole list file"""
-BLACKHOLE_FILE_PATH = os.getenv("BLACKHOLE_FILE_PATH", "./storage/blackhole_list.txt")
+BLACKHOLE_FILE_PATH = os.getenv("BLACKHOLE_FILE_PATH", "/opt/dicomhawk/storage/blackhole_list.txt" if DOCKER else "./storage/blackhole_list.txt")
 
 """DICOM files storage"""
 
-DICOM_STORAGE_DIR = "./storage/dicom_storage"
+DICOM_STORAGE_DIR = "/opt/dicomhawk/storage/dicom_storage" if DOCKER else "./storage/dicom_storage"
 
 """DICOM files recieved through the server storage"""
 
-C_STORE_STORAGE = "./storage/c_store_files"
+C_STORE_STORAGE = "/opt/dicomhawk/storage/c_store_files" if DOCKER else "./storage/c_store_files"
 
 """DICOM server port configuration"""
 try:
@@ -104,7 +104,7 @@ REDIS_HOST = os.getenv("REDIS_HOST", "172.29.0.4") if DOCKER else "localhost"
 
 """Logs directories"""
 MAIN_LOG_DIRECTORY, SIMPLIFIED_LOG_DIRECTORY, EXCEPTIONS_LOG_DIRECTORY = (
-    ("/app/logs/pynetdicom", "/app/logs/simplified", "/app/logs/exceptions")
+    ("/var/log/dicomhawk/pynetdicom", "/var/log/dicomhawk/simplified", "/var/log/dicomhawk/exceptions")
     if DOCKER
     else (
         "../flask_logging_server/logs/pynetdicom",
@@ -114,7 +114,7 @@ MAIN_LOG_DIRECTORY, SIMPLIFIED_LOG_DIRECTORY, EXCEPTIONS_LOG_DIRECTORY = (
 )
 
 """The sqlite file path"""
-DICOM_DATABASE = "/app/db.db" if DOCKER else "./storage/db.db"
+DICOM_DATABASE = "/opt/dicomhawk/storage/db.db" if DOCKER else "./storage/db.db"
 
 """TCIA username and password to use it in API calls"""
 TCIA_USER_NAME = os.getenv("TCIA_USER_NAME", "user")
@@ -128,9 +128,9 @@ TCIA_PERIOD_UNIT = os.getenv("TCIA_PERIOD_UNIT", "week")
 TCIA_PERIOD = int(os.getenv("TCIA_PERIOD", 1))
 
 """The path where TCIA dicom files save on retrieval"""
-TCIA_FILES_DIRECTORY = "./storage/tcia_data"
+TCIA_FILES_DIRECTORY = "/opt/dicomhawk/tcia/data" if DOCKER else "./storage/tcia_data"
 """Files stagger directory"""
-TCIA_FILES_STAGGER_DIRECTORY = "./storage/stagger"
+TCIA_FILES_STAGGER_DIRECTORY = "/opt/dicomhawk/tcia/stagger" if DOCKER else "./storage/stagger"
 """ API key Abuseipdb """
 ABUSE_IP_API_KEY = os.getenv(
     "ABUSE_IP__KEY",
@@ -150,7 +150,7 @@ VIRUS_TOTAL_API_KEY = os.getenv(
 )
 
 """Canary pdf path"""
-CANARY_PDF_PATH = "./storage/can.pdf"
+CANARY_PDF_PATH = "/opt/dicomhawk/storage/can.pdf" if DOCKER else "./storage/can.pdf"
 
 
 """TCIA activated"""
@@ -177,7 +177,7 @@ HONEY_URL = os.getenv("HONEY_URL","VALUE")
 INTEGRITY_CHECK = os.getenv("INTEGRITY_CHECK", "True").lower() in TRUE_LIST
 
 """Integrity checker file storage path"""
-HASH_STORAGE_PATH = "./storage/hash_store.json"
+HASH_STORAGE_PATH = "/opt/dicomhawk/storage/hash_store.json" if DOCKER else "./storage/hash_store.json"
 
 """Faker locale for generating patient names and data"""
 FAKER_LOCALE = os.getenv("FAKER_LOCALE", "en_US")
@@ -205,4 +205,4 @@ OSM_FALLBACK_INSTITUTIONS = json.loads(os.getenv("OSM_FALLBACK_INSTITUTIONS",
     '["Københavns Sundhedscenter", "Aarhus Kliniken", "Odense Patienthus", "Nordjylland Med Institut"]'))
 
 """OSM cache file path"""
-OSM_CACHE_FILE = "./storage/osm_institutions_cache.json"
+OSM_CACHE_FILE = "/opt/dicomhawk/storage/osm_institutions_cache.json" if DOCKER else "./storage/osm_institutions_cache.json"

@@ -6,7 +6,7 @@ services:
     volumes:
       - ./flask_logging_server/templates:/log_server/templates
       - ./flask_logging_server/static:/log_server/static
-      - shared_data:/app
+      - ./data/dicomhawk/logs:/var/log/dicomhawk
     environment:
       - Docker_ENV=True
     networks:
@@ -19,7 +19,8 @@ services:
     profiles: ["main"]
     build: ./API/.
     volumes:
-      - shared_data:/app
+      - ./data/dicomhawk/logs:/var/log/dicomhawk
+      - ./dicom_server/storage:/opt/dicomhawk/storage
     networks:
       main_network:
         ipv4_address: 172.29.0.2
@@ -54,11 +55,11 @@ services:
       - BLOCK_SCANNERS=no
       - INTEGRITY_CHECK=yes
       - TCIA_ACTIVATED=yes
-      - BLACKHOLE_FILE_PATH=./storage/blackhole_list.txt
+      - BLACKHOLE_FILE_PATH=/opt/dicomhawk/storage/blackhole_list.txt
       - REDIS_HOST=172.29.0.4
       - TCIA_USER_NAME=${TCIA_USER_NAME}
       - TCIA_PASSWORD=${TCIA_PASSWORD}
-      - TCIA_PERIOD_UNIT=week
+      - TCIA_PERIOD_UNIT=minutes
       - TCIA_PERIOD=1
       - FAKER_LOCALE=${FAKER_LOCALE}
       - OSM_ENABLED=${OSM_ENABLED:-true}
@@ -83,7 +84,11 @@ services:
 
     build: ./dicom_server/.
     volumes:
-      - shared_data:/app
+      - ./data/dicomhawk/logs:/var/log/dicomhawk
+      - ./data/dicomhawk/db:/opt/dicomhawk/db
+      - ./dicom_server/storage:/opt/dicomhawk/storage
+      - ./dicom_server/storage/tcia_data:/opt/dicomhawk/tcia/data
+      - ./dicom_server/storage/stagger:/opt/dicomhawk/tcia/stagger
     ports:
       - "11112:11112"
     depends_on:
@@ -92,13 +97,27 @@ services:
       main_network:
         ipv4_address: 172.29.0.3
 
+  dicomhawkinit:
+    profiles: ["main"]
+    container_name: dicomhawkinit
+    build: ./dicomhawkinit/.
+    restart: always
+    environment:
+      - PERSISTENCE_CYCLES=30
+    volumes:
+      - ./data:/data
+    networks:
+      main_network:
+        ipv4_address: 172.29.0.7
+
   # Monitoring Stack Services (profile: monitoring)
   logstash:
     profiles: ["monitoring"]
     image: 6711/logstash3:1.0.0
-    environment:
-      REDIS_HOST: "172.29.0.4"
     entrypoint: ["/bin/bash", "/sub.sh"]
+    volumes:
+      - ./data:/data
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     depends_on:
       - elastiksearch
     networks:
