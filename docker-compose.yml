@@ -15,10 +15,10 @@ services:
   logserver:
     profiles: ["main"]
     build: ./flask_logging_server/.
+    tmpfs:
+      - /tmp:uid=2000,gid=2000
     volumes:
-      - ./flask_logging_server/templates:/log_server/templates
-      - ./flask_logging_server/static:/log_server/static
-      - ./data/dicomhawk/logs:/var/log/dicomhawk
+      - ./data/dicomhawk/logs:/var/log/dicomhawk:uid=2000,gid=2000
     environment:
       - Docker_ENV=True
     networks:
@@ -32,9 +32,12 @@ services:
     build: ./API/.
     depends_on:
       - customizer
+    tmpfs:
+      - /tmp:uid=2000,gid=2000
     volumes:
-      - ./data/dicomhawk/logs:/var/log/dicomhawk
-      - ./dicom_server/storage:/opt/dicomhawk/storage
+      - ./data/dicomhawk/logs:/var/log/dicomhawk:uid=2000,gid=2000
+      - ./dicom_server/storage:/opt/dicomhawk/storage:uid=2000,gid=2000
+      - ./API/uploads:/api/uploads:uid=2000,gid=2000
     networks:
       main_network:
         ipv4_address: 172.29.0.2
@@ -55,6 +58,9 @@ services:
   redis:
     profiles: ["main"]
     image: redis
+    user: "2000:2000"
+    tmpfs:
+      - /tmp:uid=2000,gid=2000
     ports:
       - "6379:6379"
     networks:
@@ -99,11 +105,13 @@ services:
       - DICOM_IMPLEMENTATION_UID=${DICOM_IMPLEMENTATION_UID}
 
     build: ./dicom_server/.
+    tmpfs:
+      - /tmp:uid=2000,gid=2000
     volumes:
-      - ./data/dicomhawk/logs:/var/log/dicomhawk
-      - ./dicom_server/storage:/opt/dicomhawk/storage
-      - ./dicom_server/storage/tcia_data:/opt/dicomhawk/tcia/data
-      - ./dicom_server/storage/stagger:/opt/dicomhawk/tcia/stagger
+      - ./data/dicomhawk/logs:/var/log/dicomhawk:uid=2000,gid=2000
+      - ./dicom_server/storage:/opt/dicomhawk/storage:uid=2000,gid=2000
+      - ./dicom_server/storage/tcia_data:/opt/dicomhawk/tcia/data:uid=2000,gid=2000
+      - ./dicom_server/storage/stagger:/opt/dicomhawk/tcia/stagger:uid=2000,gid=2000
     ports:
       - "11112:11112"
     networks:
@@ -117,8 +125,10 @@ services:
     restart: always
     environment:
       - PERSISTENCE_CYCLES=30
+    tmpfs:
+      - /tmp:uid=2000,gid=2000
     volumes:
-      - ./data:/data
+      - ./data:/data:uid=2000,gid=2000
     networks:
       main_network:
         ipv4_address: 172.29.0.7
@@ -128,8 +138,9 @@ services:
     profiles: ["monitoring"]
     image: 6711/logstash3:1.0.0
     entrypoint: ["/bin/bash", "/sub.sh"]
+    user: "1000:1000"
     volumes:
-      - ./data:/data
+      - ./data:/data:uid=1000,gid=1000
       - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     depends_on:
       - elastiksearch
@@ -143,6 +154,19 @@ services:
     profiles: ["monitoring"]
     image: 6711/elasticsearch
     entrypoint: ["/bin/bash", "/entry.sh"]
+    mem_limit: 2g
+    memswap_limit: 2g
+    environment:
+    - "ES_JAVA_OPTS=-Xms512m -Xmx512m"  # Reduce to 512MB heap
+    - "xpack.security.enabled=false"
+    - "cluster.routing.allocation.disk.threshold_enabled=false"
+    - "logger.level=ERROR"               # Reduce logging to ERROR only
+    - "bootstrap.memory_lock=false"      # Disable memory locking to avoid issues
+    - "indices.memory.index_buffer_size=10%"  # Limit index buffer
+    - "indices.queries.cache.size=10%"        # Limit query cache
+    - "indices.fielddata.cache.size=10%"      # Limit fielddata cache
+    - "node.name=elasticsearch-single" 
+    - "cluster.name=docker-cluster"    
     ports:
       - "9200:9200"
       - "9300:9300"
