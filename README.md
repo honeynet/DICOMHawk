@@ -64,6 +64,13 @@ services:
       - VIRUS_TOTAL_API_KEY=APIKEY
 ```
 
+### macOS Users
+
+macOS Control Center binds to TCP port 5000 which prevents the logserver
+from starting.
+
+See docs/macos-setup.md for the workaround.
+
 ## Key Configurable Parameters in `config.py`
 
 The main configurable parameters available in the `config.py` file, along with their possible values are:
