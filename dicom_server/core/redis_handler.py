@@ -3,6 +3,11 @@ from services.redis_service import IRedisService
 
 
 class RedisClient(IRedisService):
+    def add_security_event(self, event):
+        key = "dicom:events:assoc_rejected"
+        payload = json.dumps(event)
+        self.redis_client.rpush(key, payload)
+        self.redis_client.ltrim(key, -10000, -1)
 
     def __init__(self, app_logger, exceptions_logger, redis_client):
 
@@ -88,3 +93,4 @@ class RedisClient(IRedisService):
             self.exceptions_logger.exception(
                 "Unexpected error while adding integrity check identifier"
             )
+
