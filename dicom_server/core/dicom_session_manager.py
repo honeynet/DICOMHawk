@@ -15,18 +15,17 @@ class SessionCollector(ISessionCollector):
 
         if not redis:
             return
-
-        event = {
-            "event": "assoc_rejected",
-            "timestamp": datetime.utcnow().isoformat(),
-            "ip": ip,
-            "calling_ae": calling_ae.decode(errors="ignore"),
-            "called_ae": called_ae.decode(errors="ignore"),
-            "reason": reason,
-        }
-
-        redis.add_security_event(event)
-
+        try:
+            event = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "ip": str(ip),
+                    "calling_ae": calling_ae.decode(errors="ignore") if isinstance(calling_ae, bytes) else str(calling_ae),
+                    "called_ae": called_ae.decode(errors="ignore") if isinstance(called_ae, bytes) else str(called_ae),
+                    "reason": reason,
+                }
+                redis.add_security_event(event)
+        except Exception:
+            self.exceptions_logger.exception("Failed to record rejected association to Redis")
 
     @inject
     def __init__(
@@ -195,5 +194,6 @@ class SessionCollector(ISessionCollector):
 
     def set_session_id(self, s_id):
         self.session_info[sk.SESSION_ID.key] = s_id
+
 
 
