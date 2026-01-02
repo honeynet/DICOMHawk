@@ -28,7 +28,6 @@ class DICOMHandlers:
 
     def handle_assoc(self, event):
         try:
-
             version_name = (
                 str(event.assoc.requestor.implementation_version_name)
                 if event.assoc.requestor.implementation_version_name
@@ -36,6 +35,18 @@ class DICOMHandlers:
             )
             ip = str(event.assoc.requestor.address)
             port = event.assoc.requestor.port
+            assoc = event.assoc
+            calling_ae = assoc.requestor.ae_title.strip()
+            called_ae  = assoc.requestor.requested_ae_title.strip()
+            ip_addr    = assoc.requestor.address
+
+            try:
+                self.event_collector.record_rejected_assoc(
+                ip_addr, calling_ae, called_ae, "ASSOC_ATTEMPT"
+                )
+            except Exception:
+                pass
+
             self.event_collector.session_started(ip, port, version_name)
         except Exception as e:
             self.exceptions_logger.exception(
@@ -311,3 +322,4 @@ class DICOMHandlers:
                 ]
 
         return matching
+
