@@ -9,6 +9,18 @@ from enums.dicom_session_keys import Sessionkeys as sk
 
 
 class SessionCollector(ISessionCollector):
+    
+    def record_rejected_assoc(self, ip, calling_ae, called_ae, reason):
+        event = {
+            "event": "assoc_rejected",
+            "timestamp": datetime.utcnow().isoformat(),
+            "ip": ip,
+            "calling_ae": calling_ae.decode(errors="ignore"),
+            "called_ae": called_ae.decode(errors="ignore"),
+            "reason": reason,
+        }
+        self.redis_client.add_security_event(event)
+
     @inject
     def __init__(
         self,
@@ -176,3 +188,4 @@ class SessionCollector(ISessionCollector):
 
     def set_session_id(self, s_id):
         self.session_info[sk.SESSION_ID.key] = s_id
+
