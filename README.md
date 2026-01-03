@@ -378,6 +378,14 @@ Example commands to interact with the server using DCMTK are:
      To access the Web API user interface, navigate to "http://localhost:3000" and use username and password is "test" - "test", respectively.
 
 
+## Troubleshooting
+
+### ImportError / ModuleNotFoundError
+If you face import errors after cloning, ensure you have activated the correct virtual environment and installed dependencies:
+
+```bash
+pip install -r requirements.txt
+
 
 
 
