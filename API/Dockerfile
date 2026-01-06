@@ -8,13 +8,15 @@ COPY . /api/
 
 WORKDIR /api/.
 
-RUN groupadd -g ${APP_GID} dicom \
-    && useradd -m -u ${APP_UID} -g ${APP_GID} -s /usr/sbin/nologin dicom \
-    && mkdir -p /api /var/log/dicomhawk \
-    && chown -R ${APP_UID}:${APP_GID} /api /var/log/dicomhawk
+RUN groupadd -g ${APP_GID} dicom
+RUN useradd -m -u ${APP_UID} -g ${APP_GID} -s /usr/sbin/nologin dicom
+RUN mkdir -p /api /var/log/dicomhawk
+RUN chown -R ${APP_UID}:${APP_GID} /api /var/log/dicomhawk
 
-RUN npm install && npm rebuild sqlite3 && npm install redis \
-    && chown -R ${APP_UID}:${APP_GID} /api
+RUN npm install
+RUN npm rebuild sqlite3 
+RUN npm install redis
+RUN chown -R ${APP_UID}:${APP_GID} /api
 
 EXPOSE 3702
 
