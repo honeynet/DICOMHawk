@@ -25,7 +25,7 @@ WORKDIR /dicom_server/.
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt \
     && apt-get update \
-    && apt-get -qq install -y iptables ipset \
+    && apt-get -qq install -y iptables ipset
 
 COPY ./pydicom_and_pynetdicom_libs/service_class.py   /usr/local/lib/python3.9/site-packages/pynetdicom/service_class.py
 COPY ./pydicom_and_pynetdicom_libs/db.py /usr/local/lib/python3.9/site-packages/pynetdicom/apps/qrscp/db.py
@@ -37,7 +37,8 @@ RUN groupadd -g ${APP_GID} dicom \
     && useradd -m -u ${APP_UID} -g ${APP_GID} -s /usr/sbin/nologin dicom \
     && chown -R ${APP_UID}:${APP_GID} \
            /var/log/dicomhawk \
-           /opt/dicomhawk \           
+           /opt/dicomhawk
+                   
 EXPOSE 11112
 USER ${APP_UID}:${APP_GID}
 CMD ["python","-u","main.py"]

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # DICOMHawk Installation Script
 # This script helps users install and configure DICOMHawk
@@ -31,6 +31,7 @@ print_error() {
 
 # Check if Docker is installed
 check_docker() {
+
     if ! command -v docker &> /dev/null; then
         print_error "Docker is not installed. Please install Docker first."
         exit 1
@@ -123,31 +124,35 @@ start_containers() {
 
 # final instructions
 show_instructions() {
-    echo
-    print_success "DICOMHawk installation completed!"
-    echo
-    echo "Access points:"
-    echo "  - Web Interface: http://localhost:5000"
-    echo "  - API: http://localhost:3702"
-    echo "  - DICOM Server: localhost:11112"
-    echo
-    echo "Useful commands:"
-    echo "  - View logs: docker-compose logs -f"
-    echo "  - Stop services: docker-compose down"
-    echo "  - Restart services: docker-compose restart"
-    echo
-    print_warning "Important:"
-    echo "  - Update TCIA credentials if they expire"
-    echo "  - Monitor logs for any issues"
-    echo
+    echo print_success "DICOMHawk installation completed!"
+
+    echo "
+    Access points:
+        - Web Interface: http://localhost:5000
+        - API: http://localhost:3702
+        - DICOM Server: localhost:11112
+
+    Useful commands:
+        - View logs: docker-compose logs -f
+        - Stop services: docker-compose down
+        - Restart services: docker-compose restart
+    "
+
+    echo print_warning "Important:
+        - Update TCIA credentials if they expire
+        - Monitor logs for any issues
+    "
+
+    exit 0
 }
 
 main() {
-    echo "=========================================="
-    echo "        DICOMHawk Installation"
-    echo "=========================================="
-    echo
-    
+    echo '
+==========================================
+            DICOMHawk Installation
+==========================================
+    '
+
     check_root
     check_docker
     create_directories
