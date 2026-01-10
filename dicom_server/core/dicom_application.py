@@ -100,6 +100,7 @@ class DicomStarter:
         Registers supported and requested presentation contexts
         for storage, query/retrieve, and verification services.
         """
+        self.ae.maximum_associations = 50
         try:
             ae = AE()
             ae.supported_contexts = AllStoragePresentationContexts
