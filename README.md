@@ -105,6 +105,19 @@ dicom_server/dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceU
 
 ## Threat Intelligence for the DICOM server and the Web API
 
+### Association Management Configuration
+
+DICOMHawk includes configurable association management to handle high-load scenarios and prevent resource exhaustion.
+
+- **DICOMHAWK_MAX_ASSOCIATIONS**: Integer value to set the maximum number of concurrent DICOM associations (default: 50). This prevents the server from being overwhelmed by too many simultaneous connections.
+
+To configure this setting, add it to your `docker-compose.yml` file:
+
+```yaml
+services:
+  dicom_server:
+    environment:
+      - DICOMHAWK_MAX_ASSOCIATIONS=100
 To enable IP reputation checks for addresses interacting with DICOMHawk, include the following environment variables in your `docker-compose.yml` file.
 
 Each variable corresponds to a threat intelligence service. You must obtain valid API keys from the respective providers before use:
