@@ -40,6 +40,38 @@ The monitoring system utilizes several key components:
 3. Kibana: Visualizes the collected data.
 
 # Usage Guide
+## DICOMHawk v2.0 Architecture
+
+DICOMHawk v2.0 introduces a modular, dependency-injection based architecture for improved maintainability and extensibility.
+
+### Core Components
+
+#### ApplicationContainer
+The central dependency injection container that manages all application services. Located in `dicom_server/core/app_container.py`.
+
+**Services managed:**
+- Database connection (SQLAlchemy)
+- Redis session management
+- DICOM handlers
+- Threat intelligence
+- TCIA integration
+
+#### DicomStarter
+Handles initialization and launching of the DICOM server. Located in `dicom_server/core/dicom_application.py`.
+
+**Responsibilities:**
+- Application Entity (AE) configuration
+- Event handler registration
+- Server startup and port binding
+
+#### DICOMHandlers
+Processes DICOM operations (C-FIND, C-STORE, C-ECHO, C-MOVE, C-GET). Located in `dicom_server/core/dicom_handlers.py`.
+
+#### SessionCollector
+Manages active DICOM associations and session tracking. Located in `dicom_server/core/dicom_session_manager.py`.
+
+### Directory Structure
+
 
 ## DICOMHawk Configuration
 
