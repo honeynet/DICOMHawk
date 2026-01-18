@@ -10,7 +10,7 @@
     <div id="particles-js"></div>
     <div class="container">
         <header>
-            <img src="{{ url_for('static', filename='dicomhawk_logo.png') }}" alt="DICOMHawk Logo" class="logo">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="DICOMHawk Logo" class="logo">
             <h1>Welcome to DICOMHawk</h1>
             <p>The ultimate honeypot DICOM server to track and analyze unauthorized access attempts.</p>
         </header>
@@ -34,13 +34,10 @@
                 </li>
             </ul>
         </nav>
-        <footer>
-            <p>&copy; 2024 DICOMHawk. All rights reserved.</p>
-        </footer>
     </div>
     <script>
-        particlesJS.load('particles-js', '{{ url_for('static', filename='particles.json') }}', function() {
-            console.log('particles.js loaded - callback');
+        particlesJS.load("particles-js", "{{ url_for('static', filename='particles.json') }}", function() {
+            console.log("particles.js loaded - callback");
         });
     </script>
 </body>

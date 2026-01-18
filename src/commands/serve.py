@@ -3,10 +3,6 @@ from dicomhawk import new_dicomhawk
 
 serve_app = typer.Typer(help="dicomhawk runner")
 
-def banner():
-    with open("logo.txt", "r") as f:
-        print("\033[92m", f.read())
-
 @serve_app.command()
 def serve(
         ports: str = typer.Option(
