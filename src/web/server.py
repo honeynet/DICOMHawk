@@ -1,6 +1,6 @@
 import os
 import ujson
-from flask import Flask, jsonify, render_template, send_from_directory, current_app
+from flask import Flask, jsonify, render_template, send_from_directory
 
 import logging
 
@@ -50,7 +50,7 @@ def handle_exception(e):
 
 @app.route("/logs/simplified")
 def simplified_logs():
-    logs_dir = current_app.logs_dir
+    logs_dir = app.config["logs"]
     fpath = os.path.join(logs_dir, "simplified.log")
 
     if not os.path.exists(fpath):
@@ -70,7 +70,7 @@ def simplified_logs():
     
 @app.route("/logs/all")
 def all_logs():
-    logs_dir = current_app.logs_dir
+    logs_dir = app.config["logs"]
     fpath = os.path.join(logs_dir, "logs.log")
 
     if not os.path.exists(fpath):
@@ -86,5 +86,5 @@ def main(
         port: int=5000, 
         logs_dir: str="logs/dicomhawk", 
     ):
-    app.logs_dir = logs_dir
+    app.config["logs"] = logs_dir
     app.run(host, port=port)
