@@ -1,35 +1,51 @@
-# IDE 
-.vscode/ 
+# IDE
+.vscode
 
-# Flask logging server logs 
-flask_logging_server/logs/simplified/*
-flask_logging_server/logs/dicom_raw_logs/*
-flask_logging_server/logs/exceptions/*
+# Byte-compiled / optimized / DLL files
+__pycache__
+__pycache__/
+*.py[cod]
+*$py.class
 
-# DICOM server logs 
-dicom_server/exceptions/*.log
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+*.hypothesis/
+.pytest_cache/
 
-# API logs
-API/logs/*.log
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Python cache files
-dicom_server/**/__pycache__/
-*.pyc
-
-# Environment files
-API/.env
+# Environments
 .env
-
-# Python specific generated files
-__pycache__/ 
-*.pyo
-*.pyd
-*.so 
-
-# Node.js
-node_modules/ 
-
-data/
-
-# Snyk Security Extension - AI Rules (auto-generated)
-.github/instructions/snyk_rules.instructions.md
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
