@@ -49,3 +49,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# snyk things
+.github/instructions/
