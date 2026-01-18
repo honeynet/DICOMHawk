@@ -1,6 +1,5 @@
 from aenum import Enum
 
-
 class Sessionkeys(Enum):
     _init_ = "key default"
 

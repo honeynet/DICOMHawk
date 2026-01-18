@@ -9,18 +9,11 @@ Asseretations:
 
 """
 
-import sys
-import os
-
-sys.path.append(os.path.abspath("../core"))
-sys.path.append(os.path.abspath("../pydicom_and_pynetdicom_libs/"))
-
 import pytest
 from pydicom import Dataset
 from pydicom.uid import UID
 from unittest.mock import Mock
 from pynetdicom.sop_class import CTImageStorage
-import global_patcher
 import app_container
 
 test_container = app_container.ApplicationContainer()

@@ -1,8 +1,4 @@
-import sys, os
 from unittest.mock import patch, Mock
-
-sys.path.append(os.path.abspath(".."))
-
 
 patch.multiple(
     "config",

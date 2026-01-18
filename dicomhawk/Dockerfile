@@ -1,6 +1,7 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 USER root
 
+# TODO: this is crazy. Why is this stored this way?
 RUN mkdir -p /var/log/dicomhawk/dicom_raw_logs \
              /var/log/dicomhawk/simplified \
              /var/log/dicomhawk/exceptions \
@@ -23,22 +24,25 @@ COPY . dicom_server/
 WORKDIR /dicom_server/.
 
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt \
-    && apt-get update \
-    && apt-get -qq install -y iptables ipset
+    && pip install .
 
-COPY ./pydicom_and_pynetdicom_libs/service_class.py   /usr/local/lib/python3.9/site-packages/pynetdicom/service_class.py
-COPY ./pydicom_and_pynetdicom_libs/db.py /usr/local/lib/python3.9/site-packages/pynetdicom/apps/qrscp/db.py
-COPY ./pydicom_and_pynetdicom_libs/valuerep.py /usr/local/lib/python3.9/site-packages/pydicom/valuerep.py
+RUN apt-get update \
+    && apt-get -qq install -y \
+    iptables \
+    ipset
 
 ARG APP_UID=2000
 ARG APP_GID=2000
 RUN groupadd -g ${APP_GID} dicom \
     && useradd -m -u ${APP_UID} -g ${APP_GID} -s /usr/sbin/nologin dicom \
     && chown -R ${APP_UID}:${APP_GID} \
-           /var/log/dicomhawk \
-           /opt/dicomhawk
-                   
+    /var/log/dicomhawk \
+    /opt/dicomhawk
+           
+# NOTE: this does nothing
 EXPOSE 11112
+
 USER ${APP_UID}:${APP_GID}
-CMD ["python","-u","main.py"]
+
+# TODO: no arguments?
+CMD ["dicomhawk"]

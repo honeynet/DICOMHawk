@@ -1,14 +1,16 @@
 """Implementation of the DICOM handlers"""
 
-import traceback, utilities.dicom_util as dicom_util
+
 from dependency_injector.wiring import inject
 from services.dicom_session_service import ISessionCollector
 from services.dicom_database_service import IDicomDatabase
 from pydicom.dataset import Dataset
-import traceback
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 from typing import Generator, Tuple, Optional
 from enums.dicom_session_keys import Sessionkeys as session_keys
+
+# TODO: what do we need from here?
+import dicomhawk.utilities.dicom_util as dicom_util
 
 
 class DICOMHandlers:

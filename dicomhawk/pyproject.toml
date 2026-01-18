@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dicomhawk"
+version = "0.1.0"
+description = "DICOM honeypot"
+authors = [
+    {name = "Georgios Theodoridis"}
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydicom",
+    "pynetdicom",
+    "pylibjpeg",
+    "pylibjpeg-libjpeg",
+    "pylibjpeg-openjpeg",
+    "requests",
+    "redis",
+    "schedule",
+    "jwt",
+    "dependency-injector",
+    "aenum",
+    "pytz",
+    "overpy",
+    "sqlalchemy",
+    "typer", 
+    "numpy"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "faker",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*"]
+
+[project.urls]
+Homepage = "https://github.com/honeynet/DICOMHawk"
+Issues = "https://github.com/honeynet/DICOMHawk/issues"
+
+[project.scripts]
+dicomhawk = "commands.main:main"

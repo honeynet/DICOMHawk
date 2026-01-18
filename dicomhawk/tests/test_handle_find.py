@@ -31,16 +31,9 @@ were used:
    - Logging is suppressed focus on functional validation (Other tests will take the logging) .
 """
 
-import sys
-import os
-
-sys.path.append(os.path.abspath("../core/"))
-sys.path.append(os.path.abspath("../pydicom_and_pynetdicom_libs/"))
 import pytest
 from unittest.mock import Mock, patch
 from pydicom import Dataset
-import global_patcher
-
 
 @pytest.fixture
 def event_retreive_all_studies():
