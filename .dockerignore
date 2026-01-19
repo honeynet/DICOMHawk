@@ -1,0 +1,12 @@
+tests
+.venv
+.local
+.github
+.vscode
+.gitignore
+
+docs/
+Makefile
+Changelog.md
+
+*.md

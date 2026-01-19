@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "DICOMHawk citation"
+authors:
+- family-names: "Vasilomanolakis"
+  given-names: "Emmanouil"
+  orcid: "https://orcid.org/0000-0001-5068-9158"
+title: "DICOMHawk"
+url: "https://github.com/honeynet/DICOMHawk"
