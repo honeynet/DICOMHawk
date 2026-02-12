@@ -182,6 +182,15 @@ To run DICOMHawk locally, each service should be run separately in its directory
   cd ./dicom_server
   pip install -r .\requirements.txt
   ```
+cd dicom_server
+
+# Create virtual environment (recommended for Debian/Kali systems)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
 
 ### Starting Each Service
 
@@ -376,6 +385,7 @@ Example commands to interact with the server using DCMTK are:
 ## Access the Web API User Interface
 
      To access the Web API user interface, navigate to "http://localhost:3000" and use username and password is "test" - "test", respectively.
+
 
 
 
