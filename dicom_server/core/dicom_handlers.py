@@ -212,6 +212,11 @@ class DICOMHandlers:
         addr = assoc.requestor.address
         port = assoc.requestor.port
         yield (str(addr), port)
+        addr = assoc.requestor.address
+        port = assoc.requestor.port
+        yield (str(addr), port)
+        assoc = event.assoc
+        identifier = event.identifier
 
         if dicom_util.identifier_invalid(identifier):
             yield 0xC000, None

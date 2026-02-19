@@ -5,13 +5,6 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <div class="nav-bar">
-        <a href="/">Landing Page</a>
-        <a href="/home">Home</a>
-        <a href="/logs">Logs</a>
-        <a href="/logs/simplified_page">Simplified Logs</a>
-        <a href="/status">Server Status</a>
-    </div>
     <h1>Simplified Logs</h1>
     <div id="logs-container">
         <table id="logs-table">
@@ -22,12 +15,11 @@
                     <th>Port</th>
                     <th>Version</th>
                     <th>Command</th>
-                    <th>Type</th>
                     <th>Term</th>
                     <th>Matches</th>
                     <th>Status</th>
                     <th>Level</th>
-                    <th>Message</th>
+                    <th>QueryRetrieveLevel</th>
                     <th>Time</th>
                 </tr>
             </thead>

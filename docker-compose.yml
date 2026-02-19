@@ -1,35 +1,78 @@
-version: '3.8'  # Use the latest version of Compose
- 
 services:
   logserver:
     build: ./flask_logging_server/.
+    volumes:
+      - shared_data:/app
+    environment:
+      - Docker_ENV=True
+    networks:
+      host:
+        ipv4_address: 172.29.0.5
+    ports:
+      - "5000:5000"
+
+  api:
+    build: ./API/.
     volumes:
       - shared_data:/app
     networks:
       host:
         ipv4_address: 172.29.0.2
     ports:
-      - "5000:5000"
-    depends_on:
-        - dicomhawk
- 
-  dicomhawk:
+      - "3000:3000"
     environment:
-      - ENABLE_LOGGING=true
-      - Docker_ENV=true
+      - Docker_ENV=True
+      - ABUSE_IP_API_KEY= APIKEY
+      - IP_QUALITY_SCORE_API_KEY= APIKEY
+      - VIRUS_TOTAL_API_KEY= APIKEY
+
+  redis:
+      image: redis
+      ports:
+        - "6379:6379"
+      networks:
+        host:
+          ipv4_address: 172.29.0.4
+
+          
+  dicom_server:
+    environment:
+      - PROD=yes
+      - FLASK_ACTIVATED=yes
+      - BLOCK_SCANNERS=no
+      - INTEGRITY_CHECK=yes
+      - TCIA_ACTIVATED=yes
+      - BLACKHOLE_FILE_PATH=./storage/blackhole_list.txt
+      - REDIS_HOST=172.29.0.4
+      - TCIA_USER_NAME= TCIA username
+      - TCIA_PASSWORD= TCIA pass
+      - TCIA_PERIOD_UNIT=week
+      - TCIA_PERIOD=1
+      - ABUSE_IP_API_KEY= APIKEY
+      - IP_QUALITY_SCORE_API_KEY= APIKEY
+      - VIRUS_TOTAL_API_KEY= APIKEY
+      - MODALITIES=["CT", "MR", "US", "DX"]
+      - MINIMUM_TCIA_FILES_IN_SERIE=1
+      - MAXIMUM_TCIA_FILES_IN_SERIE=3
+      - TCIA_STUDIES_PER_MODALITY=10
+      - DOCKER=yes
+      - HONEY_URL="https://[YOURHONEYURL]"
     build: ./dicom_server/.
     volumes:
       - shared_data:/app
     ports:
-      - "11112:11112"
+      - "104:11112"
+    depends_on:
+      - redis
     networks:
       host:
         ipv4_address: 172.29.0.3
+  
+
 volumes:
   shared_data:
     driver: local
- 
- 
+
 networks:
   host:
     ipam:

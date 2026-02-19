@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patients</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f3f6f9;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            color: #1f4e79;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #d3d3d3;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #e9eef2;
+            color: #1f4e79;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9fbfd;
+        }
+
+        #return-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            text-align: center;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #return-button:hover {
+            background-color: #0056b3;
+            /* Darker green on hover */
+        }
+
+        /* Align the button to the right */
+        .button-container {
+            text-align: right;
+            /* Aligns text (button) to the right */
+            margin-top: 10px;
+            /* Space above the button */
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/sql-wasm.js"></script>
+
+</head>
+
+<body>
+    <div class="container">
+        <h2>Patients</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Patient ID</th>
+                    <th>Patient Name</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+
+            </tbody>
+        </table>
+    </div>
+    <div class="button-container">
+        <button id="return-button">Return</button>
+    </div>
+
+
+    <script>
+
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Fetch data from the patients endpoint
+                const resp = await fetch('/main/patients');
+
+                // Check if the response was successful
+                if (!resp.ok) {
+                    throw new Error(`HTTP error! status: ${resp.status}`);
+                }
+
+                // Parse the response as JSON
+                const data = await resp.json();
+                const tableBody = document.getElementById('table-body');
+
+                // Populate the table with data
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                    <td>${row.patient_id}</td>
+                    <td>${row.patient_name}</td>
+                `;
+                    tableBody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Error. Data were not fetched:', error);
+            }
+
+            // Event listener for the return button
+            document.getElementById('return-button').addEventListener('click', () => {
+                window.history.back(); // Navigate to the previous page
+            });
+        });
+
+
+    </script>
+
+
+
+</body>
+
+</html>

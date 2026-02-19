@@ -1,0 +1,715 @@
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Association Aborted (A-P-ABORT)
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 27)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 27
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 28)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 28
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 29)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 29
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 30)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 30
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 31)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 31
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 32)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 32
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 33)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 33
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 34)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 34
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 35)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 35
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 36)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 36
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 66)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 66
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Study Root Query/Retrieve Information Model - FIND
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntaxes:
+      =Implicit VR Little Endian
+      =Explicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Study Root Query/Retrieve Information Model - FIND
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-FIND RQ
+Message ID                    : 67
+Affected SOP Class UID        : Study Root Query/Retrieve Information Model - FIND
+Identifier                    : Present
+Priority                      : Medium
+============================ END DIMSE MESSAGE =============================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Find SCP Request Identifier:
+
+# DICOM Dataset
+(0008,0005) CS (no value available)                     # 0 SpecificCharacterSet
+(0008,0020) DA (no value available)                     # 0 StudyDate
+(0008,0030) TM (no value available)                     # 0 StudyTime
+(0008,0050) SH (no value available)                     # 0 AccessionNumber
+(0008,0052) CS [STUDY]                                  # 1 QueryRetrieveLevel
+(0008,0060) CS (no value available)                     # 0 Modality
+(0008,0061) CS (no value available)                     # 0 ModalitiesInStudy
+(0008,0080) LO (no value available)                     # 0 InstitutionName
+(0008,0090) PN (no value available)                     # 0 ReferringPhysicianName
+(0008,1030) LO (no value available)                     # 0 StudyDescription
+(0010,0010) PN (no value available)                     # 0 PatientName
+(0010,0020) LO (no value available)                     # 0 PatientID
+(0010,0030) DA (no value available)                     # 0 PatientBirthDate
+(0010,0040) CS (no value available)                     # 0 PatientSex
+(0020,000D) UI (no value available)                     # 0 StudyInstanceUID
+(0020,0010) SH (no value available)                     # 0 StudyID
+(0020,1208) IS (no value available)                     # 0 NumberOfStudyRelatedInstances
+
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Find SCP Response 1: 0xC001 (Failure - Unable to Process)
+========================== OUTGOING DIMSE MESSAGE ==========================
+Message Type                  : C-FIND RSP
+Message ID Being Responded To : 67
+Affected SOP Class UID        : Study Root Query/Retrieve Information Model - FIND
+Identifier                    : None
+Status                        : 0xC001
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Verification SOP Class
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntax:
+      =Implicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Verification SOP Class
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Received Echo Request (MsgID 68)
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-ECHO RQ
+Presentation Context ID       : 1
+Message ID                    : 68
+Data Set                      : None
+============================ END DIMSE MESSAGE =============================
+Association Released
+Request Parameters:
+======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+Their Implementation Class UID:      1.2.300.55647173.7238010.5.0.3.5.4
+Their Implementation Version Name:   SANTESOFT
+Application Context Name:    1.2.840.10008.3.1.1.1
+Calling Application Name:    SANTE1
+Called Application Name:     localhost
+Their Max PDU Receive Size:  65535
+Presentation Context:
+  Context ID:        1 (Proposed)
+    Abstract Syntax: =Study Root Query/Retrieve Information Model - FIND
+    Proposed SCP/SCU Role: Default
+    Proposed Transfer Syntaxes:
+      =Implicit VR Little Endian
+      =Explicit VR Little Endian
+Requested Extended Negotiation: None
+Requested Common Extended Negotiation: None
+Requested Asynchronous Operations Window Negotiation: None
+Requested User Identity Negotiation: None
+========================== END A-ASSOCIATE-RQ PDU ==========================
+Accepting Association
+Accept Parameters:
+======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.2.1.0
+Our Implementation Version Name:   PYNETDICOM_210
+Application Context Name:    1.2.840.10008.3.1.1.1
+Responding Application Name: resp. AE Title
+Our Max PDU Receive Size:    16382
+Presentation Contexts:
+  Context ID:        1 (Accepted)
+    Abstract Syntax: =Study Root Query/Retrieve Information Model - FIND
+    Accepted SCP/SCU Role: Default
+    Accepted Transfer Syntax: =Implicit VR Little Endian
+Accepted Extended Negotiation: None
+Accepted Asynchronous Operations Window Negotiation: None
+User Identity Negotiation Response: None
+========================== END A-ASSOCIATE-AC PDU ==========================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+========================== INCOMING DIMSE MESSAGE ==========================
+Message Type                  : C-FIND RQ
+Message ID                    : 69
+Affected SOP Class UID        : Study Root Query/Retrieve Information Model - FIND
+Identifier                    : Present
+Priority                      : Medium
+============================ END DIMSE MESSAGE =============================
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Find SCP Request Identifier:
+
+# DICOM Dataset
+(0008,0005) CS (no value available)                     # 0 SpecificCharacterSet
+(0008,0020) DA (no value available)                     # 0 StudyDate
+(0008,0030) TM (no value available)                     # 0 StudyTime
+(0008,0050) SH (no value available)                     # 0 AccessionNumber
+(0008,0052) CS [STUDY]                                  # 1 QueryRetrieveLevel
+(0008,0060) CS (no value available)                     # 0 Modality
+(0008,0061) CS (no value available)                     # 0 ModalitiesInStudy
+(0008,0080) LO (no value available)                     # 0 InstitutionName
+(0008,0090) PN (no value available)                     # 0 ReferringPhysicianName
+(0008,1030) LO (no value available)                     # 0 StudyDescription
+(0010,0010) PN (no value available)                     # 0 PatientName
+(0010,0020) LO (no value available)                     # 0 PatientID
+(0010,0030) DA (no value available)                     # 0 PatientBirthDate
+(0010,0040) CS (no value available)                     # 0 PatientSex
+(0020,000D) UI (no value available)                     # 0 StudyInstanceUID
+(0020,0010) SH (no value available)                     # 0 StudyID
+(0020,1208) IS (no value available)                     # 0 NumberOfStudyRelatedInstances
+
+pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+Find SCP Response 1: 0xC001 (Failure - Unable to Process)
+========================== OUTGOING DIMSE MESSAGE ==========================
+Message Type                  : C-FIND RSP
+Message ID Being Responded To : 69
+Affected SOP Class UID        : Study Root Query/Retrieve Information Model - FIND
+Identifier                    : None
+Status                        : 0xC001
+============================ END DIMSE MESSAGE =============================
+Association Released

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+            <html>
+            <head>
+                <title>Unauthorized</title>
+                <script>
+                    let seconds = 3;
+                    function updateCountdown() {
+                        document.getElementById('countdown').innerText = seconds;
+                        seconds--;
+                        if (seconds < 0) {
+                            window.location.href = '/';
+                        }
+                    }
+                    setInterval(updateCountdown, 1000);
+                </script>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 20%; }
+                    h1 { color: red; }
+                    p { font-size: 18px; }
+                </style>
+            </head>
+            <body>
+                <h1>401 - Unauthorized</h1>
+                <p>You are not authorized to access this page.</p>
+                <p>Redirecting to the <a>login page</a> in <span id="countdown">3</span> seconds...</p>
+            </body>
+            </html>

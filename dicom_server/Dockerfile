@@ -1,27 +1,21 @@
 FROM python:3.9-slim
- 
-# Set the working directory in the container
- 
- 
-# Copy the current directory contents into the container at /app
-COPY . .
-#Patched file
- 
-#COPY simplified_logs ./app/
-#COPY logs ./app/
- 
-WORKDIR /.
- 
- 
-# Install any needed packages specified in requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
- 
-# COPY ./service_class.py   ./usr/local/lib/python3.9/site-packages/pynetdicom/service_class.py
-# COPY ./db.py ./usr/local/lib/python3.9/site-packages/pynetdicom/apps/qrscp/db.py
- 
-# Expose the DICOM
+USER root
+
+COPY ./storage/db.db app/
+
+RUN mkdir -p app/logs/pynetdicom app/logs/simplified app/logs/exceptions && \
+    touch app/logs/pynetdicom/pynetdicom.log app/logs/simplified/simplified_logger.log app/logs/exceptions/exceptions.log
+
+COPY . dicom_server/
+
+WORKDIR /dicom_server/.
+
+RUN pip install --upgrade pip  && pip install -r requirements.txt && apt-get update &&  apt-get -qq install iptables ipset
+
+
+COPY ./pydicom_and_pynetdicom_libs/service_class.py   /usr/local/lib/python3.9/site-packages/pynetdicom/service_class.py
+COPY ./pydicom_and_pynetdicom_libs/db.py /usr/local/lib/python3.9/site-packages/pynetdicom/apps/qrscp/db.py
+COPY ./pydicom_and_pynetdicom_libs/valuerep.py /usr/local/lib/python3.9/site-packages/pydicom/valuerep.py
+
 EXPOSE 11112
- 
- 
-# Run the app
-CMD ["python","-u" ,"dicomhawk.py"]
+CMD ["python","-u" ,"main.py"]
