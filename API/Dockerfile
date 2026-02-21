@@ -1,12 +1,17 @@
-FROM node
 
+FROM node:20-bookworm
 
+WORKDIR /api
 
-COPY package*.json /api/
-COPY . /api/
+COPY package*.json ./
 
-WORKDIR /api/.
-RUN npm install &&  npm rebuild sqlite3 && npm install redis
+RUN npm install
+
+COPY . .
+
+RUN npm rebuild sqlite3
+
 EXPOSE 3000
+
 
 CMD ["node", "app.js"]
