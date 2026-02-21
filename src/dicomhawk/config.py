@@ -66,7 +66,6 @@ class Settings:
     SIMPLIFIED_LOG_DIR: str
     EXCEPTIONS_LOG_DIR: str
 
-    # TODO: we shouldn't store api keys. This can be loaded from secrets
     ABUSE_IP_API_KEY: str
     IP_QUALITY_SCORE_API_KEY: str
     VIRUS_TOTAL_API_KEY: str
@@ -112,13 +111,38 @@ def require_one_of(value, name: str, allowed):
     return value
 
 
+def get_secret(name: str) -> str | None:
+    """Read a Docker secret from a file.
+
+    The base path is controlled by the SECRETS_BASE_PATH env var
+    (default: /run/secrets) so it works with Docker Compose, Swarm,
+    and local development without hardcoding any path.
+    """
+    base = os.getenv("SECRETS_BASE_PATH", "/run/secrets")
+    try:
+        with open(f"{base}/{name}") as f:
+            return f.read().strip()
+    except (FileNotFoundError, PermissionError):
+        return None
+
+
+def secret_or_env(secret_name: str, env_name: str, default: str | None = None) -> str | None:
+    """Try a Docker secret file first, then fall back to an env var.
+
+    This allows:
+    - Production/Docker: secrets mounted as files (more secure)
+    - Local dev: values set in .env (no secret files needed)
+    """
+    return get_secret(secret_name) or os.getenv(env_name, default)
+
+
 
 def load_settings() -> Settings:
     docker = env_bool("DOCKER")
 
     dicom = DICOMSettings(
         PORTS=env_json("DICOM_PORTS", [11112]),
-        SERVER_HOST="172.29.0.3" if docker else "0.0.0.0",
+        SERVER_HOST="0.0.0.0",  # Bind to all interfaces; 172.29.0.3 routes other containers here
 
         STORAGE_DIR=docker_path(docker, "/opt/dicomhawk/storage/dicom_storage", "./storage/dicom_storage"),
         C_STORE_DIR=docker_path(docker, "/opt/dicomhawk/storage/c_store_files", "./storage/c_store_files"),
@@ -135,8 +159,8 @@ def load_settings() -> Settings:
     tcia = TCIASettings(
         ACTIVATED=env_bool("TCIA_ACTIVATED", "True"),
         FALLBACK_MODE=env_bool("TCIA_FALLBACK_MODE", "True"),
-        USERNAME=os.getenv("TCIA_USER_NAME", "user"),
-        PASSWORD=os.getenv("TCIA_PASSWORD", "pass"),
+        USERNAME=secret_or_env("tcia_username", "TCIA_USER_NAME", "user"),
+        PASSWORD=secret_or_env("tcia_password", "TCIA_PASSWORD", "pass"),
         PERIOD_UNIT=require_one_of(
             os.getenv("TCIA_PERIOD_UNIT", "week"),
             "TCIA_PERIOD_UNIT",
@@ -184,12 +208,11 @@ def load_settings() -> Settings:
         SIMPLIFIED_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/simplified", "../flask_logging_server/logs/simplified"),
         EXCEPTIONS_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/exceptions", "./exceptions"),
 
-        # TODO: Point to a file or a secret, do not load this into memory
-        ABUSE_IP_API_KEY=require(os.getenv("ABUSE_IP__KEY"), "ABUSE_IP__KEY"),
-        IP_QUALITY_SCORE_API_KEY=require(os.getenv("IP_QUALITY_SCORE_API_KEY"), "IP_QUALITY_SCORE_API_KEY"),
-        VIRUS_TOTAL_API_KEY=require(os.getenv("VIRUS_TOTAL_API_KEY"), "VIRUS_TOTAL_API_KEY"),
+        ABUSE_IP_API_KEY=require(secret_or_env("abuse_ip_key", "ABUSE_IP__KEY"), "abuse_ip_key / ABUSE_IP__KEY"),
+        IP_QUALITY_SCORE_API_KEY=require(secret_or_env("ip_quality_score_key", "IP_QUALITY_SCORE_API_KEY"), "ip_quality_score_key / IP_QUALITY_SCORE_API_KEY"),
+        VIRUS_TOTAL_API_KEY=require(secret_or_env("virus_total_key", "VIRUS_TOTAL_API_KEY"), "virus_total_key / VIRUS_TOTAL_API_KEY"),
 
-        HONEY_URL=os.getenv("HONEY_URL", "VALUE"),
+        HONEY_URL=secret_or_env("honey_url", "HONEY_URL", "VALUE"),
         FAKER_LOCALE=os.getenv("FAKER_LOCALE", "en_US"),
 
         # Settings

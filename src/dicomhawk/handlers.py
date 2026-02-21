@@ -138,8 +138,11 @@ def handle_store(
 class DIMSEFactory:
     handlers: dict[str, EventHandler]
 
+    def __init__(self):
+        self.handlers = {}
+
     def get(self, name: str) -> EventHandler | None:
-        return self.handlers[name]
+        return self.handlers.get(name, default_handler)
     
     def register(self, name: str, handler: EventHandler) -> 'DIMSEFactory':
         self.handlers[name] = handler
@@ -147,6 +150,7 @@ class DIMSEFactory:
     
 def new_dimse_factory() -> DIMSEFactory:
     factory = DIMSEFactory()
-    # TODO: register handlers
-
+    # Register default passthrough handlers for all DICOM events
+    for name in ("associate", "release", "find", "store", "echo", "move", "get", "abort"):
+        factory.register(name, default_handler)
     return factory
