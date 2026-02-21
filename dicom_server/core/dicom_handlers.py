@@ -200,7 +200,14 @@ class DICOMHandlers:
             },
             True,
         )
-        dicom_util.store_received_file(event)
+        try:
+            dicom_util.store_received_file(event)
+        except Exception:
+            self.exceptions_logger.exception(
+                "C-STORE failed: could not persist received dataset"
+            )
+            # 0xA700 = Out of Resources — indicates server-side storage failure
+            return 0xA700
         return 0x0000
 
     def handle_move(

@@ -70,9 +70,9 @@ BLACKHOLE_FILE_PATH = os.getenv("BLACKHOLE_FILE_PATH", "./storage/blackhole_list
 
 DICOM_STORAGE_DIR = "./storage/dicom_storage"
 
-"""DICOM files recieved through the server storage"""
+"""DICOM files recieved through the server storage (overridable via C_STORE_STORAGE env var)"""
 
-C_STORE_STORAGE = "./storage/c_store_files"
+C_STORE_STORAGE = os.getenv("C_STORE_STORAGE", "./storage/c_store_files")
 
 """DICOM server port configuration"""
 DICOM_PORT = 11112

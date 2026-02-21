@@ -57,6 +57,9 @@ services:
       - TCIA_STUDIES_PER_MODALITY=10
       - DOCKER=yes
       - HONEY_URL="https://[YOURHONEYURL]"
+      # C-STORE uploads are persisted to this path inside the container.
+      # Override and add a bind-mount volume below to keep files across restarts.
+      - C_STORE_STORAGE=/app/c_store_files
     build: ./dicom_server/.
     volumes:
       - shared_data:/app

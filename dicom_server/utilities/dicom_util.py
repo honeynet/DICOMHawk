@@ -89,11 +89,62 @@ def file_compressed(instance):
     return instance.file_meta.TransferSyntaxUID.is_compressed
 
 
+_UID_SAFE_RE = __import__("re").compile(r"^[0-9.]+$")
+
+
+def _sanitize_uid(uid):
+    """Return *uid* as a string if it contains only digits and dots, else None."""
+    s = str(uid).strip() if uid else ""
+    return s if (s and _UID_SAFE_RE.match(s)) else None
+
+
 def store_received_file(event):
-    file_name = "received_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")
-    event.dataset.file_meta = event.file_meta
-    event.dataset.save_as(
-        os.path.join(config.C_STORE_STORAGE, file_name), write_like_original=False
+    """Persist the C-STORE dataset to disk.
+
+    Storage layout (when all UIDs are present):
+        <C_STORE_STORAGE>/<StudyInstanceUID>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
+
+    Falls back to a flat timestamp-based filename when any UID is missing or
+    contains unexpected characters.
+
+    Raises on I/O failure so the caller can return an appropriate DICOM error
+    status instead of silently claiming success.
+    """
+    ds = event.dataset
+
+    study_uid  = _sanitize_uid(getattr(ds, "StudyInstanceUID",  None))
+    series_uid = _sanitize_uid(getattr(ds, "SeriesInstanceUID", None))
+    sop_uid    = _sanitize_uid(getattr(ds, "SOPInstanceUID",    None))
+
+    # Derive caller identity for logging (best-effort)
+    try:
+        remote_ip = str(event.assoc.requestor.address)
+        remote_ae = str(event.assoc.requestor.ae_title).strip()
+    except Exception:
+        remote_ip, remote_ae = "unknown", "unknown"
+
+    if study_uid and series_uid and sop_uid:
+        dest_dir  = os.path.join(config.C_STORE_STORAGE, study_uid, series_uid)
+        file_path = os.path.join(dest_dir, sop_uid + ".dcm")
+    else:
+        dest_dir  = config.C_STORE_STORAGE
+        file_path = os.path.join(
+            dest_dir,
+            "received_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f") + ".dcm",
+        )
+
+    exceptions_logger.debug(
+        "C-STORE incoming | remote=%s AE=%s | study=%s series=%s sop=%s",
+        remote_ip, remote_ae, study_uid, series_uid, sop_uid,
+    )
+
+    os.makedirs(dest_dir, exist_ok=True)
+    ds.file_meta = event.file_meta
+    ds.save_as(file_path, write_like_original=False)
+
+    exceptions_logger.info(
+        "C-STORE saved | path=%s | remote=%s AE=%s | study=%s series=%s sop=%s",
+        file_path, remote_ip, remote_ae, study_uid, series_uid, sop_uid,
     )
 
 

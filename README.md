@@ -103,6 +103,58 @@ dicom_server/dicom_storage/tcia_data/modality/[StudyInstanceUID]/SeriesInstanceU
 - **DICOM_SERVER_HOST**: IP address or hostname of the DICOM server.
 - **BLOCK_SCANNERS**: Boolean to block (`yes`) or allow (`no`) known mass scanners.
 
+### C-STORE Persistence
+
+DICOMHawk accepts inbound C-STORE requests and **persists every received DICOM dataset to disk** for forensic analysis and realism.
+
+#### Storage location
+
+Files are saved under the directory specified by the `C_STORE_STORAGE` environment variable (default: `./storage/c_store_files`, relative to the runtime working directory).
+
+#### Directory structure
+
+When the received dataset contains valid Study/Series/SOP Instance UIDs the file is stored as:
+
+```
+<C_STORE_STORAGE>/<StudyInstanceUID>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
+```
+
+If any UID is absent or contains unexpected characters the server falls back to a flat timestamp-based filename:
+
+```
+<C_STORE_STORAGE>/received_<YYYY-MM-DD_HH-MM-SS.ffffff>.dcm
+```
+
+The storage directory (including any intermediate sub-directories) is created automatically if it does not exist.
+
+#### Configuration
+
+Override the default path by setting the `C_STORE_STORAGE` environment variable:
+
+```yaml
+# docker-compose.yml
+services:
+  dicom_server:
+    environment:
+      - C_STORE_STORAGE=/app/c_store_files
+    volumes:
+      - ./c_store_files:/app/c_store_files   # persist across container restarts
+```
+
+> **Docker note:** If you run DICOMHawk as a container and want uploads to survive container restarts, mount the storage directory as a named or bind-mount volume as shown above.
+
+#### Error handling
+
+If the dataset cannot be written to disk (e.g. the filesystem is full or permissions are insufficient) the server:
+1. Logs the exception via the exceptions logger.
+2. Returns DICOM status **0xA700 (Out of Resources)** to the SCU instead of falsely claiming success.
+
+#### Sending a file (example)
+
+```bash
+storescu -v -d localhost 104 /path/to/file.dcm
+```
+
 ## Threat Intelligence for the DICOM server and the Web API
 
 To enable IP reputation checks for addresses interacting with DICOMHawk, include the following environment variables in your `docker-compose.yml` file.
