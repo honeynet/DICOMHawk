@@ -26,5 +26,5 @@ RUN pip install --no-cache-dir -e .
 
 USER ${APP_UID}:${APP_GID}
 
-# Default: DICOM server. Override via `command:` in docker-compose.yml for logserver.
-CMD ["dicomhawk", "serve"]
+# Default: DICOM server.
+CMD ["dicomhawk", "dicom", "serve"]

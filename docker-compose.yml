@@ -1,24 +1,5 @@
 services:
 
-  redis:
-    image: redis:7-alpine
-    networks:
-      main_network:
-        ipv4_address: 172.29.0.4
-    ports:
-      - "6379:6379"
-
-  logserver:
-    build: .
-    command: ["dicomhawk", "web", "serve", "--ports", "5000"]
-    volumes:
-      - logs:/var/log/dicomhawk
-    networks:
-      main_network:
-        ipv4_address: 172.29.0.5
-    ports:
-      - "5000:5000"
-
   dicom_server:
     build: .
     command:
@@ -35,17 +16,12 @@ services:
       - "1.2.826.0.1.3680043.2.1143.107.104.103.17"
       - --integrity-check
       - --no-block-scanners
-    depends_on:
-      - redis
-      - logserver
     env_file:
       - .env
     environment:
       # --- Core infrastructure ---
       - DOCKER=yes
       - PROD=yes
-      - FLASK_ACTIVATED=yes
-      - REDIS_HOST=172.29.0.4
       - SECRETS_BASE_PATH=/run/secrets
 
       # --- TCIA (honeypot DICOM data source) ---
@@ -79,7 +55,6 @@ services:
       - OSM_TIMEOUT=${OSM_TIMEOUT:-30}
 
     # Docker secrets mounted at /run/secrets/<name> inside the container.
-    # SECRETS_BASE_PATH defaults to /run/secrets — no extra config needed.
     secrets:
       - tcia_username
       - tcia_password
@@ -93,15 +68,12 @@ services:
       - tcia_stagger:/opt/dicomhawk/tcia/stagger
       - logs:/var/log/dicomhawk
     networks:
-      main_network:
-        ipv4_address: 172.29.0.3
+      - main_network
     ports:
       - "11112:11112"
 
   api:
     build: ./API
-    depends_on:
-      - redis
     env_file:
       - .env
     environment:
@@ -127,8 +99,7 @@ services:
       - dicom_storage:/opt/dicomhawk/storage
       - ./API/uploads:/api/uploads
     networks:
-      main_network:
-        ipv4_address: 172.29.0.2
+      - main_network
     ports:
       - "3702:3702"
 
@@ -158,6 +129,3 @@ volumes:
 networks:
   main_network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.29.0.0/16

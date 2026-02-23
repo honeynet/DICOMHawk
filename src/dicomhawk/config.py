@@ -203,9 +203,9 @@ def load_settings() -> Settings:
             "/opt/dicomhawk/storage/blackhole_list.txt",
             "./storage/blackhole_list.txt",
         ),
-        REDIS_HOST=os.getenv("REDIS_HOST", "172.29.0.4") if docker else "localhost",
-        MAIN_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/dicom_raw_logs", "../flask_logging_server/logs/dicom_raw_logs"),
-        SIMPLIFIED_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/simplified", "../flask_logging_server/logs/simplified"),
+        REDIS_HOST=os.getenv("REDIS_HOST", "localhost"),
+        MAIN_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/dicom_raw_logs", "./logs/dicom_raw_logs"),
+        SIMPLIFIED_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/simplified", "./logs/simplified"),
         EXCEPTIONS_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/exceptions", "./exceptions"),
 
         ABUSE_IP_API_KEY=require(secret_or_env("abuse_ip_key", "ABUSE_IP__KEY"), "abuse_ip_key / ABUSE_IP__KEY"),
