@@ -191,17 +191,23 @@ class DICOMHandlers:
             yield (0xC001, None)
 
     def handle_store(self, event):
+        try:
+            self.event_collector.collect_session_info(
+                {
+                    session_keys.LOG_LEVEL.key: "Info",
+                    session_keys.REQUEST_TYPE.key: "C_STORE",
+                    session_keys.SESSION_MAIN_OPERATION.key: "C_STORE",
+                },
+                True,
+            )
+            dicom_util.store_received_file(event)
+            return 0x0000
+        except Exception:
+           self.exceptions_logger.exception(
+               "Unexpected error while handling C-STORE operation"
+            )
+           return 0xC000
 
-        self.event_collector.collect_session_info(
-            {
-                session_keys.LOG_LEVEL.key: "Info",
-                session_keys.REQUEST_TYPE.key: "C_STORE",
-                session_keys.SESSION_MAIN_OPERATION.key: "C_STORE",
-            },
-            True,
-        )
-        dicom_util.store_received_file(event)
-        return 0x0000
 
     def handle_move(
         self, event
