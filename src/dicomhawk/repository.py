@@ -16,9 +16,14 @@ from .storage import Storage
 from .honey import Middleware
 
 import os
+import hashlib
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _hash_uid(uid: str) -> str:
+    # hash uid with sha256 to avoid path traversal
+    return hashlib.sha256(uid.encode()).hexdigest()
 
 class QRError:
     error: str
@@ -135,7 +140,7 @@ class Repository:
                 self.storage.compress(tf)
 
         fdir = self.storage.jail(safe)
-        fname = ds.SOPInstanceUID # NOTE: this is dangerous
+        fname = _hash_uid(str(ds.SOPInstanceUID))
         fpath = os.path.join(fdir, fname)
 
         if os.path.exists(fpath):
@@ -171,6 +176,20 @@ class Repository:
     def find_instance(self, match: Dataset, decompress: bool = False, inject: bool = True) -> FindResult:
         result = FindResult()
 
+        # don't allow retrieving quarantined files
+        if self.storage.is_quarantined(match.filename):
+            err = QRError()
+            err.error = (
+                f"Retrieval denied: instance '{match.filename}' is quarantined. "
+                "Only pre-loaded honeypot data may be retrieved."
+            )
+            err.status = QRStatus.FAILURE
+            result.error = err
+            logger.warning(
+                "Blocked C-GET/C-MOVE for quarantined file: %s", match.filename
+            )
+            return result
+
         try:
             instance = dcmread(match.filename)
         except Exception as exc:
@@ -180,7 +199,6 @@ class Repository:
             result.error = err
             return result
         
-        # NOTE: not sure this is needed tbh, why not sending files compressed?
         if decompress and instance.file_meta.TransferSyntaxUID.is_compressed:
             instance.decompress()
             apply_modality_lut(instance.pixel_array, instance)

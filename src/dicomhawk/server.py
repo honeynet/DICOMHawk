@@ -54,7 +54,7 @@ class Server:
         handler_factory = new_handler_factory()
         self.handlers = self.make_handlers(handler_factory)
 
-    def make_handlers(self, handlers: HandlerFactory):
+    def make_handlers(self, handlers: dict):
         # TODO: the config should have a list of supported operations
         return [
             (evt.EVT_ACSE_RECV, handlers.get("associate")),
