@@ -1,111 +1,18 @@
 services:
-
   dicom_server:
     build: .
-    command:
-      - dicomhawk
-      - dicom
-      - serve
-      - --ports
-      - "11112"
-      - --ae-title
-      - ORTHANC
-      - --impl-name
-      - ORTHANC
-      - --impl-uid
-      - "1.2.826.0.1.3680043.2.1143.107.104.103.17"
-      - --integrity-check
-      - --no-block-scanners
     env_file:
       - .env
     environment:
-      # --- Core infrastructure ---
-      - DOCKER=yes
-      - PROD=yes
       - SECRETS_BASE_PATH=/run/secrets
-
-      # --- TCIA (honeypot DICOM data source) ---
-      # Credentials come from secret files; these env vars are the local dev fallback.
-      - TCIA_ACTIVATED=${TCIA_ACTIVATED}
-      - TCIA_FALLBACK_MODE=true
-      - TCIA_PERIOD_UNIT=${TCIA_PERIOD_UNIT}
-      - TCIA_PERIOD=${TCIA_PERIOD}
-      - MODALITIES=["CT", "MR", "US", "DX"]
-      - MINIMUM_TCIA_FILES_IN_SERIE=1
-      - MAXIMUM_TCIA_FILES_IN_SERIE=3
-      - TCIA_STUDIES_PER_MODALITY=10
-
-      # --- Honeytokens ---
-      # HONEY_URL is read from secret file; env var is local dev fallback.
-      - FAKER_LOCALE=${FAKER_LOCALE}
-
-      # --- Threat Intelligence ---
-      # Keys read from secret files; env vars are local dev fallback.
-      # NOTE: config.py reads ABUSE_IP__KEY (double underscore)
-      - ABUSE_IP__KEY=${ABUSE_IP__KEY}
-      - IP_QUALITY_SCORE_API_KEY=${IP_QUALITY_SCORE_API_KEY}
-      - VIRUS_TOTAL_API_KEY=${VIRUS_TOTAL_API_KEY}
-
-      # --- OSM (geolocation enrichment) ---
-      - OSM_ENABLED=${OSM_ENABLED:-true}
-      - OSM_COUNTRY=${OSM_COUNTRY:-DK}
-      - OSM_CITY=${OSM_CITY:-}
-      - OSM_CACHE_DURATION=${OSM_CACHE_DURATION:-24}
-      - OSM_MAX_INSTITUTIONS=${OSM_MAX_INSTITUTIONS:-50}
-      - OSM_TIMEOUT=${OSM_TIMEOUT:-30}
-
-    # Docker secrets mounted at /run/secrets/<name> inside the container.
     secrets:
       - tcia_username
       - tcia_password
       - honey_url
-      - abuse_ip_key
-      - ip_quality_score_key
-      - virus_total_key
     volumes:
       - dicom_storage:/opt/dicomhawk/storage
-      - tcia_data:/opt/dicomhawk/tcia/data
-      - tcia_stagger:/opt/dicomhawk/tcia/stagger
       - logs:/var/log/dicomhawk
-    networks:
-      - main_network
-    ports:
-      - "11112:11112"
 
-  api:
-    build: ./API
-    env_file:
-      - .env
-    environment:
-      - Docker_ENV=True     # sqliteConnector.js checks this exact casing
-      - API_PORT=3702
-      - SECRETS_BASE_PATH=/run/secrets
-      # Threat intel keys — secret files take priority; env vars are local dev fallback
-      - ABUSE_IP_API_KEY=${ABUSE_IP_API_KEY}
-      - IP_QUALITY_SCORE_API_KEY=${IP_QUALITY_SCORE_API_KEY}
-      - VIRUS_TOTAL_API_KEY=${VIRUS_TOTAL_API_KEY}
-      - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET}
-      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
-      - ADMIN_SECRET=${ADMIN_SECRET}
-      - ADMIN_REFRESH_TOKEN_SECRET=${ADMIN_REFRESH_TOKEN_SECRET}
-      - SESSION_SECRET=${SESSION_SECRET}
-    # Threat intelligence keys mounted as secrets
-    secrets:
-      - abuse_ip_key
-      - ip_quality_score_key
-      - virus_total_key
-    volumes:
-      - logs:/var/log/dicomhawk
-      - dicom_storage:/opt/dicomhawk/storage
-      - ./API/uploads:/api/uploads
-    networks:
-      - main_network
-    ports:
-      - "3702:3702"
-
-# ─── Docker Secrets ───────────────────────────────────────────────────────────
-# File-based secrets for sensitive credentials. They are mounted read-only
-# at /run/secrets/<name> with a fallback to environment variables.
 secrets:
   tcia_username:
     file: ./tcia_username
@@ -113,19 +20,7 @@ secrets:
     file: ./tcia_password
   honey_url:
     file: ./honey_url
-  abuse_ip_key:
-    file: ./abuse_ip_key
-  ip_quality_score_key:
-    file: ./ip_quality_score_key
-  virus_total_key:
-    file: ./virus_total_key
 
 volumes:
   dicom_storage:
-  tcia_data:
-  tcia_stagger:
   logs:
-
-networks:
-  main_network:
-    driver: bridge

@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 
@@ -59,17 +60,6 @@ class Settings:
     FLASK_ACTIVATED: bool
     BLOCK_SCANNERS: bool
 
-    BLACKHOLE_FILE: str
-    REDIS_HOST: str
-
-    MAIN_LOG_DIR: str
-    SIMPLIFIED_LOG_DIR: str
-    EXCEPTIONS_LOG_DIR: str
-
-    ABUSE_IP_API_KEY: str
-    IP_QUALITY_SCORE_API_KEY: str
-    VIRUS_TOTAL_API_KEY: str
-
     HONEY_URL: str
     FAKER_LOCALE: str
 
@@ -111,30 +101,35 @@ def require_one_of(value, name: str, allowed):
     return value
 
 
-def get_secret(name: str) -> str | None:
-    """Read a Docker secret from a file.
+_log = logging.getLogger(__name__)
 
-    The base path is controlled by the SECRETS_BASE_PATH env var
-    (default: /run/secrets) so it works with Docker Compose, Swarm,
-    and local development without hardcoding any path.
+
+def get_secret(name: str) -> str | None:
+    """Read a secret from a mounted file.
+
+    The base path is controlled by SECRETS_BASE_PATH (default: /run/secrets),
+    so the same code works in Docker Compose, Swarm, and bare-metal setups.
+
+    Returns None when the file does not exist — the caller can fall back to
+    an environment variable for local development.  Raises on permission
+    errors because that indicates a misconfigured deployment and we should
+    not silently continue.
     """
     base = os.getenv("SECRETS_BASE_PATH", "/run/secrets")
+    path = f"{base}/{name}"
     try:
-        with open(f"{base}/{name}") as f:
+        with open(path) as f:
             return f.read().strip()
-    except (FileNotFoundError, PermissionError):
+    except FileNotFoundError:
         return None
+    except PermissionError:
+        _log.error("Cannot read secret '%s' from %s: permission denied", name, path)
+        raise
 
 
 def secret_or_env(secret_name: str, env_name: str, default: str | None = None) -> str | None:
-    """Try a Docker secret file first, then fall back to an env var.
-
-    This allows:
-    - Production/Docker: secrets mounted as files (more secure)
-    - Local dev: values set in .env (no secret files needed)
-    """
+    """Prefer a secret file; fall back to an env var for local development."""
     return get_secret(secret_name) or os.getenv(env_name, default)
-
 
 
 def load_settings() -> Settings:
@@ -142,7 +137,7 @@ def load_settings() -> Settings:
 
     dicom = DICOMSettings(
         PORTS=env_json("DICOM_PORTS", [11112]),
-        SERVER_HOST="0.0.0.0",  # Bind to all interfaces; 172.29.0.3 routes other containers here
+        SERVER_HOST="172.29.0.3" if docker else "0.0.0.0",
 
         STORAGE_DIR=docker_path(docker, "/opt/dicomhawk/storage/dicom_storage", "./storage/dicom_storage"),
         C_STORE_DIR=docker_path(docker, "/opt/dicomhawk/storage/c_store_files", "./storage/c_store_files"),
@@ -198,20 +193,6 @@ def load_settings() -> Settings:
         DOCKER=docker,
         FLASK_ACTIVATED=env_bool("FLASK_ACTIVATED", "True"),
         BLOCK_SCANNERS=env_bool("BLOCK_SCANNERS"),
-        BLACKHOLE_FILE=docker_path(
-            docker,
-            "/opt/dicomhawk/storage/blackhole_list.txt",
-            "./storage/blackhole_list.txt",
-        ),
-        REDIS_HOST=os.getenv("REDIS_HOST", "localhost"),
-        MAIN_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/dicom_raw_logs", "./logs/dicom_raw_logs"),
-        SIMPLIFIED_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/simplified", "./logs/simplified"),
-        EXCEPTIONS_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/exceptions", "./exceptions"),
-
-        ABUSE_IP_API_KEY=require(secret_or_env("abuse_ip_key", "ABUSE_IP__KEY"), "abuse_ip_key / ABUSE_IP__KEY"),
-        IP_QUALITY_SCORE_API_KEY=require(secret_or_env("ip_quality_score_key", "IP_QUALITY_SCORE_API_KEY"), "ip_quality_score_key / IP_QUALITY_SCORE_API_KEY"),
-        VIRUS_TOTAL_API_KEY=require(secret_or_env("virus_total_key", "VIRUS_TOTAL_API_KEY"), "virus_total_key / VIRUS_TOTAL_API_KEY"),
-
         HONEY_URL=secret_or_env("honey_url", "HONEY_URL", "VALUE"),
         FAKER_LOCALE=os.getenv("FAKER_LOCALE", "en_US"),
 

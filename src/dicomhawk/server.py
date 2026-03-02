@@ -17,8 +17,6 @@ from pynetdicom.sop_class import (
     _VERIFICATION_CLASSES
 )
 
-from .handlers import DIMSEFactory, new_dimse_factory
-
 class ServerConfig:
     PORTS: list[int]
     HOST: str
@@ -53,10 +51,10 @@ class Server:
         self.config = config
 
         # TODO: we have a whole class to make handlers, use that
-        handler_factory = new_dimse_factory()
+        handler_factory = new_handler_factory()
         self.handlers = self.make_handlers(handler_factory)
 
-    def make_handlers(self, handlers: DIMSEFactory):
+    def make_handlers(self, handlers: HandlerFactory):
         # TODO: the config should have a list of supported operations
         return [
             (evt.EVT_ACSE_RECV, handlers.get("associate")),

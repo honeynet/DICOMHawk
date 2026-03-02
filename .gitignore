@@ -52,11 +52,3 @@ venv.bak/
 
 # snyk things
 .github/instructions/
-
-# Docker secret files — never commit real values (see README → "Using Docker Secrets")
-tcia_username
-tcia_password
-honey_url
-abuse_ip_key
-ip_quality_score_key
-virus_total_key

@@ -1,26 +1,8 @@
 const axios = require('axios');
-const fs = require('fs');
-
-/**
- * Read a Docker secret from a mounted file.
- * Falls back to null if the file does not exist, so callers
- * can chain with process.env for local development.
- *
- * The base path is set by SECRETS_BASE_PATH (default: /run/secrets),
- * keeping it compatible with Compose, Swarm, and bare-metal setups.
- */
-function readSecret(name) {
-    const base = process.env.SECRETS_BASE_PATH || "/run/secrets";
-    try {
-        return fs.readFileSync(`${base}/${name}`, "utf8").trim();
-    } catch {
-        return null;
-    }
-}
 const { format } = require('date-fns');
 
 async function getIPSecurityScore(ip) {
-    const apiKey = readSecret("abuse_ip_key") || process.env.ABUSE_IP_API_KEY;
+    const apiKey = process.env.ABUSE_IP_API_KEY;
     const url = "https://api.abuseipdb.com/api/v2/check";
     const headers = {
         Accept: "application/json",
@@ -45,7 +27,7 @@ async function getIPSecurityScore(ip) {
 }
 
 async function getIpqualityScore(ip) {
-    const apiKey = readSecret("ip_quality_score_key") || process.env.IP_QUALITY_SCORE_API_KEY;
+    const apiKey = process.env.IP_QUALITY_SCORE_API_KEY;
     const url = `https://ipqualityscore.com/api/json/ip/${apiKey}/${ip}`;
 
     try {
@@ -67,7 +49,7 @@ async function getIpqualityScore(ip) {
 }
 
 async function getVirusTotalScore(ip) {
-    const apiKey = readSecret("virus_total_key") || process.env.VIRUS_TOTAL_API_KEY;
+    const apiKey = process.env.VIRUS_TOTAL_API_KEY;
     const url = `https://www.virustotal.com/api/v3/ip_addresses/${ip}`;
     const headers = { "x-apikey": apiKey };
 
