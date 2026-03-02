@@ -90,7 +90,7 @@ async function getReputationData(ip) {
         repData.country = abusedbObject[2];
         repData.ISP = abusedbObject[0];
         repData.AbuseDBScore = abusedbObject[1];
-        
+
         return repData;
     } catch (error) {
         console.error("Unexpected error while building IP reputation object", error);
