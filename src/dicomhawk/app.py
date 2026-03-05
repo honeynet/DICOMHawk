@@ -1,23 +1,25 @@
-from .server import ServerConfig, new_server
+from .server import Server
 from .component import Component
 
-from logging import Logger
+import logging
+logger = logging.getLogger(__name__)
 
-class DicomHawk:
-    def __init__(self, logger: Logger, components: list[Component], config: ServerConfig) -> None:
-        self.logger = logger
+class Dicomhawk:
+    def __init__(self, components: list[Component], server: Server) -> None:
         self.components = components
-        self.server = new_server(self.logger, config)
+        self.server = server
 
     def start(self) -> None:
+        logger.debug("Starting DICOMHawk")
         for c in self.components:
             c.start()
         self.server.run()
 
     def stop(self) -> None:
+        logger.debug("Stopping DICOMHawk")
         self.server.stop()
         for c in self.components:
             c.stop()
 
-def new_dicomhawk(logger: Logger, components: list[Component], config: ServerConfig) -> DicomHawk:
-    return DicomHawk(logger, components, config)
+def new_dicomhawk(server: Server, components: list[Component]) -> Dicomhawk:
+    return Dicomhawk(components, server)

@@ -1,10 +1,21 @@
 import typer
-from dicomhawk import new_dicomhawk
+from dicomhawk.app import new_dicomhawk
+from dicomhawk.handlers import new_dimse_factory
+from dicomhawk.middlewares import Middleware
+from dicomhawk.repository import new_repo
+from dicomhawk.server import new_config, new_server
+from dicomhawk.storage import new_store
 
 serve_app = typer.Typer(help="dicomhawk runner")
 
 @serve_app.command()
 def serve(
+        host: str = typer.Option(
+            "0.0.0.0",
+            "-h",
+            "--host",
+            help="Host addresses to listen for connections"
+        ),
         ports: str = typer.Option(
             "104,11112",
             "-p",
@@ -19,18 +30,18 @@ def serve(
         ),
         impl_uid: str = typer.Option(
             "1.2.3.4", # TODO: fix this
-            "-id",
+            "-uid",
             "--impl_uid",
             help="Implementation UID"
         ),
         impl_name: str = typer.Option(
             "ORTHANC",
-            "-in",
+            "-name",
             "--impl_name",
             help="Implementation name"
         ),
-        dimse: str | None = typer.Option(
-            None,
+        dimse: str = typer.Option(
+            "associate,echo,get,find,move,store,release,abort",
             "-d",
             "--dimse",
             help="DIMSE operations supported"
@@ -41,16 +52,35 @@ def serve(
             "--database",
             help="path to database"
         ),
+        traces : str = typer.Option(
+            "traces",
+            "-t",
+            "--traces",
+            help="Where to store traces (i.e., DICOM files and uploaded payloads)"
+        )
     ):
 
-    config = new_server_config(
-        ports,
+    p_int = [int(p) for p in ports.split(",")]
+    config = new_config(
+        host,
+        p_int,
         ae_title,
         impl_uid,
         impl_name,
-        dimse,
-        database
     )
 
-    hp = new_dicomhawk(config)
-    hp.run()
+    store = new_store(traces)
+    mws: list[Middleware] = [] # TODO: fix this, add a middleware to inject the honeytoken
+    repo = new_repo(database, store, mws)
+    bus = new_bus() # TODO: make the bus
+
+    dimse_fact = new_dimse_factory(repo, bus)
+
+    handlers = []
+    for h in dimse.split(","):
+        if handler:=dimse_fact.get(h):
+            handlers.append(handler)
+
+    srv = new_server(bus, config, handlers)
+    hp = new_dicomhawk(srv, []) # TODO: fix this, add components?
+    hp.start()
