@@ -1,5 +1,6 @@
+# TODO: this needs to be redone
 services:
-  dicom_server:
+  dicomhawk:
     build: .
     env_file:
       - .env
