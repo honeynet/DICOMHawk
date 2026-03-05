@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+import logging
 from copy import copy
 from logging import Logger
 from itertools import chain
@@ -6,6 +8,7 @@ from pynetdicom import (
     AE,
 )
 
+from pynetdicom.events import EventHandlerType
 from pynetdicom.transport import ThreadedAssociationServer
 from pynetdicom.presentation import (
     AllStoragePresentationContexts,
@@ -17,44 +20,41 @@ from pynetdicom.sop_class import (
     _VERIFICATION_CLASSES
 )
 
+from .handlers import DIMSEFactory
+
+logger = logging.getLogger(__name__)
+
+@dataclass
 class ServerConfig:
-    PORTS: list[int]
     HOST: str
-    
-    STORAGE_DIR: str
-    C_STORE_DIR: str
-    DATABASE: str
-    HASH_STORE: str
-    CANARY_PDF: str
-    INTEGRITY_CHECK: bool
+    PORTS: list[int]
 
-    # AE title
-    AE_TITLE: str
-
+    AE_TITLE: str # AE title
     # UserInfo (application identity)
-    IMPLEMENTATION_NAME: str
     IMPLEMENTATION_UID: str
+    IMPLEMENTATION_NAME: str
 
     # Maximum number of associations (min: 1, max: 65536)
-    MAX_ASSOC: int
+    MAX_ASSOC: int = 65536
+
+def new_config(host: str, ports: list[int], ae_title: str, impl_uid: str, impl_name: str) -> ServerConfig:
+    return ServerConfig(host, ports, ae_title, impl_uid, impl_name)
 
 class Server:
     listeners: list[ThreadedAssociationServer]
 
     def __init__(
             self, 
-            logger: Logger,
+            bus: Logger,
             config: ServerConfig,
+            handlers: list[EventHandlerType],
         ):
 
-        self.logger = logger
+        self.logger = bus
         self.config = config
+        self.handlers = handlers
 
-        # TODO: we have a whole class to make handlers, use that
-        handler_factory = new_handler_factory()
-        self.handlers = self.make_handlers(handler_factory)
-
-    def make_handlers(self, handlers: HandlerFactory):
+    def make_handlers(self, handlers: DIMSEFactory):
         # TODO: the config should have a list of supported operations
         return [
             (evt.EVT_ACSE_RECV, handlers.get("associate")),
@@ -63,12 +63,12 @@ class Server:
             (evt.EVT_C_STORE, handlers.get("store")),
             (evt.EVT_C_ECHO, handlers.get("echo")),
             (evt.EVT_C_MOVE, handlers.get("move")),
-            (evt.EVT_C_GET, handlers.get("get")),
+            ( handlers.get("get")),
             (evt.EVT_ABORTED, handlers.get("abort")),
         ]
 
     def init(self) -> AE:
-        self.logger.debug("Initializing AE")
+        logger.debug("Initializing AE")
 
         # Titles
         ae = AE(ae_title=self.config.AE_TITLE)
@@ -86,6 +86,9 @@ class Server:
         # Set supported operations 
         store_ctx = copy(StoragePresentationContexts)
         for ctx in store_ctx:
+
+            # TODO: this could come from some sort of setting
+            # to decide what we are
             ctx._as_scp = True
             ctx._as_scu = True
             ctx.scp_role = True
@@ -98,6 +101,7 @@ class Server:
             ae.add_supported_context(qr)
 
         return ae
+    
     def run(self):        
         # Start server on each port
         app = self.init()
@@ -119,5 +123,5 @@ class Server:
         for srv in self.listeners:
             srv.shutdown()
 
-def new_server(logger: Logger, config: ServerConfig) -> Server:
-    return Server(logger, config)
+def new_server(bus: Logger, config: ServerConfig, handlers: list[EventHandlerType]) -> Server:
+    return Server(bus, config, handlers)
