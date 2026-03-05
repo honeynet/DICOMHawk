@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 
 A `DicomStarter` class to initialize and launch the DICOM server.
@@ -7,26 +9,30 @@ and verifies port availability before starting the server
 """
 
 import socket
-from pynetdicom import evt
+from typing import Any, Optional
+
+from pynetdicom import AE, AllStoragePresentationContexts, StoragePresentationContexts, evt
 from pynetdicom.sop_class import (
     PatientRootQueryRetrieveInformationModelFind,
-    Verification,
-    StudyRootQueryRetrieveInformationModelMove,
     PatientRootQueryRetrieveInformationModelGet,
+    PatientRootQueryRetrieveInformationModelMove,
     StudyRootQueryRetrieveInformationModelFind,
     StudyRootQueryRetrieveInformationModelGet,
-    PatientRootQueryRetrieveInformationModelMove,
-)
-from pynetdicom import (
-    AE,
-    AllStoragePresentationContexts,
-    StoragePresentationContexts,
+    StudyRootQueryRetrieveInformationModelMove,
+    Verification,
 )
 
 
 class DicomStarter:
 
-    def __init__(self, app_logger, exceptions_logger, port, ip, handlers):
+    def __init__(
+        self,
+        app_logger: Any,
+        exceptions_logger: Any,
+        port: int,
+        ip: str,
+        handlers: Any,
+    ) -> None:
         """
 
         Constructor for DicomStarter.
@@ -48,13 +54,13 @@ class DicomStarter:
         self.handlers = handlers
         self.exceptions_logger = exceptions_logger
 
-    def register_dicom_handlers(self):
+    def register_dicom_handlers(self) -> Optional[list[tuple[Any, Any]]]:
         """
         List of event-handler tuples for the DICOM server.
 
         """
         try:
-            handlers = [
+            handlers: list[tuple[Any, Any]] = [
                 (evt.EVT_ACSE_RECV, self.handlers.handle_assoc),
                 (evt.EVT_RELEASED, self.handlers.handle_release),
                 (evt.EVT_C_FIND, self.handlers.handle_find),
@@ -67,12 +73,13 @@ class DicomStarter:
 
             return handlers
 
-        except Exception as e:
+        except Exception:
             self.exceptions_logger.exception(
                 "Unexpected error while registering the DICOM handlers"
             )
+            return None
 
-    def start_the_application(self):
+    def start_the_application(self) -> None:
         """
         Start the DICOM server.
         Sets up the Application Entity and registers event handlers if the port is not already used.
@@ -81,6 +88,8 @@ class DicomStarter:
         try:
             ae = self.initialize_application_entity()
             handlers = self.register_dicom_handlers()
+            if ae is None or handlers is None:
+                return
             if not self.is_port_in_use():
                 self.logger.info("DICOM Server Started")
                 ae.start_server(
@@ -94,7 +103,7 @@ class DicomStarter:
                 "Unexpected error starting the application"
             )
 
-    def initialize_application_entity(self):
+    def initialize_application_entity(self) -> Optional[AE]:
         """
         Create and configure the Application Entity (AE).
         Registers supported and requested presentation contexts
@@ -118,20 +127,21 @@ class DicomStarter:
             self.exceptions_logger.exception(
                 "Unexpected error while initializing the application entity object"
             )
+            return None
 
     # Ensure the presentation context used when initializing the server can act as SCU to handle STORE operation
 
-    def initialize_storage_contexts(self, StoragePresentationContexts):
+    def initialize_storage_contexts(self, storage_presentation_contexts: Any) -> None:
         """
         Configure the roles (SCP/SCU) for each Storage Presentation Context.
 
         """
-        for context in StoragePresentationContexts:
+        for context in storage_presentation_contexts:
             context._as_scp = True
             context._as_scu = True
             context.scp_role = True
             context.scu_role = True
 
-    def is_port_in_use(self):
+    def is_port_in_use(self) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex((self.ip, self.port)) == 0
