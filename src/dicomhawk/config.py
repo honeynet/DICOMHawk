@@ -9,13 +9,16 @@ from typing import List
 class DICOMSettings:
     PORTS: List[int]
     SERVER_HOST: str
-    
+
     STORAGE_DIR: str
     C_STORE_DIR: str
     DATABASE: str
     HASH_STORE: str
     CANARY_PDF: str
     INTEGRITY_CHECK: bool
+
+    # Structured event log — one JSON line per DICOM operation
+    EVENT_LOG: str
 
     # AE title
     AE_TITLE: str
@@ -145,6 +148,8 @@ def load_settings() -> Settings:
         HASH_STORE=docker_path(docker, "/opt/dicomhawk/storage/hash_store.json", "./storage/hash_store.json"),
         CANARY_PDF=docker_path(docker, "/opt/dicomhawk/storage/can.pdf", "./storage/can.pdf"),
         INTEGRITY_CHECK=env_bool("INTEGRITY_CHECK", "True"),
+
+        EVENT_LOG=docker_path(docker, "/var/log/dicomhawk/dicomhawk.log", "./logs/dicomhawk.log"),
 
         AE_TITLE=os.getenv("DICOM_AE_TITLE", "ORTHANC"), # TODO: I am not sure this is the typical AE title for ORTHANC
         IMPLEMENTATION_NAME=os.getenv("DICOM_IMPLEMENTATION_NAME", "ORTHANC"), # TODO: missing the version?

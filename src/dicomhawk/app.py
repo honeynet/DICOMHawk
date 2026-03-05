@@ -1,5 +1,7 @@
 from .server import ServerConfig, new_server
 from .component import Component
+from . import event_logger
+from .config import settings
 
 from logging import Logger
 
@@ -8,6 +10,7 @@ class DicomHawk:
         self.logger = logger
         self.components = components
         self.server = new_server(self.logger, config)
+        event_logger.configure(settings.DICOM.EVENT_LOG)
 
     def start(self) -> None:
         for c in self.components:

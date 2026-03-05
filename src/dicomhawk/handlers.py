@@ -5,6 +5,7 @@ from pynetdicom.events import Event
 
 from .status import QRStatus
 from .repository import Repository
+from . import event_logger
 
 import logging
 
@@ -16,13 +17,39 @@ type QRResult = Generator[tuple[int, Optional[Dataset]], None, None]
 # def middlewhare(event: Event)
 # take the event and send it together with the event manager to the handler
 
+def _caller_info(event: Event) -> dict:
+    """Pull the requesting side's address and AE title out of an event."""
+    requestor = event.assoc.requestor
+    ae_title = requestor.ae_title
+    if isinstance(ae_title, bytes):
+        ae_title = ae_title.decode("ascii", errors="replace")
+    return {
+        "src_ip": requestor.address,
+        "src_port": requestor.port,
+        "ae_title_calling": str(ae_title).strip(),
+    }
+
+
 def default_handler(**kwargs):
     pass
+
 
 def handle_find(
         repo: Repository, # This is an interface to the repo
         event: Event
     ) -> QRResult:
+
+    sop = event.request.AffectedSOPClassUID
+    qr_level = getattr(event.identifier, "QueryRetrieveLevel", "")
+
+    event_logger.log_event({
+        **_caller_info(event),
+        "dimse_operation": "C-FIND",
+        "sop_class_uid": str(sop) if sop else None,
+        "query_retrieve_level": str(qr_level),
+        "honeytoken_injected": True,
+        "connection_result": "accepted",
+    })
 
     if err := repo.eval_qr(event):
         # NOTE: we may want a separate logger for this?
@@ -50,10 +77,23 @@ def handle_find(
         yield (QRStatus.PENDING, res)
     yield (QRStatus.SUCCESS, None)
 
+
 def handle_get(
         repo: Repository,
         event: Event
     ) -> QRResult:
+
+    sop = event.request.AffectedSOPClassUID
+    qr_level = getattr(event.identifier, "QueryRetrieveLevel", "")
+
+    event_logger.log_event({
+        **_caller_info(event),
+        "dimse_operation": "C-GET",
+        "sop_class_uid": str(sop) if sop else None,
+        "query_retrieve_level": str(qr_level),
+        "honeytoken_injected": False,
+        "connection_result": "accepted",
+    })
 
     if err := repo.eval_qr(event):
         logger.error(err.error)
@@ -82,10 +122,27 @@ def handle_get(
         yield (QRStatus.PENDING, res.dataset)
     yield (QRStatus.SUCCESS, None)
 
+
 def handle_move(
         repo: Repository,
         event: Event
     ) -> QRResult:
+
+    sop = event.request.AffectedSOPClassUID
+    qr_level = getattr(event.identifier, "QueryRetrieveLevel", "")
+    destination = event.move_destination
+    if isinstance(destination, bytes):
+        destination = destination.decode("ascii", errors="replace")
+
+    event_logger.log_event({
+        **_caller_info(event),
+        "dimse_operation": "C-MOVE",
+        "sop_class_uid": str(sop) if sop else None,
+        "query_retrieve_level": str(qr_level),
+        "move_destination": str(destination).strip() if destination else None,
+        "honeytoken_injected": False,
+        "connection_result": "accepted",
+    })
 
     if err := repo.eval_qr(event):
         logger.error(err.error)
@@ -131,6 +188,19 @@ def handle_store(
         event: Event
     ) -> QRResult:
 
+    ds = event.identifier
+    sop_class = getattr(ds, "SOPClassUID", None)
+    sop_instance = getattr(ds, "SOPInstanceUID", None)
+
+    event_logger.log_event({
+        **_caller_info(event),
+        "dimse_operation": "C-STORE",
+        "sop_class_uid": str(sop_class) if sop_class else None,
+        "sop_instance_uid": str(sop_instance) if sop_instance else None,
+        "honeytoken_injected": False,
+        "connection_result": "accepted",
+    })
+
     repo.store(event.identifier)
     yield (QRStatus.SUCCESS, None)
 
@@ -144,7 +214,8 @@ class DIMSEFactory:
     def register(self, name: str, handler: EventHandler) -> 'DIMSEFactory':
         self.handlers[name] = handler
         return self
-    
+
+
 def new_dimse_factory() -> DIMSEFactory:
     factory = DIMSEFactory()
     # TODO: register handlers
