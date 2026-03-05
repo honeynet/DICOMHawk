@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 
@@ -59,18 +60,6 @@ class Settings:
     FLASK_ACTIVATED: bool
     BLOCK_SCANNERS: bool
 
-    BLACKHOLE_FILE: str
-    REDIS_HOST: str
-
-    MAIN_LOG_DIR: str
-    SIMPLIFIED_LOG_DIR: str
-    EXCEPTIONS_LOG_DIR: str
-
-    # TODO: we shouldn't store api keys. This can be loaded from secrets
-    ABUSE_IP_API_KEY: str
-    IP_QUALITY_SCORE_API_KEY: str
-    VIRUS_TOTAL_API_KEY: str
-
     HONEY_URL: str
     FAKER_LOCALE: str
 
@@ -112,6 +101,36 @@ def require_one_of(value, name: str, allowed):
     return value
 
 
+_log = logging.getLogger(__name__)
+
+
+def get_secret(name: str) -> str | None:
+    """Read a secret from a mounted file.
+
+    The base path is controlled by SECRETS_BASE_PATH (default: /run/secrets),
+    so the same code works in Docker Compose, Swarm, and bare-metal setups.
+
+    Returns None when the file does not exist — the caller can fall back to
+    an environment variable for local development.  Raises on permission
+    errors because that indicates a misconfigured deployment and we should
+    not silently continue.
+    """
+    base = os.getenv("SECRETS_BASE_PATH", "/run/secrets")
+    path = f"{base}/{name}"
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return None
+    except PermissionError:
+        _log.error("Cannot read secret '%s' from %s: permission denied", name, path)
+        raise
+
+
+def secret_or_env(secret_name: str, env_name: str, default: str | None = None) -> str | None:
+    """Prefer a secret file; fall back to an env var for local development."""
+    return get_secret(secret_name) or os.getenv(env_name, default)
+
 
 def load_settings() -> Settings:
     docker = env_bool("DOCKER")
@@ -135,8 +154,8 @@ def load_settings() -> Settings:
     tcia = TCIASettings(
         ACTIVATED=env_bool("TCIA_ACTIVATED", "True"),
         FALLBACK_MODE=env_bool("TCIA_FALLBACK_MODE", "True"),
-        USERNAME=os.getenv("TCIA_USER_NAME", "user"),
-        PASSWORD=os.getenv("TCIA_PASSWORD", "pass"),
+        USERNAME=secret_or_env("tcia_username", "TCIA_USER_NAME", "user"),
+        PASSWORD=secret_or_env("tcia_password", "TCIA_PASSWORD", "pass"),
         PERIOD_UNIT=require_one_of(
             os.getenv("TCIA_PERIOD_UNIT", "week"),
             "TCIA_PERIOD_UNIT",
@@ -174,22 +193,7 @@ def load_settings() -> Settings:
         DOCKER=docker,
         FLASK_ACTIVATED=env_bool("FLASK_ACTIVATED", "True"),
         BLOCK_SCANNERS=env_bool("BLOCK_SCANNERS"),
-        BLACKHOLE_FILE=docker_path(
-            docker,
-            "/opt/dicomhawk/storage/blackhole_list.txt",
-            "./storage/blackhole_list.txt",
-        ),
-        REDIS_HOST=os.getenv("REDIS_HOST", "172.29.0.4") if docker else "localhost",
-        MAIN_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/dicom_raw_logs", "../flask_logging_server/logs/dicom_raw_logs"),
-        SIMPLIFIED_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/simplified", "../flask_logging_server/logs/simplified"),
-        EXCEPTIONS_LOG_DIR=docker_path(docker, "/var/log/dicomhawk/exceptions", "./exceptions"),
-
-        # TODO: Point to a file or a secret, do not load this into memory
-        ABUSE_IP_API_KEY=require(os.getenv("ABUSE_IP__KEY"), "ABUSE_IP__KEY"),
-        IP_QUALITY_SCORE_API_KEY=require(os.getenv("IP_QUALITY_SCORE_API_KEY"), "IP_QUALITY_SCORE_API_KEY"),
-        VIRUS_TOTAL_API_KEY=require(os.getenv("VIRUS_TOTAL_API_KEY"), "VIRUS_TOTAL_API_KEY"),
-
-        HONEY_URL=os.getenv("HONEY_URL", "VALUE"),
+        HONEY_URL=secret_or_env("honey_url", "HONEY_URL", "VALUE"),
         FAKER_LOCALE=os.getenv("FAKER_LOCALE", "en_US"),
 
         # Settings

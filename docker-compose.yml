@@ -1,0 +1,26 @@
+services:
+  dicom_server:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - SECRETS_BASE_PATH=/run/secrets
+    secrets:
+      - tcia_username
+      - tcia_password
+      - honey_url
+    volumes:
+      - dicom_storage:/opt/dicomhawk/storage
+      - logs:/var/log/dicomhawk
+
+secrets:
+  tcia_username:
+    file: ./tcia_username
+  tcia_password:
+    file: ./tcia_password
+  honey_url:
+    file: ./honey_url
+
+volumes:
+  dicom_storage:
+  logs:
