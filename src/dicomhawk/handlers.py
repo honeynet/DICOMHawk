@@ -1,17 +1,25 @@
 from typing import Callable, Any, Generator, Optional
 
+from pynetdicom import evt
 from pydicom.dataset import Dataset
-from pynetdicom.events import Event
+from pynetdicom.events import Event, EventHandlerType, EventType
 
 from .status import QRStatus
 from .repository import Repository
-from . import event_logger
+from .event_logger import EventLogger
 
 import logging
 
 logger = logging.getLogger(__name__)
 
-type EventHandler = Callable[[Repository, Event], Any]
+type EventHandler = Callable[
+    [
+        Repository, # instance of the repo, to store and retrieve
+        EventLogger, # a bus to push logs
+        Event, # the event
+    ],
+    Any,
+]
 type QRResult = Generator[tuple[int, Optional[Dataset]], None, None]
 
 # def middlewhare(event: Event)
@@ -36,13 +44,14 @@ def default_handler(**kwargs):
 
 def handle_find(
         repo: Repository, # This is an interface to the repo
+        bus: EventLogger,
         event: Event
     ) -> QRResult:
 
     sop = event.request.AffectedSOPClassUID
     qr_level = getattr(event.identifier, "QueryRetrieveLevel", "")
 
-    event_logger.log_event({
+    bus.log({
         **_caller_info(event),
         "dimse_operation": "C-FIND",
         "sop_class_uid": str(sop) if sop else None,
@@ -80,13 +89,14 @@ def handle_find(
 
 def handle_get(
         repo: Repository,
+        bus: EventLogger,
         event: Event
     ) -> QRResult:
 
     sop = event.request.AffectedSOPClassUID
     qr_level = getattr(event.identifier, "QueryRetrieveLevel", "")
 
-    event_logger.log_event({
+    bus.log({
         **_caller_info(event),
         "dimse_operation": "C-GET",
         "sop_class_uid": str(sop) if sop else None,
@@ -125,6 +135,7 @@ def handle_get(
 
 def handle_move(
         repo: Repository,
+        bus: EventLogger,
         event: Event
     ) -> QRResult:
 
@@ -134,7 +145,7 @@ def handle_move(
     if isinstance(destination, bytes):
         destination = destination.decode("ascii", errors="replace")
 
-    event_logger.log_event({
+    bus.log({
         **_caller_info(event),
         "dimse_operation": "C-MOVE",
         "sop_class_uid": str(sop) if sop else None,
@@ -185,6 +196,7 @@ def handle_move(
 
 def handle_store(
         repo: Repository,
+        bus: EventLogger,
         event: Event
     ) -> QRResult:
 
@@ -192,7 +204,7 @@ def handle_store(
     sop_class = getattr(ds, "SOPClassUID", None)
     sop_instance = getattr(ds, "SOPInstanceUID", None)
 
-    event_logger.log_event({
+    bus.log({
         **_caller_info(event),
         "dimse_operation": "C-STORE",
         "sop_class_uid": str(sop_class) if sop_class else None,
@@ -205,19 +217,38 @@ def handle_store(
     yield (QRStatus.SUCCESS, None)
 
 
-class DIMSEFactory:
-    handlers: dict[str, EventHandler]
+def bind(repo: Repository, bus: EventLogger, handler: EventHandler) -> Callable:
+    def binder(evt: Event, *args):
+        return handler(repo, bus, evt, *args)
+    return binder
 
-    def get(self, name: str) -> EventHandler | None:
-        return self.handlers[name]
+
+_handlers: list[tuple[str, EventType, EventHandler]] = [
+    ("get", evt.EVT_C_GET, handle_get),
+    ("store", evt.EVT_C_STORE, handle_store),
+    ("find", evt.EVT_C_FIND, handle_find),
+    ("move", evt.EVT_C_MOVE, handle_move),
+]
+
+
+class DIMSEFactory:
+
+    def __init__(self) -> None:
+        self.handlers: dict[str, EventHandlerType] = {}
+
+    def get(self, name: str) -> EventHandlerType | None:
+        if handler := self.handlers[name]:
+            return handler
     
-    def register(self, name: str, handler: EventHandler) -> 'DIMSEFactory':
+    def register(self, name: str, handler: EventHandlerType) -> 'DIMSEFactory':
         self.handlers[name] = handler
         return self
 
 
-def new_dimse_factory() -> DIMSEFactory:
+def new_dimse_factory(repo: Repository, bus: EventLogger) -> DIMSEFactory:
     factory = DIMSEFactory()
-    # TODO: register handlers
+    for n, t, h in _handlers:
+        handler = bind(repo, bus, h)
+        factory.register(n, (t, handler))
 
     return factory

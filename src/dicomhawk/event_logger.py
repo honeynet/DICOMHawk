@@ -4,10 +4,6 @@ Each incoming DICOM operation is recorded as a single JSON line in a
 configurable log file. The format is intentionally flat and simple so it
 can be consumed by log shippers (e.g. Filebeat) feeding into ELK stacks
 like T-Pot without any pre-processing.
-
-Call configure() once at startup before the server starts accepting
-connections.  If configure() is never called, log_event() is a silent
-no-op so callers do not need to guard against an unconfigured logger.
 """
 
 import json
@@ -18,46 +14,37 @@ from typing import Any
 
 _log = logging.getLogger(__name__)
 
-_log_path: Path | None = None
 
+class EventLogger:
+    """Writes one JSON line per DICOM event to a log file.
 
-def configure(path: str) -> None:
-    """Set the destination file for the structured event log.
-
-    Creates any missing parent directories.  Raises nothing — if the
-    directory cannot be created the error is logged and logging is
-    left disabled.
+    Uses Python's standard logging infrastructure internally so operational
+    errors (e.g. permission denied) are surfaced through the normal log
+    pipeline rather than swallowed silently.
     """
-    global _log_path
 
-    p = Path(path)
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        _log.error("Cannot create log directory %s: %s", p.parent, exc)
-        return
+    def __init__(self, path: str) -> None:
+        p = Path(path)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise OSError(f"Cannot create log directory {p.parent}") from exc
+        self._path = p
+        _log.info("Event log initialised at %s", self._path)
 
-    _log_path = p
-    _log.info("Event log configured at %s", _log_path)
+    def log(self, fields: dict[str, Any]) -> None:
+        """Append one JSON event record to the log file.
 
+        A UTC timestamp is added under the key ``timestamp`` if not already
+        present in *fields*.
+        """
+        fields.setdefault(
+            "timestamp",
+            datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
 
-def log_event(fields: dict[str, Any]) -> None:
-    """Append one JSON record to the event log.
-
-    A UTC timestamp is added under the key ``timestamp`` if one is not
-    already present in *fields*.  The call is a no-op when configure()
-    has not been called yet.
-    """
-    if _log_path is None:
-        return
-
-    fields.setdefault(
-        "timestamp",
-        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    )
-
-    try:
-        with _log_path.open("a") as f:
-            f.write(json.dumps(fields) + "\n")
-    except OSError as exc:
-        _log.error("Failed to write event log entry: %s", exc)
+        try:
+            with self._path.open("a") as f:
+                f.write(json.dumps(fields) + "\n")
+        except OSError as exc:
+            _log.error("Failed to write event log entry: %s", exc)
