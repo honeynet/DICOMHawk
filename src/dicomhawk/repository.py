@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from .status import QRStatus
 from .storage import Storage
-from .honey import Middleware
+from .middlewares import Middleware
 
 import os
 import logging
@@ -38,9 +38,9 @@ class Repository:
     session: Session
 
     def __init__(self, location: str | None, storage: Storage, middlewares: list[Middleware]=[]):
-        self.location = location or ":memory:"
+        self.location: str = location or ":memory:"
         self.storage: Storage = storage
-        self.middlewares = middlewares
+        self.middlewares: list[Middleware] = middlewares
 
     def _new_connection(self) -> Engine:
         engine = db.create(
@@ -190,3 +190,7 @@ class Repository:
 
         result.dataset = instance
         return result
+    
+
+def new_repo(db: str | None, store: Storage, mws: list[Middleware]) -> Repository:
+    return Repository(db, store, mws)

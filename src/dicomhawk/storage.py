@@ -42,3 +42,7 @@ class Storage:
             shutil.copyfileobj(f_in, f_out)
 
         return compressed_path
+    
+
+def new_store(traces: str) -> Storage:
+    return Storage(traces)
