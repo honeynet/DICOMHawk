@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import logging
 from copy import copy
-from logging import Logger
+from .event_logger import EventLogger
 from itertools import chain
 from pynetdicom import (
     evt,
@@ -45,7 +45,7 @@ class Server:
 
     def __init__(
             self, 
-            bus: Logger,
+            bus: EventLogger,
             config: ServerConfig,
             handlers: list[EventHandlerType],
         ):
@@ -123,5 +123,5 @@ class Server:
         for srv in self.listeners:
             srv.shutdown()
 
-def new_server(bus: Logger, config: ServerConfig, handlers: list[EventHandlerType]) -> Server:
+def new_server(bus: EventLogger, config: ServerConfig, handlers: list[EventHandlerType]) -> Server:
     return Server(bus, config, handlers)

@@ -4,6 +4,7 @@ from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.middlewares import Middleware
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
+from dicomhawk.event_logger import new_bus
 from dicomhawk.storage import new_store
 
 serve_app = typer.Typer(help="dicomhawk runner")
@@ -52,6 +53,12 @@ def serve(
             "--database",
             help="path to database"
         ),
+        log_path: str = typer.Option(
+            "data/dicomhawk.log",
+            "-l",
+            "--log-path",
+            help="path to the JSON event log file"
+        ),
         traces : str = typer.Option(
             "traces",
             "-t",
@@ -72,7 +79,7 @@ def serve(
     store = new_store(traces)
     mws: list[Middleware] = [] # TODO: fix this, add a middleware to inject the honeytoken
     repo = new_repo(database, store, mws)
-    bus = new_bus() # TODO: make the bus
+    bus = new_bus(log_path)
 
     dimse_fact = new_dimse_factory(repo, bus)
 
