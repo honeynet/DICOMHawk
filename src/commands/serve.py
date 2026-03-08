@@ -4,7 +4,7 @@ from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.middlewares import Middleware
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
-from dicomhawk.event_logger import new_bus
+from dicomhawk.bus import new_bus
 from dicomhawk.storage import new_store
 
 serve_app = typer.Typer(help="dicomhawk runner")
