@@ -237,7 +237,7 @@ class DIMSEFactory:
         self.handlers: dict[str, EventHandlerType] = {}
 
     def get(self, name: str) -> EventHandlerType | None:
-        if handler := self.handlers[name]:
+        if handler := self.handlers.get(name):
             return handler
     
     def register(self, name: str, handler: EventHandlerType) -> 'DIMSEFactory':

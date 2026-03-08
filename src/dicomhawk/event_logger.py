@@ -48,3 +48,7 @@ class EventLogger:
                 f.write(json.dumps(fields) + "\n")
         except OSError as exc:
             _log.error("Failed to write event log entry: %s", exc)
+
+
+def new_bus(path: str) -> EventLogger:
+    return EventLogger(path)
