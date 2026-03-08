@@ -10,6 +10,7 @@ class QRStatus(IntEnum):
     SOP_CLASS_INVALID = 0xA900 # Identifier does not match SOP class
     
     STORE_ERROR = 0xA700
+    READ_ERROR = 0xC421
 
 class QRLevel(StrEnum):
     STUDY = "STUDY"

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class QRError:
     error: str
-    status: int
+    status: QRStatus
 
 class QRResult:
     matches: list[Dataset]
@@ -176,7 +176,7 @@ class Repository:
         except Exception as exc:
             err = QRError()
             err.error = f"Error reading file: {match.filename}\n{exc}"
-            err.status = 0xC421
+            err.status = QRStatus.READ_ERROR
             result.error = err
             return result
         
