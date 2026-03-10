@@ -74,6 +74,11 @@ def serve(
             None,
             "--canary-pdf",
             help="Path to an Encapsulated PDF Canary to inject into datasets"
+        ),
+        stix_out: str | None = typer.Option(
+            None,
+            "--stix-out",
+            help="Directory to write STIX 2.1 Bundle JSON (NDJSON) output"
         )
     ):
 
@@ -92,7 +97,13 @@ def serve(
     mws: list[Middleware] = [injector]
     
     repo = new_repo(database, store, mws)
-    bus = new_bus(log_path)
+
+    stix_identity = None
+    if stix_out:
+        from dicomhawk.stix import new_honeypot_identity
+        stix_identity = new_honeypot_identity(ae_title, impl_uid)
+
+    bus = new_bus(log_path, stix_out=stix_out, stix_identity=stix_identity)
 
     dimse_fact = new_dimse_factory(repo, bus)
 
