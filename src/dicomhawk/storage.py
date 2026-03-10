@@ -7,18 +7,29 @@ from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
 
-class Storage:
-    storage_dir: str
-    quarantine_dir: str
+from path_jail import Jail
 
+
+class Storage:
     def __init__(self, traces: str) -> None:
         self.traces_dir = Path(traces)
         self.traces_dir.mkdir(parents=True, exist_ok=True)
+        self.storage_dir = self.traces_dir / "storage"
+        self.quarantine_dir = self.traces_dir / "quarantine"
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.quarantine_dir.mkdir(parents=True, exist_ok=True)
+        self._jail_storage = Jail(self.storage_dir)
+        self._jail_quarantine = Jail(self.quarantine_dir)
 
     def jail(self, safe: bool = False) -> str:
         if safe:
-            return self.storage_dir
-        return self.quarantine_dir
+            return str(self.storage_dir)
+        return str(self.quarantine_dir)
+
+    def path_for(self, safe: bool, filename: str) -> Path:
+        """Path inside the jail for filename. Raises ValueError if path would escape."""
+        j = self._jail_storage if safe else self._jail_quarantine
+        return Path(j.join(filename))
     
     @contextmanager
     def temp(self, suffix=".dcm"):

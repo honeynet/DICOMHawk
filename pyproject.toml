@@ -27,7 +27,8 @@ dependencies = [
     "pytz",
     "overpy",
     "sqlalchemy",
-    "typer", 
+    "typer",
+    "path-jail",
     "numpy",
     # for the web
     "flask",
