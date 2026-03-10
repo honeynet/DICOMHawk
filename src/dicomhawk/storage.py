@@ -7,7 +7,16 @@ from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
 
-from path_jail import Jail
+
+def _jailed_path(root: Path, filename: str) -> Path:
+    """Resolve path under root. Raises ValueError if it would escape the jail."""
+    if Path(filename).is_absolute():
+        raise ValueError("filename must be relative")
+    root_resolved = root.resolve()
+    full = (root / filename).resolve()
+    if not full.is_relative_to(root_resolved):
+        raise ValueError("path escapes jail")
+    return full
 
 
 class Storage:
@@ -18,8 +27,6 @@ class Storage:
         self.quarantine_dir = self.traces_dir / "quarantine"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.quarantine_dir.mkdir(parents=True, exist_ok=True)
-        self._jail_storage = Jail(self.storage_dir)
-        self._jail_quarantine = Jail(self.quarantine_dir)
 
     def jail(self, safe: bool = False) -> str:
         if safe:
@@ -28,8 +35,8 @@ class Storage:
 
     def path_for(self, safe: bool, filename: str) -> Path:
         """Path inside the jail for filename. Raises ValueError if path would escape."""
-        j = self._jail_storage if safe else self._jail_quarantine
-        return Path(j.join(filename))
+        root = self.storage_dir if safe else self.quarantine_dir
+        return _jailed_path(root, filename)
     
     @contextmanager
     def temp(self, suffix=".dcm"):

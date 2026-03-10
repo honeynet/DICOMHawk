@@ -28,7 +28,6 @@ dependencies = [
     "overpy",
     "sqlalchemy",
     "typer",
-    "path-jail",
     "numpy",
     # for the web
     "flask",
