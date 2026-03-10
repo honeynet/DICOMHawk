@@ -78,7 +78,14 @@ def config_bus_size_rotation(bus: Logger, stdout: str, size: int = 1024) -> Logg
     bus.addHandler(h)
     return bus
 
-def new_bus(stdout: Optional[str] = None, when: Optional[str] = None, interval: int = 1, size: Optional[int] = None) -> Logger:
+def new_bus(
+    stdout: Optional[str] = None,
+    when: Optional[str] = None,
+    interval: int = 1,
+    size: Optional[int] = None,
+    stix_out: Optional[str] = None,
+    stix_identity=None,
+) -> Logger:
     lg = logging.getLogger("bus")
     if not stdout:
         return lg
@@ -91,5 +98,9 @@ def new_bus(stdout: Optional[str] = None, when: Optional[str] = None, interval: 
 
     if size:
         lg = config_bus_size_rotation(lg, stdout, size)
+
+    if stix_out and stix_identity:
+        from .stix import StixHandler
+        lg.addHandler(StixHandler(stix_identity, stix_out))
 
     return lg

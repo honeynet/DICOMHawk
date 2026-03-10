@@ -1,7 +1,7 @@
 import typer
 from dicomhawk.app import new_dicomhawk
 from dicomhawk.handlers import new_dimse_factory
-from dicomhawk.middlewares import Middleware
+from dicomhawk.middlewares import Middleware, new_honeytoken_injector
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
 from dicomhawk.bus import new_bus
@@ -64,6 +64,21 @@ def serve(
             "-t",
             "--traces",
             help="Where to store traces (i.e., DICOM files and uploaded payloads)"
+        ),
+        honey_url: str | None = typer.Option(
+            None,
+            "--honey-url",
+            help="URL to inject as RetrieveURL for Honey URLs"
+        ),
+        canary_pdf: str | None = typer.Option(
+            None,
+            "--canary-pdf",
+            help="Path to an Encapsulated PDF Canary to inject into datasets"
+        ),
+        stix_out: str | None = typer.Option(
+            None,
+            "--stix-out",
+            help="Directory to write STIX 2.1 Bundle JSON (NDJSON) output"
         )
     ):
 
@@ -77,9 +92,18 @@ def serve(
     )
 
     store = new_store(traces)
-    mws: list[Middleware] = [] # TODO: fix this, add a middleware to inject the honeytoken
+    
+    injector = new_honeytoken_injector(honey_url, canary_pdf)
+    mws: list[Middleware] = [injector]
+    
     repo = new_repo(database, store, mws)
-    bus = new_bus(log_path)
+
+    stix_identity = None
+    if stix_out:
+        from dicomhawk.stix import new_honeypot_identity
+        stix_identity = new_honeypot_identity(ae_title, impl_uid)
+
+    bus = new_bus(log_path, stix_out=stix_out, stix_identity=stix_identity)
 
     dimse_fact = new_dimse_factory(repo, bus)
 

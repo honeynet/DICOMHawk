@@ -35,9 +35,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+stix = [
+    "stix2>=3.0.0",
+]
 dev = [
     "pytest",
     "faker",
+    "stix2>=3.0.0",
 ]
 
 [tool.setuptools]
