@@ -7,6 +7,7 @@ and verifies port availability before starting the server
 """
 
 import socket
+import sys
 from pynetdicom import evt
 from pynetdicom.sop_class import (
     PatientRootQueryRetrieveInformationModelFind,
@@ -88,7 +89,8 @@ class DicomStarter:
                     evt_handlers=handlers,
                 )
             else:
-                self.logger.debug(f"port {self.port} is in use")
+                self.logger.error(f"Port {self.port} is already in use. Please free the port or configure a different one.")
+                sys.exit(1)
         except Exception:
             self.exceptions_logger.exception(
                 "Unexpected error starting the application"
