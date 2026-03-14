@@ -23,11 +23,12 @@ from pynetdicom import (
     AllStoragePresentationContexts,
     StoragePresentationContexts,
 )
+from vendor_personas import get_persona
 
 
 class DicomStarter:
 
-    def __init__(self, app_logger, exceptions_logger, port, ip, handlers):
+    def __init__(self, app_logger, exceptions_logger, port, ip, handlers, vendor_persona="default"):
         """
 
         Constructor for DicomStarter.
@@ -41,6 +42,9 @@ class DicomStarter:
             DICOM host IP address .
         handlers : object
             Assoc, C-FIND, C-GET, C-MOVE, Release, Abort  handler methods.
+        vendor_persona : str
+            Name of a vendor persona to emulate (e.g. 'ge_ct', 'siemens_ct',
+            'philips_mr').  Use 'default' for original behaviour.
 
         """
         self.logger = app_logger
@@ -48,6 +52,7 @@ class DicomStarter:
         self.ip = ip
         self.handlers = handlers
         self.exceptions_logger = exceptions_logger
+        self.persona = get_persona(vendor_persona)
 
     def register_dicom_handlers(self):
         """
@@ -101,19 +106,45 @@ class DicomStarter:
         Create and configure the Application Entity (AE).
         Registers supported and requested presentation contexts
         for storage, query/retrieve, and verification services.
+
+        When a vendor persona is active, the AE title, implementation
+        identifiers, and the set of advertised SOP classes / transfer
+        syntaxes are restricted to match that persona, making the
+        honeypot harder to fingerprint.
         """
         try:
             ae = AE()
-            ae.supported_contexts = AllStoragePresentationContexts
-            ae.requested_contexts = StoragePresentationContexts
-            ae.add_supported_context(PatientRootQueryRetrieveInformationModelFind)
-            ae.add_supported_context(PatientRootQueryRetrieveInformationModelGet)
-            ae.add_supported_context(StudyRootQueryRetrieveInformationModelGet)
-            ae.add_supported_context(StudyRootQueryRetrieveInformationModelFind)
-            ae.add_supported_context(StudyRootQueryRetrieveInformationModelMove)
-            ae.add_supported_context(PatientRootQueryRetrieveInformationModelMove)
-            ae.add_supported_context(Verification)
-            self.initialize_storage_contexts(StoragePresentationContexts)
+
+            if self.persona:
+                # -- Vendor persona mode --
+                ae.ae_title = self.persona["ae_title"]
+                ae.implementation_class_uid = self.persona["implementation_class_uid"]
+                ae.implementation_version_name = self.persona["implementation_version_name"]
+
+                transfer_syntaxes = self.persona["transfer_syntaxes"]
+
+                for sop_class in self.persona["supported_sop_classes"]:
+                    ae.add_supported_context(sop_class, transfer_syntaxes)
+                    ae.add_requested_context(sop_class, transfer_syntaxes)
+
+                self.logger.info(
+                    f"Vendor persona active: {self.persona['description']} "
+                    f"(AE title={self.persona['ae_title']}, "
+                    f"SOP classes={len(self.persona['supported_sop_classes'])})"
+                )
+            else:
+                # -- Default mode (original behaviour) --
+                ae.supported_contexts = AllStoragePresentationContexts
+                ae.requested_contexts = StoragePresentationContexts
+                ae.add_supported_context(PatientRootQueryRetrieveInformationModelFind)
+                ae.add_supported_context(PatientRootQueryRetrieveInformationModelGet)
+                ae.add_supported_context(StudyRootQueryRetrieveInformationModelGet)
+                ae.add_supported_context(StudyRootQueryRetrieveInformationModelFind)
+                ae.add_supported_context(StudyRootQueryRetrieveInformationModelMove)
+                ae.add_supported_context(PatientRootQueryRetrieveInformationModelMove)
+                ae.add_supported_context(Verification)
+                self.initialize_storage_contexts(StoragePresentationContexts)
+
             self.logger.debug("Application entity initialized")
             return ae
         except Exception:

@@ -57,6 +57,7 @@ services:
       - TCIA_STUDIES_PER_MODALITY=10
       - DOCKER=yes
       - HONEY_URL="https://[YOURHONEYURL]"
+      - VENDOR_PERSONA=default
     build: ./dicom_server/.
     volumes:
       - shared_data:/app

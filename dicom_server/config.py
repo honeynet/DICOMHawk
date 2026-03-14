@@ -156,6 +156,12 @@ TCIA_STUDIES_PER_MODALITY = int(os.getenv("TCIA_STUDIES_PER_MODALITY", 10))
 """Honeytoken URL"""
 HONEY_URL = os.getenv("HONEY_URL","VALUE")
 
+"""Vendor persona for fingerprint resistance.
+Set to a persona key (e.g. 'ge_ct', 'siemens_ct', 'philips_mr') to make the
+honeypot mimic a specific vendor's DICOM device.  Leave as 'default' to use
+the original generic DICOMHawk configuration."""
+VENDOR_PERSONA = os.getenv("VENDOR_PERSONA", "default")
+
 """Activate DICOM files integrity checks every 6 hours"""
 INTEGRITY_CHECK = os.getenv("INTEGRITY_CHECK", "True").lower() in TRUE_LIST
 

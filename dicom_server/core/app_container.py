@@ -200,6 +200,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
         config.DICOM_PORT,
         config.DICOM_SERVER_HOST,
         dicom_handlers,
+        config.VENDOR_PERSONA,
     )
 
     if config.TCIA_ACTIVATED:
