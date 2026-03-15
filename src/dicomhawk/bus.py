@@ -83,8 +83,8 @@ def new_bus(stdout: Optional[str] = None, when: Optional[str] = None, interval: 
     if not stdout:
         return lg
     
-    # create the file if it does not exist
-    Path(stdout).mkdir(parents=True, exist_ok=True)
+    # create the directory if it does not exist
+    Path(stdout).parent.mkdir(parents=True, exist_ok=True)
     
     if when:
         lg = config_bus_time_rotation(lg, stdout, when, interval)

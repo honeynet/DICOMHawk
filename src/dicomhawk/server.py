@@ -14,6 +14,7 @@ from pynetdicom.transport import ThreadedAssociationServer
 from pynetdicom.presentation import (
     AllStoragePresentationContexts,
     StoragePresentationContexts,
+    build_context,
 )
 
 from pynetdicom.sop_class import (
@@ -34,12 +35,11 @@ class ServerConfig:
     # UserInfo (application identity)
     IMPLEMENTATION_UID: str
     IMPLEMENTATION_NAME: str
+    MAX_ASSOC: int = 65536  # Maximum number of associations (min: 1, max: 65536)
+    presentation_contexts: list | None = None
 
-    # Maximum number of associations (min: 1, max: 65536)
-    MAX_ASSOC: int = 65536
-
-def new_config(host: str, ports: list[int], ae_title: str, impl_uid: str, impl_name: str) -> ServerConfig:
-    return ServerConfig(host, ports, ae_title, impl_uid, impl_name)
+def new_config(host: str, ports: list[int], ae_title: str, impl_uid: str, impl_name: str, presentation_contexts: list = None) -> ServerConfig:
+    return ServerConfig(host, ports, ae_title, impl_uid, impl_name, presentation_contexts=presentation_contexts)
 
 class Server:
     listeners: list[ThreadedAssociationServer]
@@ -84,22 +84,25 @@ class Server:
         # from greedy malware
         ae.maximum_pdu_size = 65536
 
-        # Set supported operations 
-        store_ctx = copy(StoragePresentationContexts)
-        for ctx in store_ctx:
+        if self.config.presentation_contexts is not None:
+            ctx_list = copy(self.config.presentation_contexts)
+        else:
+            # Set supported operations
+            ctx_list = copy(StoragePresentationContexts)
+            for qr in chain(_QR_CLASSES.values(), _VERIFICATION_CLASSES.values()):
+                ctx_list.append(build_context(qr))
 
-            # TODO: this could come from some sort of setting
-            # to decide what we are
+        # Configure SCP/SCU roles for all contexts
+        for ctx in ctx_list:
+            # TODO: this could come from some sort of setting to decide what we are
             ctx._as_scp = True
             ctx._as_scu = True
             ctx.scp_role = True
             ctx.scu_role = True
 
-        ae.requested_contexts = store_ctx
-        ae.supported_contexts = AllStoragePresentationContexts
-
-        for qr in chain(_QR_CLASSES.values(), _VERIFICATION_CLASSES.values()):
-            ae.add_supported_context(qr)
+        # Max 128 contexts per association per standard
+        ae.requested_contexts = ctx_list[:128]
+        ae.supported_contexts = ctx_list
 
         return ae
     

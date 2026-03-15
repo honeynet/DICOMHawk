@@ -37,10 +37,11 @@ class Repository:
     engine: Engine
     session: Session
 
-    def __init__(self, location: str | None, storage: Storage, middlewares: list[Middleware]=[]):
+    def __init__(self, location: str | None, storage: Storage, middlewares: list[Middleware], supported_sop: list[UID]):
         self.location: str = location or ":memory:"
         self.storage: Storage = storage
         self.middlewares: list[Middleware] = middlewares
+        self.supported_sop = list(supported_sop)
 
     def _new_connection(self) -> Engine:
         engine = db.create(
@@ -192,5 +193,5 @@ class Repository:
         return result
     
 
-def new_repo(db: str | None, store: Storage, mws: list[Middleware]) -> Repository:
-    return Repository(db, store, mws)
+def new_repo(db: str | None, store: Storage, mws: list[Middleware], supported_sop: list[UID]) -> Repository:
+    return Repository(db, store, mws, supported_sop)
