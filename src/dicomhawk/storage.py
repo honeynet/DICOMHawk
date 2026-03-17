@@ -12,7 +12,6 @@ class Storage:
     def __init__(self, traces: str) -> None:
         self.traces_dir = Path(traces)
         self.traces_dir.mkdir(parents=True, exist_ok=True)
-        # Initialize storage and quarantine directories
         self.storage_dir = self.traces_dir / "storage"
         self.quarantine_dir = self.traces_dir / "quarantine"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
