@@ -1,4 +1,3 @@
-
 from pydicom import dcmread
 from pydicom.uid import UID
 from pydicom.dataset import Dataset
@@ -15,7 +14,6 @@ from .status import QRStatus
 from .storage import Storage
 from .middlewares import Middleware
 
-import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,11 +132,18 @@ class Repository:
                 ds.save_as(tf, enforce_file_format=False)
                 self.storage.compress(tf)
 
-        fdir = self.storage.jail(safe)
-        fname = ds.SOPInstanceUID # NOTE: this is dangerous
-        fpath = os.path.join(fdir, fname)
+        fname = str(ds.SOPInstanceUID)
 
-        if os.path.exists(fpath):
+        try:
+            fpath = self.storage.path_for(safe, fname)
+        except ValueError as exc:
+            logger.warning(f"Path traversal attempt blocked: {fname} — {exc}")
+            err = QRError()
+            err.error = f"Dangerous SOPInstanceUID rejected: {fname}"
+            err.status = QRStatus.STORE_ERROR
+            return err
+
+        if fpath.exists():
             logger.warning(f"Instance already exists in storage directory: {fname}; overwriting")
 
         try:
@@ -157,7 +162,7 @@ class Repository:
                 .all()
             )
 
-            db.add_instance(ds, self.conn, os.path.abspath(fpath))
+            db.add_instance(ds, self.conn, str(fpath.resolve()))
             if not matches:
                 logger.info("Instance added to database")
             else:
