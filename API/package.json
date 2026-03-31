@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "serve": "node app.js",
-    "devStart": "nodemon app.js"
+    "devStart": "nodemon app.js",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -36,6 +37,8 @@
   },
   "devDependencies": {
     "i": "^0.3.7",
-    "nodemon": "^3.1.7"
+    "jest": "^30.3.0",
+    "nodemon": "^3.1.7",
+    "supertest": "^7.2.2"
   }
 }
