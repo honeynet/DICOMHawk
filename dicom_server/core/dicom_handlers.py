@@ -207,11 +207,11 @@ class DICOMHandlers:
         self, event
     ) -> Generator[Tuple[int, Optional[Dataset]], None, None]:
 
+        assoc = event.assoc
+        identifier = event.identifier
         addr = assoc.requestor.address
         port = assoc.requestor.port
         yield (str(addr), port)
-        assoc = event.assoc
-        identifier = event.identifier
 
         if dicom_util.identifier_invalid(identifier):
             yield 0xC000, None
