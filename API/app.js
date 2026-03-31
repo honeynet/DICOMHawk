@@ -222,6 +222,9 @@ app.get('/downloadInstance', (req, res) => {
   res.download(file, 'image-000008.dcm.url', (err) => {
     if (err) {
       console.error("File not available: ", err);
+      if (!res.headersSent) {
+        res.status(404).send('File not available');
+      }
     }
   });
 });
@@ -233,6 +236,9 @@ app.get('/downloadStudyFiles', (req, res) => {
   res.download(file, 'StudyFiles.zip', (err) => {
     if (err) {
       console.error("File not available: ", err);
+      if (!res.headersSent) {
+        res.status(404).send('File not available');
+      }
     }
   });
 });
