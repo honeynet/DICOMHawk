@@ -50,7 +50,9 @@ DICOM server:
 
 """
 
-import os, json
+import os, json, logging
+
+_logger = logging.getLogger(__name__)
 
 TRUE_LIST = ["true", "1", "t", "yes"]
 """Envirnoment"""
@@ -161,3 +163,25 @@ INTEGRITY_CHECK = os.getenv("INTEGRITY_CHECK", "True").lower() in TRUE_LIST
 
 """Integrity checker file storage path"""
 HASH_STORAGE_PATH = "./storage/hash_store.json"
+
+_PLACEHOLDER = "apikey"
+_OPTIONAL_API_KEYS = {
+    "ABUSE_IP_API_KEY": ABUSE_IP_API_KEY,
+    "IP_QUALITY_SCORE_API_KEY": IP_QUALITY_SCORE_API_KEY,
+    "VIRUS_TOTAL_API_KEY": VIRUS_TOTAL_API_KEY,
+}
+
+
+def warn_placeholder_keys():
+    """Emit a WARNING for each threat-intelligence API key that is absent or
+    still set to its placeholder value.  The server continues to start; the
+    warning exists so operators notice the feature is unconfigured.
+    """
+    for name, value in _OPTIONAL_API_KEYS.items():
+        if not value or value == _PLACEHOLDER:
+            _logger.warning(
+                "%s is not configured (value is %r). "
+                "Threat-intelligence lookups for this provider will be skipped.",
+                name,
+                value,
+            )
