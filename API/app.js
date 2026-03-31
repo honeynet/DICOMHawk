@@ -151,20 +151,13 @@ app.get("/get-ip", (req, res) => {
 });
 app.post('/logout', (req, res) => {
   req.session.destroy(err => {
-    //console.log("before clearing", connect.sid);
-    //res.clearCookie('connect.sid');
-    //console.log("after clearing", connect.sid);
-    //console.log("session destroyed");
     if (err) {
       return res.status(500).send('Error logging out');
     }
-  })
-  res.clearCookie('accessToken');
-  //console.log("aaaaaaaa",res.clearCookie('accessToken'))
-  res.clearCookie('refreshToken');
-  // console.log("bbbbbbbbbbbbb", res.clearCookie('refreshToken'));
-  res.status(200).json({ message: "Logged out successfully" });
-  //res.redirect('/');
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+    res.status(200).json({ message: "Logged out successfully" });
+  });
 });
 
 app.get('/refresh', (req, res) => {
