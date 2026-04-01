@@ -13,31 +13,31 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pydicom",
-    "pynetdicom",
-    "pylibjpeg",
-    "pylibjpeg-libjpeg",
-    "pylibjpeg-openjpeg",
-    "requests",
-    "redis",
-    "schedule",
-    "jwt",
-    "dependency-injector",
-    "aenum",
-    "pytz",
-    "overpy",
-    "sqlalchemy",
-    "typer", 
-    "numpy",
+    "pydicom==3.0.2",
+    "pynetdicom==3.0.4",
+    "pylibjpeg==2.1.0",
+    "pylibjpeg-libjpeg==2.4.0",
+    "pylibjpeg-openjpeg==2.5.0",
+    "requests==2.33.1",
+    "redis==7.4.0",
+    "schedule==1.2.2",
+    "jwt==1.4.0",
+    "dependency-injector==4.49.0",
+    "aenum==3.1.17",
+    "pytz==2026.1.post1",
+    "overpy==0.7",
+    "sqlalchemy==2.0.48",
+    "typer==0.24.1",
+    "numpy==2.4.4",
     # for the web
-    "flask",
-    "ujson"
+    "flask==3.1.3",
+    "ujson==5.12.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "faker",
+    "pytest==9.0.2",
+    "faker==40.12.0",
 ]
 
 [tool.setuptools]
