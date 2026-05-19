@@ -52,3 +52,8 @@ venv.bak/
 
 # snyk things
 .github/instructions/
+
+# DICOMHawk runtime artifacts
+traces/
+data/
+*.log
