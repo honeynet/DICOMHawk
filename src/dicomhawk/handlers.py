@@ -1,5 +1,6 @@
-from typing import Callable, Any, Generator, Optional
+import logging
 from logging import Logger
+from typing import Callable, Any, Generator, Optional
 
 from pynetdicom import evt
 from pydicom.dataset import Dataset
@@ -8,8 +9,6 @@ from pynetdicom.events import Event, EventHandlerType, EventType
 from .status import QRStatus
 from .repository import Repository
 from .bus import new_response, new_request
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +22,26 @@ type EventHandler = Callable[
 ]
 type QRResult = Generator[tuple[int, Optional[Dataset]], None, None]
 
+# Only Q/R operations get eval_qr validation; C-STORE and C-ECHO do not carry
+# QueryRetrieveLevel and must bypass that check entirely.
+_QR_EVENTS: frozenset[EventType] = frozenset({
+    evt.EVT_C_FIND,
+    evt.EVT_C_GET,
+    evt.EVT_C_MOVE,
+})
+
+
+def handle_echo(
+        repo: Repository,
+        bus: Logger,
+        event: Event
+    ) -> QRResult:
+    bus.info(new_response(event, QRStatus.SUCCESS))
+    yield (QRStatus.SUCCESS, None)
+
+
 def handle_find(
-        repo: Repository, # This is an interface to the repo
+        repo: Repository,
         bus: Logger,
         event: Event
     ) -> QRResult:
@@ -34,11 +51,11 @@ def handle_find(
     model = event.request.AffectedSOPClassUID
 
     result = repo.find(idt, model, inject=True)
-    if (err:=result.error) is not None:
+    if (err := result.error) is not None:
         bus.info(new_response(event, err.status, error=err.error))
         yield (err.status, None)
         return
-    
+
     bus.info(new_response(event, QRStatus.PENDING, data={"matches": len(result.matches)}))
     for m in result.matches:
         if event.is_cancelled:
@@ -70,7 +87,7 @@ def handle_get(
 
     model = event.request.AffectedSOPClassUID
     result = repo.find(idt, model)
-    if (err:=result.error) is not None:
+    if (err := result.error) is not None:
         bus.info(new_response(event, err.status, error=err.error))
         yield (err.status, None)
         return
@@ -82,9 +99,9 @@ def handle_get(
             bus.info(new_response(event, QRStatus.CANCEL))
             yield (QRStatus.CANCEL, None)
             return
-        
+
         res = repo.find_instance(m, decompress=True)
-        if (err:=res.error) is not None:
+        if (err := res.error) is not None:
             bus.info(new_response(event, err.status, error=err.error))
             yield (err.status, None)
 
@@ -99,42 +116,11 @@ def handle_move(
         bus: Logger,
         event: Event
     ) -> QRResult:
-
-    idt = event.identifier
-    model = event.request.AffectedSOPClassUID
-
-    result = repo.find(idt, model)
-    if (err:=result.error) is not None:
-        bus.info(new_response(event, err.status, error=err.error))
-        yield (err.status, None)
-        return
-
-    # TODO: need destinations
-    # try:
-    #     addr, port = destinations[event.move_destination]
-    # except KeyError:
-    #     logger.info("No matching move destination in the configuration")
-    #     yield None, None
-    #     return
-    # contexts = list(set([ii.context for ii in matches]))
-    # yield addr, port, {"contexts": contexts[:128]}
-    
-    yield len(result.matches) # type: ignore
-    for m in result.matches:
-        if event.is_cancelled:
-            bus.info(new_response(event, QRStatus.CANCEL))
-            yield (QRStatus.CANCEL, None)
-            return
-        
-        res = repo.find_instance(m, decompress=True)
-        if (err:=res.error) is not None:
-            bus.info(new_response(event, err.status, error=err.error))
-            yield (err.status, None)
-
-        yield (QRStatus.PENDING, res.dataset)
-
-    bus.info(new_response(event, QRStatus.SUCCESS))
-    yield (QRStatus.SUCCESS, None)
+    # NOTE: honeypot-correct — log the destination AE title (attacker infrastructure)
+    # then yield (None, None); pynetdicom auto-responds 0xA801 "Move Destination Unknown"
+    # so no data ever leaves the honeypot.
+    bus.info(new_response(event, QRStatus.FAILURE, data={"destination": str(event.move_destination).strip()}))
+    yield (None, None)
 
 
 def handle_store(
@@ -143,25 +129,54 @@ def handle_store(
         event: Event
     ) -> QRResult:
 
-    repo.store(event.identifier)
+    try:
+        ds = event.dataset
+    except Exception as exc:
+        bus.info(new_response(event, QRStatus.FAILURE, error=str(exc)))
+        yield (QRStatus.FAILURE, None)
+        return
+
+    if (err := repo.store(ds)) is not None:
+        bus.info(new_response(event, err.status, error=err.error))
+        yield (err.status, None)
+        return
+
+    bus.info(new_response(event, QRStatus.SUCCESS))
     yield (QRStatus.SUCCESS, None)
 
 
-def bind(repo: Repository, bus: Logger, handler: EventHandler) -> Callable:
-    def binder(evt: Event, *args):
-        # NOTE: if this binder grows with weird functionality before passing
-        # the event to the handler, we may want to have a pre-handler, 
-        # middlewares, and post-handler effects?
-        bus.info(new_request(evt))
-        if err := repo.eval_qr(evt):
-            logger.error(err.error)
-            yield (err.status, None)
+def bind(repo: Repository, bus: Logger, handler: EventHandler, event_type: EventType) -> Callable:
+    # NOTE: if this binder grows with weird functionality before passing
+    # the event to the handler, we may want to have a pre-handler,
+    # middlewares, and post-handler effects?
+    _eval_qr = event_type in _QR_EVENTS
 
-        return handler(repo, bus, evt, *args)
-    return binder
+    if _eval_qr:
+        # C-FIND, C-GET, C-MOVE: pynetdicom drives these as iterators
+        def binder(event: Event, *args):
+            bus.info(new_request(event))
+            if err := repo.eval_qr(event):
+                logger.error(err.error)
+                yield (err.status, None)
+                return
+            yield from handler(repo, bus, event, *args)
+        return binder
+    else:
+        # C-ECHO, C-STORE: pynetdicom expects a plain int status return value,
+        # not an iterator. Advance the handler generator once to get the status.
+        def binder(event: Event, *args):
+            bus.info(new_request(event))
+            gen = handler(repo, bus, event, *args)
+            try:
+                status, _ = next(gen)
+                return int(status)
+            except StopIteration:
+                return int(QRStatus.SUCCESS)
+        return binder
 
 
 _handlers: list[tuple[str, EventType, EventHandler]] = [
+    ("echo", evt.EVT_C_ECHO, handle_echo),
     ("get", evt.EVT_C_GET, handle_get),
     ("store", evt.EVT_C_STORE, handle_store),
     ("find", evt.EVT_C_FIND, handle_find),
@@ -176,7 +191,7 @@ class DIMSEFactory:
     def get(self, name: str) -> EventHandlerType | None:
         if handler := self.handlers.get(name):
             return handler
-    
+
     def register(self, name: str, handler: EventHandlerType) -> 'DIMSEFactory':
         self.handlers[name] = handler
         return self
@@ -184,7 +199,7 @@ class DIMSEFactory:
 def new_dimse_factory(repo: Repository, bus: Logger) -> DIMSEFactory:
     factory = DIMSEFactory()
     for n, t, h in _handlers:
-        handler = bind(repo, bus, h)
+        handler = bind(repo, bus, h, t)
         factory.register(n, (t, handler))
 
     return factory

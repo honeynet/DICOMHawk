@@ -1,10 +1,13 @@
+import logging
+
 from pydicom import dcmread
 from pydicom.uid import UID
 from pydicom.dataset import Dataset
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 
-from pynetdicom.events import Event 
+from pynetdicom.events import Event
 from pynetdicom.apps.qrscp import db
+from pynetdicom.presentation import QueryRetrievePresentationContexts
 
 from sqlalchemy import Engine
 from sqlalchemy.schema import MetaData
@@ -13,8 +16,6 @@ from sqlalchemy.orm import sessionmaker, Session
 from .status import QRStatus
 from .storage import Storage
 from .middlewares import Middleware
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +32,18 @@ class FindResult:
     error: QRError
 
 class Repository:
-    supported_sop: list[UID]
-    engine: Engine
-    session: Session
 
     def __init__(self, location: str | None, storage: Storage, middlewares: list[Middleware]=[]):
         self.location: str = location or ":memory:"
         self.storage: Storage = storage
         self.middlewares: list[Middleware] = middlewares
+        self.engine: Engine | None = None
+        self.session: Session | None = None
+        self.supported_sop: list[UID] = [
+            ctx.abstract_syntax
+            for ctx in QueryRetrievePresentationContexts
+            if ctx.abstract_syntax is not None
+        ]
 
     def _new_connection(self) -> Engine:
         engine = db.create(

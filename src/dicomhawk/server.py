@@ -103,7 +103,7 @@ class Server:
 
         return ae
     
-    def run(self):        
+    def run(self):
         # Start server on each port
         app = self.init()
 
@@ -112,13 +112,13 @@ class Server:
             if worker := app.start_server(
                 (self.config.HOST, port),
                 evt_handlers=self.handlers,
-                block=False 
+                block=False
             ):
                 threads.append(worker)
-            
+                print(f"Listening on {self.config.HOST}:{port}", flush=True)
+
         for th in threads:
             th.serve_forever()
-        self.logger.info(f"Listening in {self.config.PORTS}")
 
     def stop(self):
         for srv in self.listeners:

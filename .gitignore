@@ -57,3 +57,7 @@ venv.bak/
 traces/
 data/
 *.log
+
+# Contributor-local docs (not for upstream PRs)
+STYLE.md
+docs/changes.md
