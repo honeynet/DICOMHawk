@@ -102,6 +102,9 @@ class DicomStarter:
         """
         try:
             ae = AE()
+            ae.maximum_associations = 500
+            ae.implementation_version_name = "OFFIS_DCMTK_362"
+            ae.implementation_class_uid = "1.2.276.0.7230010.3.0.3.6.2"
             ae.supported_contexts = AllStoragePresentationContexts
             ae.requested_contexts = StoragePresentationContexts
             ae.add_supported_context(PatientRootQueryRetrieveInformationModelFind)
