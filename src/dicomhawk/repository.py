@@ -9,9 +9,10 @@ from pynetdicom.events import Event
 from pynetdicom.apps.qrscp import db
 from pynetdicom.presentation import QueryRetrievePresentationContexts
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import MetaData
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, scoped_session, Session
 
 from .status import QRStatus
 from .storage import Storage
@@ -20,16 +21,19 @@ from .middlewares import Middleware
 logger = logging.getLogger(__name__)
 
 class QRError:
-    error: str
-    status: QRStatus
+    def __init__(self):
+        self.error: str = ""
+        self.status: QRStatus = QRStatus.FAILURE
 
 class QRResult:
-    matches: list[Dataset]
-    error: QRError
+    def __init__(self):
+        self.matches: list[Dataset] = []
+        self.error: QRError | None = None
 
 class FindResult:
-    dataset: Dataset
-    error: QRError
+    def __init__(self):
+        self.dataset: Dataset | None = None
+        self.error: QRError | None = None
 
 class Repository:
 
@@ -46,10 +50,12 @@ class Repository:
         ]
 
     def _new_connection(self) -> Engine:
-        engine = db.create(
-            f"sqlite:///{self.location}"
-        )
-    
+        url = f"sqlite:///{self.location}"
+        kwargs: dict = {"connect_args": {"check_same_thread": False}}
+        if self.location == ":memory:":
+            kwargs["poolclass"] = StaticPool
+        engine = create_engine(url, **kwargs)
+        db.Base.metadata.create_all(engine)
         meta = MetaData()
         meta.reflect(bind=engine)
         return engine
@@ -57,8 +63,7 @@ class Repository:
     def _new_session(self):
         if not self.engine:
             self.engine = self._new_connection()
-        session = sessionmaker(bind=self.engine)()
-        return session
+        return scoped_session(sessionmaker(bind=self.engine))
 
     def _connect(self):
         if not self.session:

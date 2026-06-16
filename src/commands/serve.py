@@ -4,7 +4,7 @@ from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.middlewares import Middleware, new_honeytoken_injector
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
-from dicomhawk.bus import new_bus
+from dicomhawk.bus import new_bus, new_dev_log
 from dicomhawk.storage import new_store
 
 serve_app = typer.Typer(help="dicomhawk runner")
@@ -74,7 +74,12 @@ def serve(
             None,
             "--canary-pdf",
             help="Path to an Encapsulated PDF Canary to inject into datasets"
-        )
+        ),
+        dev_log_path: str | None = typer.Option(
+            None,
+            "--dev-log",
+            help="Path to the developer/internal log file (Python warnings and errors)"
+        ),
     ):
 
     p_int = [int(p) for p in ports.split(",")]
@@ -93,6 +98,8 @@ def serve(
     
     repo = new_repo(database, store, mws)
     bus = new_bus(log_path)
+    if dev_log_path:
+        new_dev_log(dev_log_path)
 
     dimse_fact = new_dimse_factory(repo, bus)
 
