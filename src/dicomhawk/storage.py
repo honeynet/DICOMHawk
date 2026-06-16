@@ -57,6 +57,14 @@ class Storage:
         
         return full
 
+    def is_quarantined(self, path: str) -> bool:
+        """Return True if path is inside the quarantine directory."""
+        try:
+            Path(path).resolve().relative_to(self.quarantine_dir.resolve())
+            return True
+        except ValueError:
+            return False
+
     def path_for(self, safe: bool, filename: str) -> Path:
         """
         Get a jailed path for the given filename.
