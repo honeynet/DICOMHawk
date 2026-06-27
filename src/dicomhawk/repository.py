@@ -116,6 +116,9 @@ class Repository:
             conn.rollback()
             return QRResult(error=QRError(f"Exception occurred while querying database: {exc}"))
 
+        # Quarantine jail: uploaded files must never be visible to DICOM clients.
+        matches = [m for m in matches if not self.storage.is_quarantined(m.filename)]
+
         if inject:
             matches = [self._apply_middlewares(m) for m in matches]
 
@@ -165,6 +168,9 @@ class Repository:
             logger.exception(exc)
 
     def find_instance(self, match: Dataset, decompress: bool = False, inject: bool = True) -> FindResult:
+        if self.storage.is_quarantined(match.filename):
+            return FindResult(error=QRError(f"Refusing to serve quarantined instance: {match.filename}", QRStatus.STORE_ERROR))
+
         try:
             instance = dcmread(match.filename)
         except Exception as exc:
