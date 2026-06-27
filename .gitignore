@@ -1,6 +1,3 @@
-# IDE
-.vscode
-
 # Byte-compiled / optimized / DLL files
 __pycache__
 __pycache__/
@@ -52,3 +49,9 @@ venv.bak/
 
 # snyk things
 .github/instructions/
+
+# DICOMHawk runtime artifacts
+traces/
+data/
+*.log
+

@@ -1,50 +1,65 @@
+import logging
+
 from pydicom import dcmread
 from pydicom.uid import UID
 from pydicom.dataset import Dataset
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 
-from pynetdicom.events import Event 
+from pynetdicom.events import Event
 from pynetdicom.apps.qrscp import db
+from pynetdicom.presentation import QueryRetrievePresentationContexts
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import MetaData
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, scoped_session, Session
 
 from .status import QRStatus
 from .storage import Storage
 from .middlewares import Middleware
 
-import logging
-
 logger = logging.getLogger(__name__)
 
 class QRError:
-    error: str
-    status: QRStatus
+    def __init__(self, error: str, status: QRStatus = QRStatus.FAILURE):
+        self.error: str = error
+        self.status: QRStatus = status
 
 class QRResult:
-    matches: list[Dataset]
-    error: QRError
+    def __init__(self, matches: list[Dataset] | None = None, error: "QRError | None" = None):
+        self.matches: list[Dataset] = [] if matches is None else matches
+        self.error: QRError | None = error
 
 class FindResult:
-    dataset: Dataset
-    error: QRError
+    def __init__(self, dataset: Dataset | None = None, error: "QRError | None" = None):
+        self.dataset: Dataset | None = dataset
+        self.error: QRError | None = error
 
 class Repository:
-    supported_sop: list[UID]
-    engine: Engine
-    session: Session
 
     def __init__(self, location: str | None, storage: Storage, middlewares: list[Middleware]=[]):
         self.location: str = location or ":memory:"
         self.storage: Storage = storage
         self.middlewares: list[Middleware] = middlewares
+        self.engine: Engine | None = None
+        self.session: Session | None = None
+        self.supported_sop: list[UID] = [
+            ctx.abstract_syntax
+            for ctx in QueryRetrievePresentationContexts
+            if ctx.abstract_syntax is not None
+        ]
 
     def _new_connection(self) -> Engine:
-        engine = db.create(
-            f"sqlite:///{self.location}"
-        )
-    
+        url = f"sqlite:///{self.location}"
+        # check_same_thread=False disables SQLite's own thread guard — safe
+        # because SQLAlchemy manages thread safety via scoped_session.
+        # StaticPool is required for :memory: so all threads share one DB;
+        # file-based paths should be used in production to avoid this entirely.
+        kwargs: dict = {"connect_args": {"check_same_thread": False}}
+        if self.location == ":memory:":
+            kwargs["poolclass"] = StaticPool
+        engine = create_engine(url, **kwargs)
+        db.Base.metadata.create_all(engine)
         meta = MetaData()
         meta.reflect(bind=engine)
         return engine
@@ -52,8 +67,7 @@ class Repository:
     def _new_session(self):
         if not self.engine:
             self.engine = self._new_connection()
-        session = sessionmaker(bind=self.engine)()
-        return session
+        return scoped_session(sessionmaker(bind=self.engine))
 
     def _connect(self):
         if not self.session:
@@ -83,46 +97,29 @@ class Repository:
         return sop in self.supported_sop
 
     def eval_qr(self, event: Event) -> QRError | None:
-        err = QRError()
         if not self.supports(sop:=event.request.AffectedSOPClassUID):
-            err.error = f"SOP Class not supported: {sop}"
-            err.status = QRStatus.SOP_CLASS_NOT_SUPPORTED
-            return err
+            return QRError(f"SOP Class not supported: {sop}", QRStatus.SOP_CLASS_NOT_SUPPORTED)
 
         ds = event.identifier
         if not ds.get("QueryRetrieveLevel"):
-            err.error = f"request identifier not supported: {ds}"
-            err.status = QRStatus.SOP_CLASS_INVALID 
-            return err
-        return
+            return QRError(f"request identifier not supported: {ds}", QRStatus.SOP_CLASS_INVALID)
+        return None
     
     def find(self, ds: Dataset, model, inject: bool = False) -> QRResult:
         conn = self.conn
-        result = QRResult()
         try:
-            matches = db.search(model, ds, conn) 
+            matches = db.search(model, ds, conn)
         except db.InvalidIdentifier as exc:
             conn.rollback()
-
-            err = QRError()
-            err.error = f"Invalid C-FIND Identifier received: {exc}"
-            err.status = QRStatus.SOP_CLASS_INVALID
-            result.error = err
-            return result
+            return QRResult(error=QRError(f"Invalid C-FIND Identifier received: {exc}", QRStatus.SOP_CLASS_INVALID))
         except Exception as exc:
             conn.rollback()
-
-            err = QRError()
-            err.error = f"Exception occurred while querying database: {exc}"
-            err.status = QRStatus.FAILURE
-            result.error = err
-            return result
+            return QRResult(error=QRError(f"Exception occurred while querying database: {exc}"))
 
         if inject:
             matches = [self._apply_middlewares(m) for m in matches]
 
-        result.matches = matches
-        return result
+        return QRResult(matches=matches)
 
     def store(self, ds: Dataset, safe: bool = False) -> QRError | None:
         # NOTE: anything not safe is zipped and quarantined
@@ -138,10 +135,7 @@ class Repository:
             fpath = self.storage.path_for(safe, fname)
         except ValueError as exc:
             logger.warning(f"Path traversal attempt blocked: {fname} — {exc}")
-            err = QRError()
-            err.error = f"Dangerous SOPInstanceUID rejected: {fname}"
-            err.status = QRStatus.STORE_ERROR
-            return err
+            return QRError(f"Dangerous SOPInstanceUID rejected: {fname}", QRStatus.STORE_ERROR)
 
         if fpath.exists():
             logger.warning(f"Instance already exists in storage directory: {fname}; overwriting")
@@ -149,10 +143,7 @@ class Repository:
         try:
             ds.save_as(fpath, overwrite=True)
         except Exception as exc:
-            err = QRError()
-            err.error = f"Failed writing instance to storage directory: {exc}"
-            err.status = QRStatus.STORE_ERROR
-            return err
+            return QRError(f"Failed writing instance to storage directory: {exc}", QRStatus.STORE_ERROR)
         
         try:
             # Path is relative to the database file
@@ -174,17 +165,11 @@ class Repository:
             logger.exception(exc)
 
     def find_instance(self, match: Dataset, decompress: bool = False, inject: bool = True) -> FindResult:
-        result = FindResult()
-
         try:
             instance = dcmread(match.filename)
         except Exception as exc:
-            err = QRError()
-            err.error = f"Error reading file: {match.filename}\n{exc}"
-            err.status = QRStatus.READ_ERROR
-            result.error = err
-            return result
-        
+            return FindResult(error=QRError(f"Error reading file: {match.filename}\n{exc}", QRStatus.READ_ERROR))
+
         # NOTE: not sure this is needed tbh, why not sending files compressed?
         if decompress and instance.file_meta.TransferSyntaxUID.is_compressed:
             instance.decompress()
@@ -193,8 +178,7 @@ class Repository:
         if inject:
             instance = self._apply_middlewares(instance)
 
-        result.dataset = instance
-        return result
+        return FindResult(dataset=instance)
     
 
 def new_repo(db: str | None, store: Storage, mws: list[Middleware]) -> Repository:
