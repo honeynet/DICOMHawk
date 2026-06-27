@@ -115,7 +115,7 @@ class Server:
                 block=False
             ):
                 threads.append(worker)
-                print(f"Listening on {self.config.HOST}:{port}", flush=True)
+                logger.info(f"Listening on {self.config.HOST}:{port}")
 
         for th in threads:
             th.serve_forever()

@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import weakref
 import ujson
 
 from datetime import datetime, timezone
@@ -23,45 +24,54 @@ _BULK_DATA_KEYWORDS: frozenset[str] = frozenset({
     "EncapsulatedDocument",
 })
 
-# Maps id(assoc) → session_id (epoch-ms string). Cleared on release/abort.
-_sessions: dict[int, str] = {}
-# Maps id(assoc) → requestor's implementation_version_name from A-ASSOCIATE-RQ.
-# Cached in handle_associate because assoc.requestor.primitive is overwritten
-# by pynetdicom during negotiation and loses the original DCMTK/peer version.
-_versions: dict[int, str] = {}
+
+class SessionCache:
+    """Tracks session IDs and requestor version names per live association.
+
+    Uses weakref.finalize so entries are purged automatically when the
+    association object is GC'd — important because attackers often drop TCP
+    connections without sending EVT_RELEASED or EVT_ABORTED, which means
+    clear() may never be called and entries would otherwise leak indefinitely.
+    """
+
+    def __init__(self) -> None:
+        self._sessions: dict[int, str] = {}
+        self._versions: dict[int, str] = {}
+
+    def get_session_id(self, assoc) -> str:
+        key = id(assoc)
+        if key not in self._sessions:
+            self._sessions[key] = str(int(datetime.now(timezone.utc).timestamp() * 1000))
+            weakref.finalize(assoc, self._cleanup, key)
+        return self._sessions[key]
+
+    def _cleanup(self, key: int) -> None:
+        self._sessions.pop(key, None)
+        self._versions.pop(key, None)
+
+    def cache_version(self, assoc, version: str) -> None:
+        """Cache the requestor's implementation version name from the A-ASSOCIATE-RQ."""
+        self._versions[id(assoc)] = version
+
+    def clear(self, assoc) -> None:
+        """Remove session entry for a closed association. Called by release/abort handlers."""
+        key = id(assoc)
+        self._sessions.pop(key, None)
+        self._versions.pop(key, None)
+
+    def get_version(self, assoc) -> str | None:
+        return self._versions.get(id(assoc))
 
 
-def _get_session_id(assoc) -> str:
-    key = id(assoc)
-    if key not in _sessions:
-        _sessions[key] = str(int(datetime.now(timezone.utc).timestamp() * 1000))
-    return _sessions[key]
-
-
-def cache_version(assoc, version: str) -> None:
-    """Cache the requestor's implementation version name from the A-ASSOCIATE-RQ."""
-    _versions[id(assoc)] = version
-
-
-def clear_session(assoc) -> None:
-    """Remove session entry for a closed association. Called by release/abort handlers."""
-    key = id(assoc)
-    _sessions.pop(key, None)
-    _versions.pop(key, None)
-
-
-def _version(assoc) -> str:
-    return _versions.get(id(assoc), "N/A")
-
-
-def _query_level(ds: Dataset) -> str:
+def _query_level(ds: Dataset) -> str | None:
     try:
-        return str(ds.QueryRetrieveLevel).strip() or "N/A"
+        val = str(ds.QueryRetrieveLevel).strip()
+        return val or None
     except AttributeError:
-        return "N/A"
+        return None
 
 
-def _extract_params(ds: Dataset) -> list[str] | str:
+def _extract_params(ds: Dataset) -> list[str] | None:
     """Return 'Key: Value' strings for non-empty, non-bulk dataset fields."""
     params = []
     for elem in ds:
@@ -74,8 +84,8 @@ def _extract_params(ds: Dataset) -> list[str] | str:
             if val:
                 params.append(f"{elem.keyword}: {val}")
         except Exception:
-            pass
-    return params if params else "N/A"
+            logger.debug("Failed to stringify element %s", elem.keyword, exc_info=True)
+    return params if params else None
 
 
 def hash_request(evt: Event) -> str:
@@ -94,21 +104,22 @@ class InteractionEvent:
     def __init__(
         self,
         evt: Event,
+        cache: SessionCache,
         request_type: str,
         *,
-        query_level: str = "N/A",
-        session_parameters: list[str] | str = "N/A",
-        matches: int | str = "N/A",
+        query_level: str | None = None,
+        session_parameters: list[str] | None = None,
+        matches: int | None = None,
         log_level: str = "INFO",
     ) -> None:
         assoc = evt.assoc
-        self.session_id = _get_session_id(assoc)
+        self.session_id = cache.get_session_id(assoc)
         self.request_type = request_type
         self.query_level = query_level
         self.session_parameters = session_parameters
         self.matches = matches
         self.log_level = log_level
-        self.version = _version(assoc)
+        self.version = cache.get_version(assoc)
         self.ip = assoc.requestor.address
         self.port = assoc.requestor.port
         self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -126,24 +137,6 @@ class InteractionEvent:
             "matches": self.matches,
             "timestamp": self.timestamp,
         })
-
-
-def new_interaction(
-    evt: Event,
-    request_type: str,
-    *,
-    query_level: str = "N/A",
-    session_parameters: list[str] | str = "N/A",
-    matches: int | str = "N/A",
-    log_level: str = "INFO",
-) -> InteractionEvent:
-    return InteractionEvent(
-        evt, request_type,
-        query_level=query_level,
-        session_parameters=session_parameters,
-        matches=matches,
-        log_level=log_level,
-    )
 
 
 def _add_file_handler(
@@ -183,7 +176,6 @@ def new_dev_log(
     interval: int = 1,
     size: Optional[int] = None,
 ) -> None:
-    """Route internal Python logger output (warnings, errors, exceptions) to a file."""
     root = logging.getLogger()
     root.setLevel(logging.WARNING)
     _add_file_handler(root, stdout, when, interval, size)

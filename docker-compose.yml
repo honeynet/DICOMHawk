@@ -7,13 +7,13 @@ services:
     env_file:
       - .env
     ports:
-      - "${DICOMHAWK_PORT_PRIMARY:-11112}:11112"
-      - "${DICOMHAWK_PORT_SECONDARY:-1104}:104"
+      - "11112:11112"
+      - "1104:104"
     command:
       - dicomhawk
       - serve
       - -p
-      - "104,11112"
+      - "${DICOMHAWK_PORTS:-104,11112}"
       - -ae
       - "${DICOMHAWK_AE_TITLE:-ORTHANC}"
       - -t

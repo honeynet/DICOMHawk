@@ -9,15 +9,16 @@ from pynetdicom.events import Event, EventHandlerType, EventType
 
 from .status import QRStatus
 from .repository import Repository
-from .bus import new_interaction, clear_session, cache_version, hash_request, _query_level, _extract_params
+from .bus import InteractionEvent, SessionCache, hash_request, _query_level, _extract_params
 
 logger = logging.getLogger(__name__)
 
 type EventHandler = Callable[
     [
-        Repository,
-        Logger,
-        Event,
+        Repository,   # instance of the repo, to store and retrieve
+        Logger,       # a bus to push logs
+        SessionCache, # session/version cache for this server instance
+        Event,        # the event
     ],
     Any,
 ]
@@ -35,22 +36,10 @@ _ACSE_EVENTS: frozenset[EventType] = frozenset({
     evt.EVT_ABORTED,
 })
 
-# Used by the Q/R binder to log eval_qr failures before the handler runs.
-_EVENT_TO_REQUEST: dict[EventType, str] = {
-    evt.EVT_C_FIND:    "C_FIND",
-    evt.EVT_C_GET:     "C_GET",
-    evt.EVT_C_MOVE:    "C_MOVE",
-    evt.EVT_C_ECHO:    "C_ECHO",
-    evt.EVT_C_STORE:   "C_STORE",
-    evt.EVT_ACSE_RECV: "Association Requested",
-    evt.EVT_RELEASED:  "Association Released",
-    evt.EVT_ABORTED:   "Association Aborted",
-}
-
 
 # --- ACSE handlers (plain functions, no yield) ---
 
-def handle_associate(repo: Repository, bus: Logger, event: Event) -> None:
+def handle_associate(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> None:
     # EVT_ACSE_RECV fires for every received ACSE PDU (A-RELEASE-RQ, A-ABORT, etc.).
     # Only log "Association Requested" for the initial A-ASSOCIATE-RQ.
     if not isinstance(event.primitive, A_ASSOCIATE):
@@ -62,29 +51,34 @@ def handle_associate(repo: Repository, bus: Logger, event: Event) -> None:
         if isinstance(item, ImplementationVersionNameNotification):
             v = item.implementation_version_name
             if v:
-                cache_version(event.assoc, v.strip())
+                cache.cache_version(event.assoc, v.strip())
             break
-    bus.info(new_interaction(event, "Association Requested"))
+    bus.info(InteractionEvent(event, cache, "Association Requested"))
 
 
-def handle_release(repo: Repository, bus: Logger, event: Event) -> None:
-    bus.info(new_interaction(event, "Association Released"))
-    clear_session(event.assoc)
+def handle_release(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> None:
+    bus.info(InteractionEvent(event, cache, "Association Released"))
+    cache.clear(event.assoc)
 
 
-def handle_abort(repo: Repository, bus: Logger, event: Event) -> None:
-    bus.info(new_interaction(event, "Association Aborted"))
-    clear_session(event.assoc)
+def handle_abort(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> None:
+    bus.warning(InteractionEvent(event, cache, "Association Aborted", log_level="WARNING"))
+    cache.clear(event.assoc)
 
 
 # --- DIMSE handlers (generators) ---
 
-def handle_echo(repo: Repository, bus: Logger, event: Event) -> QRResult:
-    bus.info(new_interaction(event, "C_ECHO"))
+def handle_echo(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
+    bus.info(InteractionEvent(event, cache, "C-ECHO"))
     yield (QRStatus.SUCCESS, None)
 
 
-def handle_find(repo: Repository, bus: Logger, event: Event) -> QRResult:
+def handle_find(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
+    if err := repo.eval_qr(event):
+        bus.error(InteractionEvent(event, cache, "C-FIND", matches=0, log_level="ERROR"))
+        yield (err.status, None)
+        return
+
     idt = event.identifier
     model = event.request.AffectedSOPClassUID
     ql = _query_level(idt)
@@ -92,11 +86,11 @@ def handle_find(repo: Repository, bus: Logger, event: Event) -> QRResult:
 
     result = repo.find(idt, model, inject=True)
     if (err := result.error) is not None:
-        bus.info(new_interaction(event, "C_FIND", query_level=ql, session_parameters=params, matches=0, log_level="WARNING"))
+        bus.error(InteractionEvent(event, cache, "C-FIND", query_level=ql, session_parameters=params, matches=0, log_level="ERROR"))
         yield (err.status, None)
         return
 
-    bus.info(new_interaction(event, "C_FIND", query_level=ql, session_parameters=params, matches=len(result.matches)))
+    bus.info(InteractionEvent(event, cache, "C-FIND", query_level=ql, session_parameters=params, matches=len(result.matches)))
     for m in result.matches:
         if event.is_cancelled:
             yield (QRStatus.CANCEL, None)
@@ -108,11 +102,16 @@ def handle_find(repo: Repository, bus: Logger, event: Event) -> QRResult:
     yield (QRStatus.SUCCESS, None)
 
 
-def handle_get(repo: Repository, bus: Logger, event: Event) -> QRResult:
+def handle_get(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
+    if err := repo.eval_qr(event):
+        bus.error(InteractionEvent(event, cache, "C-GET", matches=0, log_level="ERROR"))
+        yield (err.status, None)
+        return
+
     try:
         idt = event.identifier
     except AttributeError as e:
-        bus.info(new_interaction(event, "C_GET", session_parameters=[f"Error: {e}"], log_level="WARNING"))
+        bus.error(InteractionEvent(event, cache, "C-GET", session_parameters=[f"Error: {e}"], log_level="ERROR"))
         yield (QRStatus.FAILURE, None)
         return
 
@@ -122,12 +121,12 @@ def handle_get(repo: Repository, bus: Logger, event: Event) -> QRResult:
 
     result = repo.find(idt, model)
     if (err := result.error) is not None:
-        bus.info(new_interaction(event, "C_GET", query_level=ql, session_parameters=params, matches=0, log_level="WARNING"))
+        bus.error(InteractionEvent(event, cache, "C-GET", query_level=ql, session_parameters=params, matches=0, log_level="ERROR"))
         yield (err.status, None)
         return
 
     matches = len(result.matches)
-    bus.info(new_interaction(event, "C_GET", query_level=ql, session_parameters=params, matches=matches))
+    bus.info(InteractionEvent(event, cache, "C-GET", query_level=ql, session_parameters=params, matches=matches))
     yield matches  # type: ignore
 
     for m in result.matches:
@@ -136,85 +135,96 @@ def handle_get(repo: Repository, bus: Logger, event: Event) -> QRResult:
             return
         res = repo.find_instance(m, decompress=True)
         if (err := res.error) is not None:
+            bus.error(InteractionEvent(event, cache, "C-GET", session_parameters=[err.error], log_level="ERROR"))
             yield (err.status, None)
         yield (QRStatus.PENDING, res.dataset)
 
     yield (QRStatus.SUCCESS, None)
 
 
-def handle_move(repo: Repository, bus: Logger, event: Event) -> QRResult:
+def handle_move(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
+    if err := repo.eval_qr(event):
+        bus.error(InteractionEvent(event, cache, "C-MOVE", matches=0, log_level="ERROR"))
+        yield (err.status, None)
+        return
+
     destination = str(event.move_destination).strip()
-    try:
-        ql = _query_level(event.identifier)
-    except AttributeError:
-        ql = "N/A"
-    bus.info(new_interaction(event, "C_MOVE", query_level=ql, session_parameters=[f"Destination: {destination}"]))
+    ql = _query_level(event.identifier)
+
+    # TODO: need destinations
+    # try:
+    #     addr, port = destinations[event.move_destination]
+    # except KeyError:
+    #     logger.info("No matching move destination in the configuration")
+    #     yield None, None
+    #     return
+    # contexts = list(set([ii.context for ii in matches]))
+    # yield addr, port, {"contexts": contexts[:128]}
+
+    bus.warning(InteractionEvent(event, cache, "C-MOVE", query_level=ql, session_parameters=[f"Destination: {destination}"], log_level="WARNING"))
     yield (None, None)
 
 
-def handle_store(repo: Repository, bus: Logger, event: Event) -> QRResult:
+def handle_store(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
     try:
         file_hash = hash_request(event)
+    except Exception as exc:
+        bus.error(InteractionEvent(event, cache, "C-STORE", session_parameters=[f"Hash error: {exc}"], log_level="ERROR"))
+        yield (QRStatus.FAILURE, None)
+        return
+
+    try:
         ds = event.dataset
     except Exception as exc:
-        bus.info(new_interaction(event, "C_STORE", session_parameters=[f"Error: {exc}"], log_level="WARNING"))
+        bus.error(InteractionEvent(event, cache, "C-STORE", session_parameters=[f"Dataset error: {exc}"], log_level="ERROR"))
         yield (QRStatus.FAILURE, None)
         return
 
     if (err := repo.store(ds)) is not None:
-        bus.info(new_interaction(event, "C_STORE", session_parameters=[
+        bus.error(InteractionEvent(event, cache, "C-STORE", session_parameters=[
             f"SHA256: {file_hash}",
             f"Error: {err.error}",
-        ], log_level="WARNING"))
+        ], log_level="ERROR"))
         yield (err.status, None)
         return
 
-    bus.info(new_interaction(event, "C_STORE", session_parameters=[
+    bus.info(InteractionEvent(event, cache, "C-STORE", session_parameters=[
         f"SHA256: {file_hash}",
         f"SOPInstanceUID: {ds.SOPInstanceUID}",
     ]))
     yield (QRStatus.SUCCESS, None)
 
 
-def bind(repo: Repository, bus: Logger, handler: EventHandler, event_type: EventType) -> Callable:
-    _is_acse = event_type in _ACSE_EVENTS
-    _eval_qr = event_type in _QR_EVENTS
+def bind_acse(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
+    # NOTE: if this binder grows with weird functionality before passing
+    # the event to the handler, we may want to have a pre-handler,
+    # middlewares, and post-handler effects?
+    def binder(event: Event, *args):
+        handler(repo, bus, cache, event, *args)
+    return binder
 
-    if _is_acse:
-        # ACSE events: plain function, no status return, no yield.
-        def binder(event: Event, *args):
-            handler(repo, bus, event, *args)
-        return binder
 
-    elif _eval_qr:
-        # C-FIND, C-GET, C-MOVE: pynetdicom drives these as iterators.
-        # eval_qr failures are logged here before the handler gets a chance to run.
-        _request_type = _EVENT_TO_REQUEST.get(event_type, "UNKNOWN")
-        def binder(event: Event, *args):
-            if err := repo.eval_qr(event):
-                logger.error(err.error)
-                try:
-                    idt = event.identifier
-                    ql = _query_level(idt)
-                    params = _extract_params(idt)
-                except Exception:
-                    ql, params = "N/A", "N/A"
-                bus.info(new_interaction(event, _request_type, query_level=ql, session_parameters=params, matches=0, log_level="WARNING"))
-                yield (err.status, None)
-                return
-            yield from handler(repo, bus, event, *args)
-        return binder
+def bind_dimse_qr(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
+    # NOTE: if this binder grows with weird functionality before passing
+    # the event to the handler, we may want to have a pre-handler,
+    # middlewares, and post-handler effects?
+    def binder(event: Event, *args):
+        yield from handler(repo, bus, cache, event, *args)
+    return binder
 
-    else:
-        # C-ECHO, C-STORE: pynetdicom expects a plain int status return, not an iterator.
-        def binder(event: Event, *args):
-            gen = handler(repo, bus, event, *args)
-            try:
-                status, _ = next(gen)
-                return int(status)
-            except StopIteration:
-                return int(QRStatus.SUCCESS)
-        return binder
+
+def bind_dimse_simple(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
+    # NOTE: if this binder grows with weird functionality before passing
+    # the event to the handler, we may want to have a pre-handler,
+    # middlewares, and post-handler effects?
+    def binder(event: Event, *args):
+        gen = handler(repo, bus, cache, event, *args)
+        try:
+            status, _ = next(gen)
+            return int(status)
+        except StopIteration:
+            return int(QRStatus.SUCCESS)
+    return binder
 
 
 _handlers: list[tuple[str, EventType, EventHandler]] = [
@@ -233,6 +243,7 @@ class DIMSEFactory:
 
     def __init__(self) -> None:
         self.handlers: dict[str, EventHandlerType] = {}
+        self.cache: SessionCache = SessionCache()
 
     def get(self, name: str) -> EventHandlerType | None:
         if handler := self.handlers.get(name):
@@ -245,7 +256,13 @@ class DIMSEFactory:
 
 def new_dimse_factory(repo: Repository, bus: Logger) -> DIMSEFactory:
     factory = DIMSEFactory()
+    cache = factory.cache
     for n, t, h in _handlers:
-        handler = bind(repo, bus, h, t)
-        factory.register(n, (t, handler))
+        if t in _ACSE_EVENTS:
+            binder = bind_acse(h, repo, bus, cache)
+        elif t in _QR_EVENTS:
+            binder = bind_dimse_qr(h, repo, bus, cache)
+        else:
+            binder = bind_dimse_simple(h, repo, bus, cache)
+        factory.register(n, (t, binder))
     return factory

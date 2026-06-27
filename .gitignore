@@ -1,6 +1,3 @@
-# IDE
-.vscode
-
 # Byte-compiled / optimized / DLL files
 __pycache__
 __pycache__/
@@ -58,6 +55,3 @@ traces/
 data/
 *.log
 
-# Contributor-local docs (not for upstream PRs)
-STYLE.md
-docs/changes.md
