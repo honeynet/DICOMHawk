@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from pydicom import dcmread
 from pydicom.uid import UID
@@ -58,6 +59,8 @@ class Repository:
         kwargs: dict = {"connect_args": {"check_same_thread": False}}
         if self.location == ":memory:":
             kwargs["poolclass"] = StaticPool
+        else:
+            Path(self.location).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(url, **kwargs)
         db.Base.metadata.create_all(engine)
         meta = MetaData()
