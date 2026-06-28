@@ -4,6 +4,7 @@ services:
     image: dicomhawk:latest
     container_name: dicomhawk
     restart: unless-stopped
+    tty: true   # pseudo-TTY so the server's stdout is a terminal → colored `docker logs`
     env_file:
       - .env
     ports:
@@ -16,10 +17,13 @@ services:
       - "${DICOMHAWK_PORTS:-104,11112}"
       - -ae
       - "${DICOMHAWK_AE_TITLE:-ORTHANC}"
+      - -db
+      - "${DICOMHAWK_DB:-/opt/dicomhawk/storage/dicomhawk.db}"
       - -t
       - /opt/dicomhawk/storage
       - -l
       - /var/log/dicomhawk/dicomhawk.log
+      - -v
     volumes:
       - dicom_storage:/opt/dicomhawk/storage
       - logs:/var/log/dicomhawk

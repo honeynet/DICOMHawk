@@ -1,8 +1,10 @@
+import copy
 import logging
 from logging import Logger
-from typing import Callable, Any, Generator, Optional
+from typing import Callable, Any, Generator
 
 from pynetdicom import evt
+from pynetdicom.apps.qrscp import db as _qrdb
 from pynetdicom.pdu_primitives import A_ASSOCIATE, ImplementationVersionNameNotification
 from pydicom.dataset import Dataset
 from pynetdicom.events import Event, EventHandlerType, EventType
@@ -22,7 +24,13 @@ type EventHandler = Callable[
     ],
     Any,
 ]
-type QRResult = Generator[tuple[int, Optional[Dataset]], None, None]
+type QRResult = Generator[tuple[int, Dataset | None], None, None]
+
+# NOTE: private pynetdicom internals — AttributeError guard degrades to no-op rather than crash.
+try:
+    _QR_MODEL_ATTRS: dict = {**_qrdb._PATIENT_ROOT, **_qrdb._STUDY_ROOT}
+except AttributeError:
+    _QR_MODEL_ATTRS: dict = {}
 
 _QR_EVENTS: frozenset[EventType] = frozenset({
     evt.EVT_C_FIND,
@@ -35,6 +43,27 @@ _ACSE_EVENTS: frozenset[EventType] = frozenset({
     evt.EVT_RELEASED,
     evt.EVT_ABORTED,
 })
+
+
+def _strip_sublevel_tags(ds: Dataset, model) -> tuple[Dataset, list[str]]:
+    """Remove tags belonging to levels below QueryRetrieveLevel; return (filtered_ds, stripped)."""
+    attr = _QR_MODEL_ATTRS.get(model)
+    if attr is None:
+        return ds, []
+    ql = getattr(ds, "QueryRetrieveLevel", None)
+    if ql not in attr:
+        return ds, []
+    levels = list(attr.keys())
+    sublevel_tags: frozenset[str] = frozenset(
+        kw for lvl in levels[levels.index(ql) + 1:] for kw in attr[lvl]
+    )
+    stripped = [kw for kw in sublevel_tags if kw in ds]
+    if not stripped:
+        return ds, []
+    filtered = copy.deepcopy(ds)
+    for kw in stripped:
+        delattr(filtered, kw)
+    return filtered, stripped
 
 
 # --- ACSE handlers (plain functions, no yield) ---
@@ -79,10 +108,12 @@ def handle_find(repo: Repository, bus: Logger, cache: SessionCache, event: Event
         yield (err.status, None)
         return
 
-    idt = event.identifier
     model = event.request.AffectedSOPClassUID
+    idt, stripped = _strip_sublevel_tags(event.identifier, model)
     ql = _query_level(idt)
     params = _extract_params(idt)
+    if stripped:
+        params = (params or []) + [f"Stripped: {', '.join(stripped)}"]
 
     result = repo.find(idt, model, inject=True)
     if (err := result.error) is not None:
@@ -108,16 +139,12 @@ def handle_get(repo: Repository, bus: Logger, cache: SessionCache, event: Event)
         yield (err.status, None)
         return
 
-    try:
-        idt = event.identifier
-    except AttributeError as e:
-        bus.error(InteractionEvent(event, cache, "C-GET", session_parameters=[f"Error: {e}"], log_level="ERROR"))
-        yield (QRStatus.FAILURE, None)
-        return
-
     model = event.request.AffectedSOPClassUID
+    idt, stripped = _strip_sublevel_tags(event.identifier, model)
     ql = _query_level(idt)
     params = _extract_params(idt)
+    if stripped:
+        params = (params or []) + [f"Stripped: {', '.join(stripped)}"]
 
     result = repo.find(idt, model)
     if (err := result.error) is not None:
@@ -137,9 +164,10 @@ def handle_get(repo: Repository, bus: Logger, cache: SessionCache, event: Event)
         if (err := res.error) is not None:
             bus.error(InteractionEvent(event, cache, "C-GET", session_parameters=[err.error], log_level="ERROR"))
             yield (err.status, None)
+            continue
         yield (QRStatus.PENDING, res.dataset)
-
-    yield (QRStatus.SUCCESS, None)
+        # No trailing (SUCCESS, None): C-GET is count-based — it completes when the yielded
+        # sub-operations match the count, and an extra yield only logs a warning.
 
 
 def handle_move(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
@@ -149,19 +177,14 @@ def handle_move(repo: Repository, bus: Logger, cache: SessionCache, event: Event
         return
 
     destination = str(event.move_destination).strip()
-    ql = _query_level(event.identifier)
+    model = event.request.AffectedSOPClassUID
+    idt, stripped = _strip_sublevel_tags(event.identifier, model)
+    ql = _query_level(idt)
+    params: list[str] = [f"Destination: {destination}"]
+    if stripped:
+        params.append(f"Stripped: {', '.join(stripped)}")
 
-    # TODO: need destinations
-    # try:
-    #     addr, port = destinations[event.move_destination]
-    # except KeyError:
-    #     logger.info("No matching move destination in the configuration")
-    #     yield None, None
-    #     return
-    # contexts = list(set([ii.context for ii in matches]))
-    # yield addr, port, {"contexts": contexts[:128]}
-
-    bus.warning(InteractionEvent(event, cache, "C-MOVE", query_level=ql, session_parameters=[f"Destination: {destination}"], log_level="WARNING"))
+    bus.warning(InteractionEvent(event, cache, "C-MOVE", query_level=ql, session_parameters=params, log_level="WARNING"))
     yield (None, None)
 
 
@@ -195,28 +218,23 @@ def handle_store(repo: Repository, bus: Logger, cache: SessionCache, event: Even
     yield (QRStatus.SUCCESS, None)
 
 
+# The binders below adapt our (repo, bus, cache, event) handlers to pynetdicom's
+# (event, *args) callback signature, splitting on how pynetdicom consumes the result:
+# ACSE callbacks return nothing, QR callbacks are generators, simple DIMSE return a status int.
+
 def bind_acse(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
-    # NOTE: if this binder grows with weird functionality before passing
-    # the event to the handler, we may want to have a pre-handler,
-    # middlewares, and post-handler effects?
     def binder(event: Event, *args):
         handler(repo, bus, cache, event, *args)
     return binder
 
 
 def bind_dimse_qr(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
-    # NOTE: if this binder grows with weird functionality before passing
-    # the event to the handler, we may want to have a pre-handler,
-    # middlewares, and post-handler effects?
     def binder(event: Event, *args):
         yield from handler(repo, bus, cache, event, *args)
     return binder
 
 
 def bind_dimse_simple(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
-    # NOTE: if this binder grows with weird functionality before passing
-    # the event to the handler, we may want to have a pre-handler,
-    # middlewares, and post-handler effects?
     def binder(event: Event, *args):
         gen = handler(repo, bus, cache, event, *args)
         try:
@@ -239,24 +257,10 @@ _handlers: list[tuple[str, EventType, EventHandler]] = [
 ]
 
 
-class DIMSEFactory:
-
-    def __init__(self) -> None:
-        self.handlers: dict[str, EventHandlerType] = {}
-        self.cache: SessionCache = SessionCache()
-
-    def get(self, name: str) -> EventHandlerType | None:
-        if handler := self.handlers.get(name):
-            return handler
-
-    def register(self, name: str, handler: EventHandlerType) -> 'DIMSEFactory':
-        self.handlers[name] = handler
-        return self
-
-
-def new_dimse_factory(repo: Repository, bus: Logger) -> DIMSEFactory:
-    factory = DIMSEFactory()
-    cache = factory.cache
+def new_dimse_factory(repo: Repository, bus: Logger) -> dict[str, EventHandlerType]:
+    """Map handler name -> (event type, pynetdicom callback). One SessionCache shared by all."""
+    cache = SessionCache()
+    handlers: dict[str, EventHandlerType] = {}
     for n, t, h in _handlers:
         if t in _ACSE_EVENTS:
             binder = bind_acse(h, repo, bus, cache)
@@ -264,5 +268,5 @@ def new_dimse_factory(repo: Repository, bus: Logger) -> DIMSEFactory:
             binder = bind_dimse_qr(h, repo, bus, cache)
         else:
             binder = bind_dimse_simple(h, repo, bus, cache)
-        factory.register(n, (t, binder))
-    return factory
+        handlers[n] = (t, binder)
+    return handlers

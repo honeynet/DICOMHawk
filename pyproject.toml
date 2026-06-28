@@ -31,13 +31,13 @@ dependencies = [
     "numpy",
     # for the web
     "flask",
-    "ujson"
+    "ujson",
+    "faker",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "faker",
 ]
 
 [tool.setuptools]

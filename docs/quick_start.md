@@ -49,6 +49,54 @@ A successful C-STORE produces:
 - a `.dcm` file under `./traces/storage/`
 - a JSON line in `./data/dicomhawk.log` describing the request and the SCP response
 
+## Seed the database
+
+Before starting the server, populate it with realistic DICOM data from [TCIA](https://www.cancerimagingarchive.net/). The `--database` and `--traces` paths **must match** the values you pass to `dicomhawk serve`.
+
+```bash
+# one-shot seed from TCGA-LUAD (requires internet)
+dicomhawk seed \
+    --database ./data/dicomhawk.db \
+    --traces ./traces
+
+# start the server against the seeded database
+dicomhawk serve \
+    -p 11112 -ae ORTHANC \
+    --database ./data/dicomhawk.db \
+    -t ./traces \
+    -l ./data/dicomhawk.log
+```
+
+Seed with real hospital names from OpenStreetMap (falls back to built-in list if Overpass is unreachable). Pass `--osm-country` alongside `--osm-city` so the city resolves to the right country:
+
+```bash
+dicomhawk seed --database ./data/dicomhawk.db --traces ./traces \
+    --osm-city "Boston" --osm-country "US"
+```
+
+Re-seed automatically every 60 minutes (blocks until Ctrl-C or SIGTERM):
+
+```bash
+dicomhawk seed --database ./data/dicomhawk.db --traces ./traces \
+    --interval 60
+```
+
+Generate patient/physician names in a different locale:
+
+```bash
+dicomhawk seed --database ./data/dicomhawk.db --traces ./traces \
+    --locale de_DE
+```
+
+Provide your own location list (`[{"institution": "...", "address": "..."}]`):
+
+```bash
+dicomhawk seed --database ./data/dicomhawk.db --traces ./traces \
+    --locations ./my-locations.json
+```
+
+If TCIA is unreachable the command logs a warning and exits cleanly with 0 instances stored. With `--interval` it retries automatically on the next tick.
+
 ## Where to look
 
 | What | venv | Docker |
