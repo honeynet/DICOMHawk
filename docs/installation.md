@@ -46,10 +46,12 @@ docker compose ps          # status should turn `healthy` within ~30 seconds
 docker compose logs -f dicomhawk
 ```
 
-Compose maps:
+Compose publishes:
 
-- container port `11112` → host `${DICOMHAWK_PORT_PRIMARY:-11112}`
-- container port `104` → host `${DICOMHAWK_PORT_SECONDARY:-1104}` (the host side defaults to a non-privileged port to avoid needing `CAP_NET_BIND_SERVICE`)
+- container port `11112` → host `11112`
+- container port `104` → host `1104` (non-privileged default; avoids `CAP_NET_BIND_SERVICE`)
+
+`DICOMHAWK_PORTS` in `.env` controls which ports the server process listens on *inside* the container. The host-side publishing above is fixed in `docker-compose.yml`; edit it directly if you need different host ports.
 
 To stop and clean up:
 

@@ -4,7 +4,6 @@ from pathlib import Path
 from pydicom import dcmread
 from pydicom.uid import UID
 from pydicom.dataset import Dataset
-from pydicom.pixel_data_handlers.util import apply_modality_lut
 
 from pynetdicom.events import Event
 from pynetdicom.apps.qrscp import db
@@ -103,12 +102,20 @@ class Repository:
         if not self.supports(sop:=event.request.AffectedSOPClassUID):
             return QRError(f"SOP Class not supported: {sop}", QRStatus.SOP_CLASS_NOT_SUPPORTED)
 
-        ds = event.identifier
+        try:
+            ds = event.identifier
+        except Exception as exc:
+            return QRError(f"Undecodable query identifier: {exc}", QRStatus.SOP_CLASS_INVALID)
         if not ds.get("QueryRetrieveLevel"):
             return QRError(f"request identifier not supported: {ds}", QRStatus.SOP_CLASS_INVALID)
         return None
     
     def find(self, ds: Dataset, model, inject: bool = False) -> QRResult:
+        # Zero-length keys = Universal Matching (PS3.4 C.2.2.2.3), but decode to "" which
+        # db.search single-value-matches → 0 results. Null them so empty queries match all.
+        for elem in ds:
+            if elem.keyword != "QueryRetrieveLevel" and elem.value is not None and str(elem.value) == "":
+                elem.value = None
         conn = self.conn
         try:
             matches = db.search(model, ds, conn)
@@ -128,14 +135,20 @@ class Repository:
         return QRResult(matches=matches)
 
     def store(self, ds: Dataset, safe: bool = False) -> QRError | None:
-        # NOTE: anything not safe is zipped and quarantined
-        # save a raw copy of the dataset with the current timestamp
+        # NOTE: anything not safe is zipped and quarantined — capture the raw
+        # attacker payload for forensics even if the rest of the store fails.
         if not safe:
-            with self.storage.temp() as tf:
-                ds.save_as(tf, enforce_file_format=False)
-                self.storage.compress(tf)
+            try:
+                with self.storage.temp() as tf:
+                    ds.save_as(tf, enforce_file_format=False)
+                    self.storage.compress(tf)
+            except Exception as exc:
+                logger.warning(f"Failed to quarantine C-STORE payload: {exc}")
 
-        fname = str(ds.SOPInstanceUID)
+        try:
+            fname = str(ds.SOPInstanceUID)
+        except AttributeError:
+            return QRError("C-STORE dataset missing SOPInstanceUID", QRStatus.STORE_ERROR)
 
         try:
             fpath = self.storage.path_for(safe, fname)
@@ -151,6 +164,13 @@ class Repository:
         except Exception as exc:
             return QRError(f"Failed writing instance to storage directory: {exc}", QRStatus.STORE_ERROR)
         
+        # add_instance raises KeyError if these identity keys are missing (common in attacker
+        # uploads); skip indexing — the raw payload is already quarantined.
+        missing = [kw for kw in ("PatientID", "StudyInstanceUID", "SeriesInstanceUID") if kw not in ds]
+        if missing:
+            logger.warning(f"Not indexing C-STORE dataset missing required keys: {', '.join(missing)}")
+            return None
+
         try:
             # Path is relative to the database file
             matches = (
@@ -179,10 +199,14 @@ class Repository:
         except Exception as exc:
             return FindResult(error=QRError(f"Error reading file: {match.filename}\n{exc}", QRStatus.READ_ERROR))
 
-        # NOTE: not sure this is needed tbh, why not sending files compressed?
         if decompress and instance.file_meta.TransferSyntaxUID.is_compressed:
-            instance.decompress()
-            apply_modality_lut(instance.pixel_array, instance)
+            try:
+                instance.decompress()
+            except Exception as exc:
+                return FindResult(error=QRError(
+                    f"Failed to decompress instance: {match.filename}\n{exc}",
+                    QRStatus.READ_ERROR,
+                ))
 
         if inject:
             instance = self._apply_middlewares(instance)

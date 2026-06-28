@@ -1,10 +1,13 @@
+import logging
+import sys
+
 import typer
 from dicomhawk.app import new_dicomhawk
 from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.middlewares import Middleware, new_honeytoken_injector
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
-from dicomhawk.bus import new_bus, new_dev_log
+from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
 
 serve_app = typer.Typer(help="dicomhawk runner")
@@ -80,6 +83,12 @@ def serve(
             "--dev-log",
             help="Path to the developer/internal log file (Python warnings and errors)"
         ),
+        verbose: bool = typer.Option(
+            False,
+            "--verbose",
+            "-v",
+            help="Print a compact colored event summary to stdout (auto-enabled when stdout is a TTY)"
+        ),
     ):
 
     p_int = [int(p) for p in ports.split(",")]
@@ -92,14 +101,24 @@ def serve(
     )
 
     store = new_store(traces)
-    
+
     injector = new_honeytoken_injector(honey_url, canary_pdf)
     mws: list[Middleware] = [injector]
-    
+
     repo = new_repo(database, store, mws)
-    bus = new_bus(log_path)
+    bus = new_bus(log_path, verbose=verbose)
     if dev_log_path:
         new_dev_log(dev_log_path)
+    else:
+        # No dev-log file: log to stdout so `docker logs` shows startup and errors.
+        fmt, datefmt = "%(asctime)s %(levelname)s %(name)s: %(message)s", "%Y-%m-%dT%H:%M:%S"
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(
+            LevelColorFormatter(fmt, datefmt) if sys.stdout.isatty()
+            else logging.Formatter(fmt, datefmt)
+        )
+        logging.basicConfig(level=logging.INFO, handlers=[handler])
+        logging.getLogger("pynetdicom").setLevel(logging.WARNING)
 
     dimse_fact = new_dimse_factory(repo, bus)
 

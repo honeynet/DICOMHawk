@@ -1,27 +1,18 @@
 
 import logging
 from logging import Logger
-from copy import copy
 from dataclasses import dataclass
 from itertools import chain
-from pynetdicom import (
-    evt,
-    AE,
-)
+from pynetdicom import AE
 
 from pynetdicom.events import EventHandlerType
 from pynetdicom.transport import ThreadedAssociationServer
-from pynetdicom.presentation import (
-    AllStoragePresentationContexts,
-    StoragePresentationContexts,
-)
+from pynetdicom.presentation import AllStoragePresentationContexts
 
 from pynetdicom.sop_class import (
     _QR_CLASSES,
     _VERIFICATION_CLASSES
 )
-
-from .handlers import DIMSEFactory
 
 logger = logging.getLogger(__name__)
 
@@ -55,19 +46,6 @@ class Server:
         self.config = config
         self.handlers = handlers
 
-    def make_handlers(self, handlers: DIMSEFactory):
-        # TODO: the config should have a list of supported operations
-        return [
-            (evt.EVT_ACSE_RECV, handlers.get("associate")),
-            (evt.EVT_RELEASED, handlers.get("release")),
-            (evt.EVT_C_FIND, handlers.get("find")),
-            (evt.EVT_C_STORE, handlers.get("store")),
-            (evt.EVT_C_ECHO, handlers.get("echo")),
-            (evt.EVT_C_MOVE, handlers.get("move")),
-            (evt.EVT_C_GET, handlers.get("get")),
-            (evt.EVT_ABORTED, handlers.get("abort")),
-        ]
-
     def init(self) -> AE:
         logger.debug("Initializing AE")
 
@@ -84,19 +62,10 @@ class Server:
         # from greedy malware
         ae.maximum_pdu_size = 65536
 
-        # Set supported operations 
-        store_ctx = copy(StoragePresentationContexts)
-        for ctx in store_ctx:
-
-            # TODO: this could come from some sort of setting
-            # to decide what we are
-            ctx._as_scp = True
-            ctx._as_scu = True
-            ctx.scp_role = True
-            ctx.scu_role = True
-
-        ae.requested_contexts = store_ctx
-        ae.supported_contexts = AllStoragePresentationContexts
+        # scu_role lets the server SEND instances during C-GET/C-MOVE sub-operations; scp_role
+        # lets it RECEIVE C-STORE. Without scu_role, C-GET sub-operations are rejected.
+        for ctx in AllStoragePresentationContexts:
+            ae.add_supported_context(ctx.abstract_syntax, scu_role=True, scp_role=True)
 
         for qr in chain(_QR_CLASSES.values(), _VERIFICATION_CLASSES.values()):
             ae.add_supported_context(qr)
