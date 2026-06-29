@@ -51,10 +51,11 @@ def serve(
             help="DIMSE operations supported"
         ),
         database: str | None = typer.Option(
-            None, 
+            None,
             "-db",
             "--database",
-            help="path to database"
+            envvar="DICOMHAWK_DB",
+            help="path to database (defaults to $DICOMHAWK_DB)"
         ),
         log_path: str = typer.Option(
             "data/dicomhawk.log",
@@ -66,7 +67,8 @@ def serve(
             "traces",
             "-t",
             "--traces",
-            help="Where to store traces (i.e., DICOM files and uploaded payloads)"
+            envvar="DICOMHAWK_TRACES",
+            help="Where to store traces (defaults to $DICOMHAWK_TRACES)"
         ),
         honey_url: str | None = typer.Option(
             None,
@@ -124,8 +126,14 @@ def serve(
 
     handlers = []
     for h in dimse.split(","):
+        if h == "connect":
+            continue  # always-on, registered below
         if handler:=dimse_fact.get(h):
             handlers.append(handler)
+
+    # Always on: captures probes that never negotiate an association.
+    if conn := dimse_fact.get("connect"):
+        handlers.append(conn)
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, []) # TODO: fix this, add components?

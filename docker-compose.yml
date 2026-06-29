@@ -20,12 +20,12 @@ services:
       - -db
       - "${DICOMHAWK_DB:-/opt/dicomhawk/storage/dicomhawk.db}"
       - -t
-      - /opt/dicomhawk/storage
+      - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
       - -l
       - /var/log/dicomhawk/dicomhawk.log
       - -v
     volumes:
-      - dicom_storage:/opt/dicomhawk/storage
+      - dicom_storage:${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}
       - logs:/var/log/dicomhawk
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 11112)); s.close()\""]

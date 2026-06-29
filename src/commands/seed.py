@@ -32,13 +32,15 @@ def seed(
         None,
         "-db",
         "--database",
-        help="Path to the SQLite database (must match the path used by dicomhawk serve)",
+        envvar="DICOMHAWK_DB",
+        help="SQLite path; defaults to $DICOMHAWK_DB so seed and serve share one DB",
     ),
     traces: str = typer.Option(
         "traces",
         "-t",
         "--traces",
-        help="Traces directory (must match the path used by dicomhawk serve)",
+        envvar="DICOMHAWK_TRACES",
+        help="Traces directory; defaults to $DICOMHAWK_TRACES so seed and serve share it",
     ),
     locations: str | None = typer.Option(
         None,

@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import sys
+import threading
 import weakref
 
 from datetime import datetime, timezone
@@ -12,6 +13,8 @@ import ujson
 
 from pydicom.dataset import Dataset
 from pynetdicom.events import Event
+
+from .status import QRStatus
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +41,27 @@ class SessionCache:
     def __init__(self) -> None:
         self._sessions: dict[int, str] = {}
         self._versions: dict[int, str] = {}
+        self._lock = threading.Lock()
+        self._last_id = 0
 
     def get_session_id(self, assoc) -> str:
         key = id(assoc)
-        if key not in self._sessions:
-            self._sessions[key] = str(int(datetime.now(timezone.utc).timestamp() * 1000))
-            weakref.finalize(assoc, self._cleanup, key)
-        return self._sessions[key]
+        sid = self._sessions.get(key)
+        if sid is not None:
+            return sid
+        with self._lock:
+            # Re-check under the lock: a concurrent call for the same assoc may have won.
+            sid = self._sessions.get(key)
+            if sid is None:
+                ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                # Same-millisecond associations would collide; force monotonic uniqueness.
+                if ms <= self._last_id:
+                    ms = self._last_id + 1
+                self._last_id = ms
+                sid = str(ms)
+                self._sessions[key] = sid
+                weakref.finalize(assoc, self._cleanup, key)
+        return sid
 
     def _cleanup(self, key: int) -> None:
         self._sessions.pop(key, None)
@@ -73,19 +90,25 @@ def _query_level(ds: Dataset) -> str | None:
 
 
 def _extract_params(ds: Dataset) -> list[str] | None:
-    """Return 'Key: Value' strings for non-empty, non-bulk dataset fields."""
+    """'Key: Value' for filter fields; empty (universal) keys summarized as 'Requested: ...'."""
     params = []
+    requested = []
     for elem in ds:
         if elem.keyword in _BULK_DATA_KEYWORDS or not elem.keyword:
             continue
         if elem.keyword == "QueryRetrieveLevel":
             continue  # captured separately in the query_level field
         try:
-            val = str(elem.value).strip()
-            if val:
-                params.append(f"{elem.keyword}: {val}")
+            val = "" if elem.value is None else str(elem.value).strip()
         except Exception:
             logger.debug("Failed to stringify element %s", elem.keyword, exc_info=True)
+            continue
+        if val:
+            params.append(f"{elem.keyword}: {val}")
+        else:
+            requested.append(elem.keyword)
+    if requested:
+        params.append(f"Requested: {', '.join(requested)}")
     return params if params else None
 
 
@@ -111,6 +134,7 @@ class InteractionEvent:
         query_level: str | None = None,
         session_parameters: list[str] | None = None,
         matches: int | None = None,
+        status: "QRStatus | None" = None,
         log_level: str = "INFO",
     ) -> None:
         assoc = evt.assoc
@@ -119,11 +143,18 @@ class InteractionEvent:
         self.query_level = query_level
         self.session_parameters = session_parameters
         self.matches = matches
+        # DIMSE outcome returned to the peer; None for non-DIMSE events.
+        self.status: str | None = f"{status.name} (0x{int(status):04X})" if status is not None else None
         self.log_level = log_level
         self.version = cache.get_version(assoc)
-        self.ip = assoc.requestor.address
-        self.port = assoc.requestor.port
-        self.local_port = assoc.acceptor.port
+        # Connection events carry the peer in event.address; DIMSE/ACSE use the requestor.
+        addr = getattr(evt, "address", None)
+        if addr is not None:
+            self.ip, self.port = addr[0], addr[1]
+        else:
+            self.ip = assoc.requestor.address
+            self.port = assoc.requestor.port
+        self.local_port = getattr(assoc.acceptor, "port", None)
         self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     def __str__(self) -> str:
@@ -132,6 +163,7 @@ class InteractionEvent:
             "request_type": self.request_type,
             "query_level": self.query_level,
             "session_parameters": self.session_parameters,
+            "status": self.status,
             "log_level": self.log_level,
             "version": self.version,
             "ip": self.ip,
@@ -139,7 +171,7 @@ class InteractionEvent:
             "local_port": self.local_port,
             "matches": self.matches,
             "timestamp": self.timestamp,
-        })
+        }, escape_forward_slashes=False)
 
 
 _LEVEL_COLORS: dict[str, str] = {
@@ -182,8 +214,10 @@ class _ConsoleFormatter(logging.Formatter):
             parts.append(ie.query_level)
         if ie.matches is not None:
             parts.append(f"matches={ie.matches}")
+        if ie.status:
+            parts.append(f"{dim}->{reset} {ie.status}")
         if ie.session_parameters:
-            parts.append(ie.session_parameters[0][:60])
+            parts.append("  ".join(p[:60] for p in ie.session_parameters))
         if ie.version:
             parts.append(f"{dim}[{ie.version}]{reset}")
         return "  ".join(parts)
