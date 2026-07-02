@@ -1,7 +1,8 @@
 import typer
 
+from seeding.cli import seed_app
+
 from .component import component_app
-from .seed import seed_app
 from .serve import serve_app
 
 app = typer.Typer(help="DicomHawk")

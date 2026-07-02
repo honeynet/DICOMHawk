@@ -2,8 +2,12 @@ import signal
 import typer
 
 from dicomhawk.repository import new_repo
-from dicomhawk.seeder import OsmClient, SeedScheduler, load_locations, new_seeder
 from dicomhawk.storage import new_store
+
+from .locations import load_locations
+from .names import load_name_pools
+from .osm import OsmClient
+from .seeder import SeedScheduler, new_seeder, resolve_rotation
 
 seed_app = typer.Typer(help="Seed the honeypot database with realistic DICOM data from TCIA")
 
@@ -14,7 +18,7 @@ def seed(
         "TCGA-LUAD",
         "-c",
         "--collection",
-        help="TCIA collection name to pull from (see cancerimagingarchive.net)",
+        help="TCIA collection name(s), comma-separated; with --rotate one is chosen per ISO week",
     ),
     max_series: int = typer.Option(
         3,
@@ -23,10 +27,11 @@ def seed(
         help="Maximum number of series to download from the collection",
     ),
     max_images: int = typer.Option(
-        5,
+        30,
         "-n",
         "--max-images",
-        help="Maximum number of images to ingest per series",
+        help="Images to ingest per series. Higher = more realistic IMAGE-level C-FIND "
+             "responses (real CT series have 100s of slices); lower = less storage/bandwidth",
     ),
     database: str | None = typer.Option(
         None,
@@ -53,6 +58,13 @@ def seed(
         "--locale",
         help="Faker locale for patient and physician name generation (e.g. en_US, de_DE, ja_JP)",
     ),
+    names: str | None = typer.Option(
+        None,
+        "-N",
+        "--names",
+        help='Path to a JSON file of name pools: {"male": ["Family^Given"], "female": [...], '
+             '"physician": [...]}. Overrides --locale generation',
+    ),
     osm_city: str | None = typer.Option(
         None,
         "--osm-city",
@@ -77,7 +89,19 @@ def seed(
         "CT",
         "-m",
         "--modality",
-        help="DICOM modality to request from TCIA (e.g. CT, MR, US, DX)",
+        help="DICOM modality/modalities, comma-separated; with --rotate one is chosen per ISO week",
+    ),
+    rotate: bool = typer.Option(
+        True,
+        "--rotate/--no-rotate",
+        help="Rotate patient identities (by ISO week) and source collection/modality for variety "
+             "on repeated seeding. --no-rotate keeps the fully deterministic behaviour",
+    ),
+    epoch: str | None = typer.Option(
+        None,
+        "--epoch",
+        hidden=True,
+        help="Override the rotation epoch (advanced; for reproducible runs/tests)",
     ),
     interval: int = typer.Option(
         0,
@@ -86,6 +110,14 @@ def seed(
         help="Re-seed every N minutes in the background (0 = run once and exit)",
     ),
 ):
+    collections = [c.strip() for c in collection.split(",") if c.strip()]
+    modalities = [m.strip() for m in modality.split(",") if m.strip()]
+    # Empty lists would IndexError/ZeroDivisionError deep in resolve_rotation instead.
+    if not collections:
+        raise typer.BadParameter("must not be empty", param_hint="--collection")
+    if not modalities:
+        raise typer.BadParameter("must not be empty", param_hint="--modality")
+
     # Resolve location list: OSM > --locations file > built-in defaults
     if osm_city or osm_country:
         osm = OsmClient(city=osm_city, country=osm_country, cache_path=osm_cache, max_results=osm_max)
@@ -103,12 +135,15 @@ def seed(
     repo.start()
 
     try:
-        seeder = new_seeder(repo, locations=loc_list, locale=locale)
+        seeder = new_seeder(repo, locations=loc_list, locale=locale, name_pools=load_name_pools(names))
 
         if interval > 0:
-            scheduler = SeedScheduler(seeder, collection, interval, max_series, max_images, modality)
+            scheduler = SeedScheduler(seeder, collections, interval, max_series, max_images, modalities, rotate)
             scheduler.start()
-            typer.echo(f"Scheduler running — seeding every {interval}m ({modality}). Press Ctrl+C to stop.")
+            typer.echo(
+                f"Scheduler running — seeding every {interval}m "
+                f"(rotate={rotate}). Press Ctrl+C to stop."
+            )
 
             stop_event = scheduler._stop
             try:
@@ -120,7 +155,8 @@ def seed(
                 scheduler.stop()
                 scheduler.join(timeout=5)
         else:
-            n = seeder.seed(collection, max_series, max_images, modality)
-            typer.echo(f"Seeded {n} instances from '{collection}' ({modality})")
+            coll, mod, ep = resolve_rotation(collections, modalities, rotate, epoch)
+            n = seeder.seed(coll, max_series, max_images, mod, ep)
+            typer.echo(f"Seeded {n} instances from '{coll}' ({mod})")
     finally:
         repo.stop()
