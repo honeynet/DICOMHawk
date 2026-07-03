@@ -20,6 +20,10 @@ from .middlewares import Middleware
 
 logger = logging.getLogger(__name__)
 
+# Identity keys db.add_instance needs; uploads omitting them are quarantined but not indexed.
+INDEX_REQUIRED_KEYS: tuple[str, ...] = ("PatientID", "StudyInstanceUID", "SeriesInstanceUID")
+
+
 class QRError:
     def __init__(self, error: str, status: QRStatus = QRStatus.FAILURE):
         self.error: str = error
@@ -166,7 +170,7 @@ class Repository:
         
         # add_instance raises KeyError if these identity keys are missing (common in attacker
         # uploads); skip indexing — the raw payload is already quarantined.
-        missing = [kw for kw in ("PatientID", "StudyInstanceUID", "SeriesInstanceUID") if kw not in ds]
+        missing = [kw for kw in INDEX_REQUIRED_KEYS if kw not in ds]
         if missing:
             logger.warning(f"Not indexing C-STORE dataset missing required keys: {', '.join(missing)}")
             return None
