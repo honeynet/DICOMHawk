@@ -27,8 +27,9 @@ dependencies = [
     "pytz",
     "overpy",
     "sqlalchemy",
-    "typer", 
+    "typer",
     "numpy",
+    "pyyaml",
     # for the web
     "flask",
     "ujson",
@@ -45,10 +46,11 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "web", "web.*"]
+include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*"]
 
 [tool.setuptools.package-data]
 seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md"]
+profiles = ["builtin/*.yaml", "builtin/*.ico"]
 
 [project.urls]
 Homepage = "https://github.com/honeynet/DICOMHawk"

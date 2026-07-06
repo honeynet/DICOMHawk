@@ -1,0 +1,259 @@
+# Source: Synapse PACS DICOM Conformance Statement DOC-0062366-A, SW 7.4.2+, 2024-09-06.
+# Transfer syntax sets below are the Table 1-3 UNIONS each Table 1-1 row actually accepts
+_ts_verification: &ts_verification         # Table 1-5: Implicit + Explicit VR LE only
+  - 1.2.840.10008.1.2           # Implicit VR Little Endian
+  - 1.2.840.10008.1.2.1         # Explicit VR Little Endian
+_ts_qr_find: &ts_qr_find                   # "LEI" — Q/R FIND SCP: Implicit VR LE only
+  - 1.2.840.10008.1.2
+_ts_qr_move_get: &ts_qr_move_get           # "LEI, LEE" — Q/R MOVE/GET SCP
+  - 1.2.840.10008.1.2
+  - 1.2.840.10008.1.2.1
+_ts_storage_llu: &ts_storage_llu           # Table 1-1 group "LL, L, U"
+  - 1.2.840.10008.1.2.4.70      # JPEG Lossless, Nonhierarchical, Process 14 (SV1)
+  - 1.2.840.10008.1.2.4.90      # JPEG 2000 Image Compression (Lossless Only)
+  - 1.2.840.10008.1.2.4.50      # JPEG Baseline (Process 1)
+  - 1.2.840.10008.1.2.4.91      # JPEG 2000 Image Compression
+  - 1.2.840.10008.1.2           # Implicit VR Little Endian
+  - 1.2.840.10008.1.2.1         # Explicit VR Little Endian
+  - 1.2.840.10008.1.2.2         # Explicit VR Big Endian
+_ts_storage_lluR: &ts_storage_lluR         # Table 1-1 group "LL, L, U, R"
+  - 1.2.840.10008.1.2.4.70
+  - 1.2.840.10008.1.2.4.90
+  - 1.2.840.10008.1.2.4.50
+  - 1.2.840.10008.1.2.4.91
+  - 1.2.840.10008.1.2
+  - 1.2.840.10008.1.2.1
+  - 1.2.840.10008.1.2.2
+  - 1.2.840.10008.1.2.5         # RLE Lossless
+_ts_storage_u: &ts_storage_u               # Table 1-1 group "U"
+  - 1.2.840.10008.1.2
+  - 1.2.840.10008.1.2.1
+  - 1.2.840.10008.1.2.2
+_ts_storage_uu: &ts_storage_uu             # Table 1-1 group "UU" (RT Dose Storage only)
+  - 1.2.840.10008.1.2
+  - 1.2.840.10008.1.2.1
+
+meta:
+  name: fujifilm
+  kind: pacs
+
+identity:
+  ae_title: SYNAPSEDICOMSCP                                 
+  implementation_class_uid: 1.2.840.113845.1.1              
+  implementation_version_name: "Syn7,3,0,1"                 
+  manufacturer: FUJIFILM Healthcare Americas Corporation
+  model_name: Synapse PACS
+
+operator:
+  honey_url: null
+  canary_pdf: null
+
+dicom:
+  operations: [echo, find, get, move, store]
+  max_associations: 16     
+  max_pdu_size: 65000      
+  ae_auth:
+    require_called_aet: false   
+    require_calling_aet: null
+
+  verification:
+    uid: 1.2.840.10008.1.1
+    transfer_syntaxes: *ts_verification
+
+  qr_classes:
+    find:
+      - uid: 1.2.840.10008.5.1.4.1.2.1.1     # Patient Root Q/R Information Model – FIND
+        transfer_syntaxes: *ts_qr_find
+      - uid: 1.2.840.10008.5.1.4.1.2.2.1     # Study Root Q/R Information Model – FIND
+        transfer_syntaxes: *ts_qr_find
+      - uid: 1.2.840.10008.5.1.4.1.2.3.1     # Patient/Study Only Q/R Information Model – FIND, retired
+        transfer_syntaxes: *ts_qr_find
+    move:
+      - uid: 1.2.840.10008.5.1.4.1.2.1.2     # Patient Root Q/R Information Model – MOVE
+        transfer_syntaxes: *ts_qr_move_get
+      - uid: 1.2.840.10008.5.1.4.1.2.2.2     # Study Root Q/R Information Model – MOVE
+        transfer_syntaxes: *ts_qr_move_get
+      - uid: 1.2.840.10008.5.1.4.1.2.3.2     # Patient/Study Only Q/R Information Model – MOVE, retired
+        transfer_syntaxes: *ts_qr_move_get
+      - uid: 1.2.840.10008.5.1.4.1.2.4.2     # Composite Instance Root Retrieve – MOVE
+        transfer_syntaxes: *ts_qr_move_get
+    get:
+      - uid: 1.2.840.10008.5.1.4.1.2.2.3     # Study Root Q/R Information Model – GET
+        transfer_syntaxes: *ts_qr_move_get
+      - uid: 1.2.840.10008.5.1.4.1.2.4.3     # Composite Instance Root Retrieve – GET
+        transfer_syntaxes: *ts_qr_move_get
+      - uid: 1.2.840.10008.5.1.4.1.2.5.3     # Composite Instance Retrieve Without Bulk Data – GET
+        transfer_syntaxes: *ts_qr_move_get
+
+  # Table 1-1 Storage SCP subset (~77 classes) — NOT AllStoragePresentationContexts.
+  storage_classes:
+    # --- accepted TS set "LL, L, U" ---
+    - uid: 1.2.392.200036.9125.1.1.2                # Fuji Private CR Storage (FujiCR)
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.1.29                    # Hardcopy Grayscale Image Storage, retired
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.1.30                    # Hardcopy Color Image Storage, retired
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1                 # Computed Radiography Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1.1               # Digital X-Ray Image Storage – For Presentation
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1.1.1             # Digital X-Ray Image Storage – For Processing
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1.2               # Digital Mammography X-Ray Image Storage – For Presentation
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1.2.1             # Digital Mammography X-Ray Image Storage – For Processing
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1.3               # Digital Intra-Oral X-Ray Image Storage – For Presentation
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.1.3.1             # Digital Intra-Oral X-Ray Image Storage – For Processing
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.2                 # CT Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.2.1               # Enhanced CT Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.4                 # MR Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.4.1               # Enhanced MR Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.4.3               # Enhanced MR Color Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.5                 # Nuclear Medicine Image Storage, retired
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.7                 # Secondary Capture Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.7.2               # Multi-frame Grayscale Byte Secondary Capture Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.7.3               # Multi-frame Grayscale Word Secondary Capture Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.7.4               # Multi-frame True Color Secondary Capture Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.12.1              # X-Ray Angiographic Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.12.2              # X-Ray Radiofluoroscopic Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.12.3              # X-Ray Angiographic Bi-Plane Image Storage, retired
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.13.1.3            # Breast Tomosynthesis Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.14.1              # Intravascular OCT Image Storage – For Presentation
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.14.2              # Intravascular OCT Image Storage – For Processing
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.20                # Nuclear Medicine Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.77.1              # VL Trial Image Storage, retired
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.77.1.1            # VL Endoscopic Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.77.1.2            # VL Microscopic Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.77.1.3            # VL Slide-Coordinates Microscopic Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.77.1.4            # VL Photographic Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.77.2              # VL Multi Frame Image Storage, retired
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.128               # Positron Emission Tomography Image Storage
+      transfer_syntaxes: *ts_storage_llu
+    - uid: 1.2.840.10008.5.1.4.1.1.481.1             # RT Image Storage
+      transfer_syntaxes: *ts_storage_llu
+
+    # --- accepted TS set "LL, L, U, R" ---
+    - uid: 1.2.840.10008.5.1.4.1.1.3                 # Ultrasound Multi-frame Image Storage, retired
+      transfer_syntaxes: *ts_storage_lluR
+    - uid: 1.2.840.10008.5.1.4.1.1.3.1               # Ultrasound Multi-frame Image Storage
+      transfer_syntaxes: *ts_storage_lluR
+    - uid: 1.2.840.10008.5.1.4.1.1.6                 # Ultrasound Image Storage, retired
+      transfer_syntaxes: *ts_storage_lluR
+    - uid: 1.2.840.10008.5.1.4.1.1.6.1               # Ultrasound Image Storage
+      transfer_syntaxes: *ts_storage_lluR
+    - uid: 1.2.840.10008.5.1.4.1.1.66.4              # Segmentation Storage
+      transfer_syntaxes: *ts_storage_lluR
+
+    # --- accepted TS set "U" ---
+    - uid: 1.2.840.10008.5.1.1.27                    # Stored Print Storage, retired
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.4.2               # MR Spectroscopy Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.7.1               # Multi-frame Single Bit Secondary Capture Image Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.8                 # Standalone Overlay Storage, retired
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9                 # Standalone Curve Storage, retired
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9.1.1             # 12-lead ECG Waveform Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9.1.2             # General ECG Waveform Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9.1.3             # Ambulatory ECG Waveform Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9.2.1             # Hemodynamic Waveform Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9.3.1             # Cardiac Electrophysiology Waveform Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.9.4.1             # Basic Voice Audio Waveform Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.10                # Standalone Modality LUT Storage, retired
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.11                # Standalone VOI LUT Storage, retired
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.11.1              # Grayscale Softcopy Presentation State Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.11.2              # Color Softcopy Presentation State Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.11.3              # Pseudo-Color Softcopy Presentation State Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.11.4              # Blending Softcopy Presentation State Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.66                # Raw Data Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.77.1.1.1          # Video Endoscopic Image Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.11             # Basic Text SR
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.22             # Enhanced SR
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.33             # Comprehensive SR
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.50             # Mammography CAD SR
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.59             # Key Object Selection
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.65             # Chest CAD SR
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.88.67             # X-Ray Radiation Dose SR
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.104.1             # Encapsulated PDF Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.129               # Standalone PET Curve Storage, retired
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.3             # RT Structure Set Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.4             # RT Beams Treatment Record Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.5             # RT Plan Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.6             # RT Brachy Treatment Record Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.7             # RT Treatment Summary Record Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.8             # RT Ion Plan Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.2.840.10008.5.1.4.1.1.481.9             # RT Ion Beams Treatment Record Storage
+      transfer_syntaxes: *ts_storage_u
+    - uid: 1.3.46.670589.2.5.1.1                     # Philips Private IE33 3D Presentation State
+      transfer_syntaxes: *ts_storage_u
+
+    # --- accepted TS set "UU" ---
+    - uid: 1.2.840.10008.5.1.4.1.1.481.2             # RT Dose Storage
+      transfer_syntaxes: *ts_storage_uu
+
+web:
+  enabled: true
+  templates_dir: fujifilm
+  server_header: Microsoft-IIS/10.0    
+  x_powered_by: ASP.NET                
+  x_aspnet_version: 4.0.30319          
+  title: Synapse Sign-On               
+  favicon: fujifilm-favicon.ico        

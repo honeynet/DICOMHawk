@@ -23,9 +23,11 @@ Flags used:
 
 The server logs `Listening in [11112]` to stdout once the bus is up.
 
+To impersonate a specific device, add `--profile fujifilm` (bundled Fujifilm Synapse PACS) or a path to a custom profile YAML — see [commands](./commands.md#dicomhawk-serve). Without it, a generic default is used.
+
 ## Run via Docker
 
-After `docker compose up -d`, the service is listening on the host ports defined in your `.env`:
+After `docker compose up -d`, the service is listening on the host ports defined in your `.env`. Set `DICOMHAWK_PROFILE=fujifilm` in `.env` to run the honeypot as Synapse PACS (empty = generic default):
 
 ```bash
 docker compose ps
