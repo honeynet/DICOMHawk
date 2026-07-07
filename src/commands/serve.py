@@ -10,7 +10,14 @@ from dicomhawk.server import new_config, new_server
 from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
 
+from profiles.profile import load_profile
+
+logger = logging.getLogger(__name__)
+
 serve_app = typer.Typer(help="dicomhawk runner")
+
+# ACSE/connection lifecycle handlers are always on — `operations` only gates DIMSE ops.
+_ALWAYS_ON_HANDLERS: tuple[str, ...] = ("associate", "reject", "release", "abort", "connect")
 
 @serve_app.command()
 def serve(
@@ -26,29 +33,22 @@ def serve(
             "--ports",
             help="Posts to listen for connections"
         ),
-        ae_title: str = typer.Option(
-            "ORTHANC",
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Profile name (profiles/builtin/<name>.yaml) or path to a custom profile YAML; omit for generic behavior"
+        ),
+        ae_title: str | None = typer.Option(
+            None,
             "-ae",
             "--ae_title",
-            help="AE title"
+            help="AE title (overrides the profile default)"
         ),
-        impl_uid: str = typer.Option(
-            "1.2.3.4", # TODO: fix this
-            "-uid",
-            "--impl_uid",
-            help="Implementation UID"
-        ),
-        impl_name: str = typer.Option(
-            "ORTHANC",
-            "-name",
-            "--impl_name",
-            help="Implementation name"
-        ),
-        dimse: str = typer.Option(
-            "associate,echo,get,find,move,store,release,abort",
-            "-d",
-            "--dimse",
-            help="DIMSE operations supported"
+        max_associations: int | None = typer.Option(
+            None,
+            "-ma",
+            "--max-associations",
+            help="Maximum simultaneous associations (overrides the profile default)"
         ),
         database: str | None = typer.Option(
             None,
@@ -73,12 +73,12 @@ def serve(
         honey_url: str | None = typer.Option(
             None,
             "--honey-url",
-            help="URL to inject as RetrieveURL for Honey URLs"
+            help="URL to inject as RetrieveURL for Honey URLs (overrides the profile default)"
         ),
         canary_pdf: str | None = typer.Option(
             None,
             "--canary-pdf",
-            help="Path to an Encapsulated PDF Canary to inject into datasets"
+            help="Path to an Encapsulated PDF Canary to inject into datasets (overrides the profile default)"
         ),
         dev_log_path: str | None = typer.Option(
             None,
@@ -93,18 +93,35 @@ def serve(
         ),
     ):
 
+    try:
+        prof = load_profile(profile)
+    except (FileNotFoundError, ValueError) as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
     p_int = [int(p) for p in ports.split(",")]
     config = new_config(
         host,
         p_int,
-        ae_title,
-        impl_uid,
-        impl_name,
+        ae_title or prof.ae_title,
+        prof.implementation_class_uid,
+        prof.implementation_version_name,
+        prof.dicom.operations,
+        prof.dicom.verification,
+        prof.dicom.storage_classes,
+        prof.dicom.qr_classes,
+        max_associations or prof.dicom.max_associations,
+        prof.dicom.max_pdu_size,
+        require_called_aet=prof.dicom.ae_auth.require_called_aet,
+        require_calling_aet=prof.dicom.ae_auth.require_calling_aet,
     )
 
     store = new_store(traces)
 
-    injector = new_honeytoken_injector(honey_url, canary_pdf)
+    injector = new_honeytoken_injector(
+        honey_url or prof.operator.honey_url,
+        canary_pdf or prof.operator.canary_pdf,
+    )
     mws: list[Middleware] = [injector]
 
     repo = new_repo(database, store, mws)
@@ -122,18 +139,17 @@ def serve(
         logging.basicConfig(level=logging.INFO, handlers=[handler])
         logging.getLogger("pynetdicom").setLevel(logging.WARNING)
 
+    logger.info(f"Profile: {prof.name} ({prof.manufacturer or 'generic'} {prof.model_name or ''})".strip())
+
     dimse_fact = new_dimse_factory(repo, bus)
 
     handlers = []
-    for h in dimse.split(","):
-        if h == "connect":
-            continue  # always-on, registered below
-        if handler:=dimse_fact.get(h):
-            handlers.append(handler)
-
-    # Always on: captures probes that never negotiate an association.
-    if conn := dimse_fact.get("connect"):
-        handlers.append(conn)
+    for op in prof.dicom.operations:
+        if h := dimse_fact.get(op):
+            handlers.append(h)
+    for always_on in _ALWAYS_ON_HANDLERS:
+        if h := dimse_fact.get(always_on):
+            handlers.append(h)
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, []) # TODO: fix this, add components?

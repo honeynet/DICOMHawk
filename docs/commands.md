@@ -6,12 +6,11 @@ Start the DICOM honeypot server.
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
+| `--profile` | | *(generic default)* | Deception profile: `fujifilm`, or a path to a custom YAML. Drives identity, advertised SOP classes, and enabled DIMSE ops. |
 | `--host` | `-h` | `0.0.0.0` | Bind address |
 | `--ports` | `-p` | `104,11112` | Comma-separated listen ports |
-| `--ae_title` | `-ae` | `ORTHANC` | AE title advertised to peers |
-| `--impl_uid` | `-uid` | `1.2.3.4` | Implementation class UID |
-| `--impl_name` | `-name` | `ORTHANC` | Implementation version name |
-| `--dimse` | `-d` | `associate,echo,get,find,move,store,release,abort` | Enabled DIMSE operations (comma-separated) |
+| `--ae_title` | `-ae` | *(profile's)* | Override the AE title the profile advertises |
+| `--max-associations` | `-ma` | *(profile's)* | Override the max simultaneous associations |
 | `--database` | `-db` | *(in-memory)* | Path to SQLite database file — **must match `seed --database`** |
 | `--traces` | `-t` | `traces` | Directory for received DICOM files and quarantined uploads |
 | `--log-path` | `-l` | `data/dicomhawk.log` | JSON interaction event log (one record per line) |
@@ -19,6 +18,8 @@ Start the DICOM honeypot server.
 | `--canary-pdf` | | | Path to a PDF canary token injected as `EncapsulatedDocument` |
 | `--dev-log` | | | Path for Python-level warnings, errors, and pynetdicom protocol events |
 | `--verbose` | `-v` | | Print a compact colored event summary to stdout; auto-enabled when stdout is a TTY |
+
+**Profiles** decide which device the honeypot impersonates. With no `--profile`, it runs a generic default (AE title `ORTHANC`, all storage classes). `--profile fujifilm` makes it present as a Fujifilm Synapse PACS — that device's identity, supported SOP classes, and status codes. To impersonate a different device, write a profile YAML in the same format as the bundled `fujifilm` profile and pass its path.
 
 **Note:** with the default in-memory database, seeded data does not persist between restarts. Pass `--database` for any deployment intended to survive a restart.
 

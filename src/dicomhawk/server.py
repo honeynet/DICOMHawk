@@ -2,19 +2,15 @@
 import logging
 from logging import Logger
 from dataclasses import dataclass
-from itertools import chain
 from pynetdicom import AE
 
 from pynetdicom.events import EventHandlerType
 from pynetdicom.transport import ThreadedAssociationServer
-from pynetdicom.presentation import AllStoragePresentationContexts
-
-from pynetdicom.sop_class import (
-    _QR_CLASSES,
-    _VERIFICATION_CLASSES
-)
 
 logger = logging.getLogger(__name__)
+
+# (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so this module never imports profiles.
+type SopClass = tuple[str, list[str]]
 
 @dataclass
 class ServerConfig:
@@ -22,15 +18,43 @@ class ServerConfig:
     PORTS: list[int]
 
     AE_TITLE: str # AE title
-    # UserInfo (application identity)
-    IMPLEMENTATION_UID: str
-    IMPLEMENTATION_NAME: str
+    IMPLEMENTATION_UID: str | None # None -> pynetdicom's own PYNETDICOM_IMPLEMENTATION_* defaults
+    IMPLEMENTATION_NAME: str | None
 
-    # Maximum number of associations (min: 1, max: 65536)
-    MAX_ASSOC: int = 65536
+    # OPERATIONS gates both handler registration (serve.py) and contexts below.
+    OPERATIONS: list[str]
+    VERIFICATION: SopClass
+    STORAGE_CLASSES: list[SopClass]
+    QR_CLASSES: dict[str, list[SopClass]]
 
-def new_config(host: str, ports: list[int], ae_title: str, impl_uid: str, impl_name: str) -> ServerConfig:
-    return ServerConfig(host, ports, ae_title, impl_uid, impl_name)
+    MAX_ASSOC: int
+    MAX_PDU_SIZE: int | None # None -> pynetdicom's own default
+    REQUIRE_CALLED_AET: bool = False
+    REQUIRE_CALLING_AET: list[str] | None = None
+
+def new_config(
+        host: str,
+        ports: list[int],
+        ae_title: str,
+        impl_uid: str | None,
+        impl_name: str | None,
+        operations: list[str],
+        verification: SopClass,
+        storage_classes: list[SopClass],
+        qr_classes: dict[str, list[SopClass]],
+        max_associations: int,
+        max_pdu_size: int | None,
+        *,
+        require_called_aet: bool = False,
+        require_calling_aet: list[str] | None = None,
+    ) -> ServerConfig:
+    return ServerConfig(
+        host, ports, ae_title, impl_uid, impl_name,
+        operations, verification, storage_classes, qr_classes,
+        max_associations, max_pdu_size,
+        REQUIRE_CALLED_AET=require_called_aet,
+        REQUIRE_CALLING_AET=require_calling_aet,
+    )
 
 class Server:
     listeners: list[ThreadedAssociationServer]
@@ -52,23 +76,37 @@ class Server:
         # Titles
         ae = AE(ae_title=self.config.AE_TITLE)
 
-        # Implementation identification
-        ae.implementation_class_uid = self.config.IMPLEMENTATION_UID
-        ae.implementation_version_name = self.config.IMPLEMENTATION_NAME
+        if self.config.IMPLEMENTATION_UID:
+            ae.implementation_class_uid = self.config.IMPLEMENTATION_UID
+        if self.config.IMPLEMENTATION_NAME:
+            ae.implementation_version_name = self.config.IMPLEMENTATION_NAME
 
         # Other config
         ae.maximum_associations = self.config.MAX_ASSOC
-        # NOTE: this is an annoying setting. Default value refuses connections
-        # from greedy malware
-        ae.maximum_pdu_size = 65536
+        if self.config.MAX_PDU_SIZE is not None:
+            ae.maximum_pdu_size = self.config.MAX_PDU_SIZE
 
-        # scu_role lets the server SEND instances during C-GET/C-MOVE sub-operations; scp_role
-        # lets it RECEIVE C-STORE. Without scu_role, C-GET sub-operations are rejected.
-        for ctx in AllStoragePresentationContexts:
-            ae.add_supported_context(ctx.abstract_syntax, scu_role=True, scp_role=True)
+        ops = self.config.OPERATIONS
+        if "echo" in ops:
+            uid, ts = self.config.VERIFICATION
+            ae.add_supported_context(uid, ts)
 
-        for qr in chain(_QR_CLASSES.values(), _VERIFICATION_CLASSES.values()):
-            ae.add_supported_context(qr)
+        # scu_role lets the server SEND instances during C-GET sub-operations; scp_role lets
+        # it RECEIVE C-STORE. Without scu_role, C-GET sub-operations are rejected.
+        if "store" in ops:
+            for uid, ts in self.config.STORAGE_CLASSES:
+                ae.add_supported_context(uid, ts, scu_role=True, scp_role=True)
+
+        for op in ("find", "move", "get"):
+            if op not in ops:
+                continue
+            for uid, ts in self.config.QR_CLASSES.get(op, []):
+                ae.add_supported_context(uid, ts, scu_role=True, scp_role=True)
+
+        if self.config.REQUIRE_CALLED_AET:
+            ae.require_called_aet = True
+        if self.config.REQUIRE_CALLING_AET:
+            ae.require_calling_aet = self.config.REQUIRE_CALLING_AET
 
         return ae
     

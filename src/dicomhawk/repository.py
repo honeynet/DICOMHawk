@@ -102,7 +102,7 @@ class Repository:
     def supports(self, sop: UID | None) -> bool:
         return sop in self.supported_sop
 
-    def eval_qr(self, event: Event) -> QRError | None:
+    def eval_qr(self, event: Event, missing_level_status: QRStatus = QRStatus.SOP_CLASS_INVALID) -> QRError | None:
         if not self.supports(sop:=event.request.AffectedSOPClassUID):
             return QRError(f"SOP Class not supported: {sop}", QRStatus.SOP_CLASS_NOT_SUPPORTED)
 
@@ -111,7 +111,7 @@ class Repository:
         except Exception as exc:
             return QRError(f"Undecodable query identifier: {exc}", QRStatus.SOP_CLASS_INVALID)
         if not ds.get("QueryRetrieveLevel"):
-            return QRError(f"request identifier not supported: {ds}", QRStatus.SOP_CLASS_INVALID)
+            return QRError(f"request identifier not supported: {ds}", missing_level_status)
         return None
     
     def find(self, ds: Dataset, model, inject: bool = False) -> QRResult:
@@ -130,9 +130,7 @@ class Repository:
             conn.rollback()
             return QRResult(error=QRError(f"Exception occurred while querying database: {exc}"))
 
-        # Quarantine jail: uploaded files must never be visible to DICOM clients.
-        matches = [m for m in matches if not self.storage.is_quarantined(m.filename)]
-
+        # Quarantined files stay visible here; find_instance() below still blocks the bytes.
         if inject:
             matches = [self._apply_middlewares(m) for m in matches]
 

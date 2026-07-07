@@ -13,10 +13,12 @@ services:
     command:
       - dicomhawk
       - serve
+      - --profile
+      - "${DICOMHAWK_PROFILE:-}"        # empty = generic default; e.g. "fujifilm" or a mounted /path.yaml
       - -p
       - "${DICOMHAWK_PORTS:-104,11112}"
       - -ae
-      - "${DICOMHAWK_AE_TITLE:-ORTHANC}"
+      - "${DICOMHAWK_AE_TITLE:-}"       # empty = use the profile's AE title; set to override it
       - -db
       - "${DICOMHAWK_DB:-/opt/dicomhawk/storage/dicomhawk.db}"
       - -t

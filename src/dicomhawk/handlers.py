@@ -40,6 +40,7 @@ _QR_EVENTS: frozenset[EventType] = frozenset({
 
 _ACSE_EVENTS: frozenset[EventType] = frozenset({
     evt.EVT_ACSE_RECV,
+    evt.EVT_ACSE_SENT,
     evt.EVT_RELEASED,
     evt.EVT_ABORTED,
 })
@@ -90,7 +91,12 @@ def handle_associate(repo: Repository, bus: Logger, cache: SessionCache, event: 
             if v:
                 cache.cache_version(event.assoc, v.strip())
             break
-    bus.info(InteractionEvent(event, cache, "Association Requested"))
+    # Logged before AE-title auth can reject the association — only place these are seen.
+    params = [
+        f"Called: {event.primitive.called_ae_title}",
+        f"Calling: {event.primitive.calling_ae_title}",
+    ]
+    bus.info(InteractionEvent(event, cache, "Association Requested", session_parameters=params))
 
 
 def handle_release(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> None:
@@ -100,6 +106,21 @@ def handle_release(repo: Repository, bus: Logger, cache: SessionCache, event: Ev
 
 def handle_abort(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> None:
     bus.warning(InteractionEvent(event, cache, "Association Aborted", log_level="WARNING"))
+    cache.clear(event.assoc)
+
+
+def handle_reject(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> None:
+    # EVT_ACSE_SENT fires for every ACSE PDU we send (accept, release-RP, abort too);
+    # only log the A-ASSOCIATE-RJ. result 0x01/0x02 = rejected (0x00 = accepted).
+    prim = event.primitive
+    if not isinstance(prim, A_ASSOCIATE) or prim.result not in (0x01, 0x02):
+        return
+    params = [
+        f"Result: {prim.result_str}",
+        f"Source: {prim.result_source}",
+        f"Reason: {prim.diagnostic}",
+    ]
+    bus.warning(InteractionEvent(event, cache, "Association Rejected", session_parameters=params, log_level="WARNING"))
     cache.clear(event.assoc)
 
 
@@ -202,7 +223,7 @@ def handle_get(repo: Repository, bus: Logger, cache: SessionCache, event: Event)
 
 
 def handle_move(repo: Repository, bus: Logger, cache: SessionCache, event: Event) -> QRResult:
-    if err := repo.eval_qr(event):
+    if err := repo.eval_qr(event, missing_level_status=QRStatus.INVALID_REQUEST):
         bus.error(InteractionEvent(event, cache, "C-MOVE", matches=0, status=err.status, log_level="ERROR"))
         yield (err.status, None)
         return
@@ -292,6 +313,7 @@ def bind_dimse_simple(handler: EventHandler, repo: Repository, bus: Logger, cach
 _handlers: list[tuple[str, EventType, EventHandler]] = [
     ("connect",   evt.EVT_CONN_OPEN, handle_connect),
     ("associate", evt.EVT_ACSE_RECV, handle_associate),
+    ("reject",    evt.EVT_ACSE_SENT, handle_reject),
     ("release",   evt.EVT_RELEASED,  handle_release),
     ("abort",     evt.EVT_ABORTED,   handle_abort),
     ("echo",      evt.EVT_C_ECHO,    handle_echo),
