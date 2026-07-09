@@ -28,16 +28,46 @@ class DICOMHandlers:
 
     def handle_assoc(self, event):
         try:
+            assoc = event.assoc
+            calling_ae = assoc.requestor.ae_title.strip()
+            called_ae  = assoc.requestor.requested_ae_title.strip()
+            ip_addr    = assoc.requestor.address
 
+            # CALLED AE validation
+            if called_ae not in ALLOWED_AE_TITLES:
+                try:
+                    self.event_collector.record_rejected_assoc(
+                        ip_addr, calling_ae, called_ae, "INVALID_CALLED_AE"
+                    )    
+                except Exception:
+                    pass
+
+                assoc.reject(result=0x01, source=0x01, reason=0x07)
+                return
+
+            # CALLING AE validation
+            if calling_ae not in ALLOWED_AE_TITLES:
+                try:
+                    self.event_collector.record_rejected_assoc(
+                        ip_addr, calling_ae, called_ae, "INVALID_CALLING_AE"
+                    )
+                except Exception:
+                    pass
+
+                assoc.reject(result=0x01, source=0x01, reason=0x03)
+                return
+
+            # Only valid associations reach here
             version_name = (
-                str(event.assoc.requestor.implementation_version_name)
-                if event.assoc.requestor.implementation_version_name
+                str(assoc.requestor.implementation_version_name)
+                if assoc.requestor.implementation_version_name
                 else "N/A"
             )
-            ip = str(event.assoc.requestor.address)
-            port = event.assoc.requestor.port
+            ip = str(ip_addr)
+            port = assoc.requestor.port
             self.event_collector.session_started(ip, port, version_name)
-        except Exception as e:
+
+        except Exception:
             self.exceptions_logger.exception(
                 "Unexpected error while handling association"
             )
@@ -311,3 +341,5 @@ class DICOMHandlers:
                 ]
 
         return matching
+
+

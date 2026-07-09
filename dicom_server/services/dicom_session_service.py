@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 class ISessionCollector(ABC):
 
     @abstractmethod
+    def record_rejected_assoc(self, ip, calling_ae, called_ae, reason):
+        pass
+
+    @abstractmethod
     def session_started(self, ip, port, version_name) -> None:
         """Start the DICOM session on association request recieved"""
         pass
@@ -37,3 +41,4 @@ class ISessionCollector(ABC):
     def set_session_id(self, session_id) -> None:
         """Set an identifier to the current session"""
         pass
+

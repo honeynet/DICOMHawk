@@ -10,6 +10,24 @@ from enums.dicom_session_keys import Sessionkeys as sk
 
 class SessionCollector(ISessionCollector):
     @inject
+    def record_rejected_assoc(self, ip, calling_ae, called_ae, reason,
+                              redis: IRedisService = None):
+
+        if not redis:
+            return
+        try:
+            event = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "ip": str(ip),
+                    "calling_ae": calling_ae.decode(errors="ignore") if isinstance(calling_ae, bytes) else str(calling_ae),
+                    "called_ae": called_ae.decode(errors="ignore") if isinstance(called_ae, bytes) else str(called_ae),
+                    "reason": reason,
+                }
+                redis.add_security_event(event)
+        except Exception:
+            self.exceptions_logger.exception("Failed to record rejected association to Redis")
+
+    @inject
     def __init__(
         self,
         app_logger,
@@ -176,3 +194,6 @@ class SessionCollector(ISessionCollector):
 
     def set_session_id(self, s_id):
         self.session_info[sk.SESSION_ID.key] = s_id
+
+
+
