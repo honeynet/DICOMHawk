@@ -46,11 +46,11 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*"]
+include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*"]
 
 [tool.setuptools.package-data]
-seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md"]
-profiles = ["builtin/*.yaml", "builtin/*.ico"]
+seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md", "config.yaml"]
+profiles = ["*/*.yaml", "*/web/config.yaml", "*/web/templates/*.html", "*/web/static/**/*"]
 
 [project.urls]
 Homepage = "https://github.com/honeynet/DICOMHawk"

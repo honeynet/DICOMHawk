@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" class="hydrated"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Synapse Log On</title>
+    <link href="{{ url_for('static', filename='synapse/head-third-party.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='synapse/head-app.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='synapse/app.css') }}" rel="stylesheet">
+</head>
+
+<body lang="en" class="sw-dark">
+
+    <div class="navbar navbar-inverse navbar-fixed-top">
+        <div class="navbar-header">
+            <span class="navbar-brand">
+                <svg xmlns="http://www.w3.org/2000/svg" class="logo" viewBox="0 0 130 20" preserveAspectRatio="xMinYMid meet">
+                    <path class="letters" d=""></path>
+                    <path class="stroke" d=""></path>
+                </svg>
+            </span>
+        </div>
+    </div>
+
+    <div class="center-parent" id="center-parent" style="padding-top: 284.5px;">
+        <div class="container">
+            <div class="page-header">
+                <h1 id="errormsg">Unable to log in using Windows Authentication.</h1>
+            </div>
+            <a id="loginbtn" class="btn btn-primary" href="/SynapseSignOn/sts/connect/authorize?winloginstatus=failure">Log in directly</a>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='synapse/translation.js') }}"></script>
+    <script nonce="{{ csp_nonce }}">
+        window.onload = function (e) {
+            getTranslations(1);
+        }
+        var updateElements = function (data) {
+            if ((data === undefined) || (data == '')) return;
+            document.title = data['Text1'];
+            document.getElementById("errormsg").innerText = data['Text2'];
+            document.getElementById("loginbtn").innerText = data['Text3'];
+        }
+    </script>
+    <script src="{{ url_for('static', filename='synapse/view-center.js') }}"></script>
+    <script src="{{ url_for('static', filename='synapse/Logo.js') }}"></script>
+</body></html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" class="hydrated"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Synapse Sign-On</title>
+    <link href="{{ url_for('static', filename='synapse/head-third-party.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='synapse/head-app.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='synapse/app.css') }}" rel="stylesheet">
+</head>
+
+<body lang="en" class="sw-dark">
+
+    <div class="navbar navbar-inverse navbar-fixed-top">
+        <div class="navbar-header">
+            <span class="navbar-brand">
+                <svg xmlns="http://www.w3.org/2000/svg" class="logo" viewBox="0 0 130 20" preserveAspectRatio="xMinYMid meet">
+                    <path class="letters" d=""></path>
+                    <path class="stroke" d=""></path>
+                </svg>
+            </span>
+        </div>
+    </div>
+
+    <div class="center-parent" id="center-parent" style="padding-top: 284.5px;">
+        <div class="container">
+            <div class="page-header">
+                <h1>Error</h1>
+            </div>
+            {% if error_message %}<div class="alert alert-danger"><strong>Error:</strong> {{ error_message }}</div>{% endif %}
+            <div><strong>Request Id: </strong><span>{{ request_id }}</span></div>
+            <p><a class="btn btn-link" href="/SynapseSignOn/sts/login">Please click here to sign in</a></p>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='synapse/Logo.js') }}"></script>
+</body></html>

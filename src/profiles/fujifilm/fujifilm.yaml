@@ -44,10 +44,6 @@ identity:
   manufacturer: FUJIFILM Healthcare Americas Corporation
   model_name: Synapse PACS
 
-operator:
-  honey_url: null
-  canary_pdf: null
-
 dicom:
   operations: [echo, find, get, move, store]
   max_associations: 16     
@@ -256,4 +252,4 @@ web:
   x_powered_by: ASP.NET                
   x_aspnet_version: 4.0.30319          
   title: Synapse Sign-On               
-  favicon: fujifilm-favicon.ico        
+  favicon: favicon.ico                 # under web/static/synapse/

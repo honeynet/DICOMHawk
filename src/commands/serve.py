@@ -11,6 +11,7 @@ from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
 
 from profiles.profile import load_profile
+from seeding.config import load_seeding_config
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def serve(
         profile: str | None = typer.Option(
             None,
             "--profile",
-            help="Profile name (profiles/builtin/<name>.yaml) or path to a custom profile YAML; omit for generic behavior"
+            help="Profile name (profiles/<name>/<name>.yaml) or path to a custom profile YAML; omit for generic behavior"
         ),
         ae_title: str | None = typer.Option(
             None,
@@ -118,9 +119,10 @@ def serve(
 
     store = new_store(traces)
 
+    honeytoken = load_seeding_config()["honeytoken"]
     injector = new_honeytoken_injector(
-        honey_url or prof.operator.honey_url,
-        canary_pdf or prof.operator.canary_pdf,
+        honey_url or honeytoken["honey_url"],
+        canary_pdf or honeytoken["canary_pdf"],
     )
     mws: list[Middleware] = [injector]
 

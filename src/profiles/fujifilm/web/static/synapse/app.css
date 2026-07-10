@@ -1,0 +1,346 @@
+﻿/*ScrollBar*/
+::-webkit-scrollbar {
+  background-color: #161c1b;
+}
+::-webkit-scrollbar-button {
+  color: #cccccc;
+}
+::-webkit-scrollbar-button:hover,
+::-webkit-scrollbar-button.hover {
+  background-color: #454d4d;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #303939;
+  border-radius: 14px;
+  box-shadow: 0px 1px 3px 0 rgba(0, 0, 0, 0.3), inset 0 0 0px 1px rgba(255, 255, 255, 0.05);
+  border: 2px solid #161c1b;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #454d4d;
+}
+.widget ::-webkit-scrollbar-thumb {
+  border-color: #0d1a19;
+}
+.widget ::-webkit-scrollbar-thumb:hover {
+  background-color: #454d4d;
+}
+.control ::-webkit-scrollbar-thumb:hover {
+  border-color: #1b2a29;
+}
+.control ::-webkit-scrollbar-thumb:hover:hover {
+  background-color: #585f5f;
+}
+::-webkit-scrollbar-track {
+  background-color: #161c1b;
+}
+.widget ::-webkit-scrollbar-track {
+  background-color: #0d1a19;
+}
+.control ::-webkit-scrollbar-track {
+  background-color: #1b2a29;
+}
+::-webkit-scrollbar-track-piece {
+  background-color: #161c1b;
+}
+::-webkit-scrollbar-corner {
+  background-color: #122221;
+}
+* {
+  scrollbar-track-color: #161c1b;
+  scrollbar-arrow-color: #cccccc;
+  scrollbar-face-color: #303939;
+  scrollbar-shadow-color: #303939;
+  scrollbar-highlight-color: #303939;
+  scrollbar-darkshadow-color: #161c1b;
+  scrollbar-3dlight-color: #161c1b;
+}
+.widget * {
+  scrollbar-track-color: #0d1a19;
+  scrollbar-shadow-color: #0d1a19;
+  scrollbar-highlight-color: #0d1a19;
+}
+.control * {
+  scrollbar-track-color: #1b2a29;
+  scrollbar-shadow-color: #1b2a29;
+  scrollbar-highlight-color: #1b2a29;
+}
+
+.alt-password {
+    position: relative    
+}
+
+.alt-password input {
+    border: none ;
+    width: 100% ;
+    box-sizing: border-box
+}
+
+.alt-password i {
+    cursor: pointer;
+    position: absolute;
+    top: 10px;
+    right: 15px
+}
+
+input[type=password]::-ms-reveal,
+input[type=password]::-ms-clear {
+    display: none;
+}
+input[type=text]::-ms-clear {
+    display: none;
+}
+
+
+body {
+  background-color: #303F3E; /* added */
+  color: #dcdcdc;            /* added */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body,p {
+  font-size: 13px;
+  font-family :'Open Sans';
+  line-height :1.7em
+}
+.center-parent {
+    padding-top: 70px;
+}
+[ng-cloak] {
+  display: none;
+}
+.page-error .request-id {
+  margin-left: 20px;
+  font-size: 80%;
+  font-weight: bold;
+}
+.page-error .request-id span {
+  font-weight: normal;
+}
+.page-login .list-unstyled {
+  margin-left: 12px;
+}
+.page-login .list-unstyled li {
+  margin-bottom: 10px;
+}
+.page-login .login-remember {
+  padding-left: 16px;
+}
+.page-login .login-remember input {
+  margin-right: 5px;
+}
+.page-login .external-providers li:first-child {
+  padding-left: 5px;
+}
+.page-login .external-providers li {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.page-loggedOut iframe.signout {
+  display: none;
+}
+.page-consent .client-logo {
+  float: left;
+}
+.page-consent .client-logo img {
+  width: 80px;
+  height: 80px;
+}
+.page-consent .consent-buttons {
+  margin-top: 25px;
+}
+.page-consent .consent-form .consent-scopecheck {
+  display: inline-block;
+  margin-right: 5px;
+}
+.page-consent .consent-form .consent-description {
+  margin-left: 25px;
+}
+.page-consent .consent-form .consent-description label {
+  font-weight: normal;
+}
+.page-consent .consent-form .consent-remember {
+  padding-left: 16px;
+}
+.page-permissions .page-header {
+  margin-bottom: 10px;
+}
+.page-permissions .permissions .permission {
+  margin-top: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid lightgray;
+}
+.page-permissions .permissions .permission img {
+  width: 100px;
+  height: 100px;
+}
+.page-permissions .permissions .permission .permission-clientname {
+  font-size: 140%;
+  font-weight: bold;
+}
+.page-permissions .permissions .permission .permission-type {
+  font-size: 120%;
+  font-weight: bold;
+}
+.page-permissions .permissions .permission li {
+  list-style-type: none;
+  display: inline;
+}
+.page-permissions .permissions .permission li:after {
+  content: ', ';
+}
+.page-permissions .permissions .permission li:last-child:after {
+  content: '';
+}
+
+
+
+/* ----| added |----- */
+a {
+    color : #38946B;
+}
+
+.btn-primary {
+    color: #fff;
+    background-color: #38946B;
+    border-color: #38946B;
+}
+
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active, .active.btn-primary, .open .btn-primary.dropdown-toggle {
+    color: #fff;
+    background-color: #38946B;
+    border-color: #38946B;
+}
+
+.btn-linkbutton {
+    text-align: left;
+    white-space: normal;
+    padding: 0;
+    padding-bottom: 10px;
+}
+
+.disabled.btn-primary, [disabled].btn-primary, fieldset[disabled] .btn-primary, .disabled.btn-primary:hover, [disabled].btn-primary:hover, fieldset[disabled] .btn-primary:hover, .disabled.btn-primary:focus, [disabled].btn-primary:focus, fieldset[disabled] .btn-primary:focus, .disabled.btn-primary:active, [disabled].btn-primary:active, fieldset[disabled] .btn-primary:active, .active.disabled.btn-primary, [disabled].active.btn-primary, fieldset[disabled] .active.btn-primary {
+    background-color:  #38946B;
+    border-color: #38946B;
+}
+
+.form-control, body.sw-dark .form-group input[type=text] {
+    background-color: #303F3E !important;
+    color: #dcdcdc; 
+    border: 1px solid #38946B;
+}
+
+.form-control, body.sw-dark .form-group input[type=password] {
+    background-color: #303F3E !important;
+    color: #dcdcdc; 
+    border: 1px solid #38946B;
+}
+
+.form-control:focus, body.sw-dark .form-group input[type=text]:focus {
+  border-color: #ccc;
+}
+
+.form-control:focus, body.sw-dark .form-group input[type=password]:focus {
+  border-color: #ccc;
+}
+
+.form-group + label
+{
+    color: #38946B; 
+}
+
+.navbar-brand {
+    font-size: 0.8rem;
+    line-height: 2;
+}
+
+.fujifilm_logo {       
+    background: url('../images/logo-fujifilm.png');
+}
+
+.navbar-brand .logo {
+    width: 130px;
+    height: 20px;
+}
+
+.navbar-brand .logo, .letters {
+    fill: #FFFFFF;
+}
+
+.navbar-brand .logo, .stroke {
+    fill: #FB0020;
+}
+
+.navbar-inverse {
+    background-color: #122221;
+}
+
+.page-header {
+    padding-bottom: 9px;
+    margin: 40px 0 20px;
+    border-bottom: 0px solid #eee;
+}
+
+.panel{
+    background-color: #38946B;
+}
+
+.panel-body {
+    background-color: #263938;
+}
+
+.panel-default{
+    border-color: #38946B;
+}
+
+.panel-default > .panel-heading {
+    color: #dcdcdc;
+    background-color: #38946B;
+    border-color: #38946B;
+}
+
+.usersso {
+    float: right;
+}
+
+.login-well {
+    background-color: #263938;
+    border-color: #38946B;
+}
+
+.shadow-box {
+    box-shadow: 0px 1px 3px rgba(0,0,0,0.6);
+    background-color: #182c2b;
+    padding: 15px;
+}
+
+.license-warning {
+    color:red;
+}
+
+.license-expires-soon {
+    color:red;
+}
+
+.license-expires-not-soon {
+    color:inherit;
+}
+
+@media (max-width: 767px) {.hidden-xs {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {.hidden-sm {
+    display: none !important;
+  }
+}
+
+@media (min-width: 992px) and (max-width: 1199px) {.hidden-md {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1200px) {.hidden-lg {
+   display: none !important;
+  }
+}

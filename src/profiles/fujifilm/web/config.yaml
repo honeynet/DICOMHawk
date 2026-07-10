@@ -1,0 +1,47 @@
+# Operator-tunable web values. Edit and restart to apply.
+
+behavior:
+  grant_access: false            # false = log + deny; true = grant into the decoy worklist
+
+# Static response headers, emitted on every response. Add/edit to match a target
+# Synapse/IIS version. X-Backendserver is site-specific — set per deploy, never reuse a real one.
+headers:
+  Server: Microsoft-IIS/10.0
+  X-Powered-By: ASP.NET
+  X-AspNet-Version: 4.0.30319
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  X-Backendserver: SYNWEB01
+
+# Cache headers applied to HTML pages only (static assets stay cacheable).
+html_cache_headers:
+  Cache-Control: "no-store, no-cache, max-age=0, private"
+  Pragma: no-cache
+
+# CSP, emitted as both Content-Security-Policy and legacy X-Content-Security-Policy.
+# Keep the {nonce} placeholder — it is filled per request so inline scripts run.
+content_security_policy: >-
+  default-src 'self'; script-src 'nonce-{nonce}' 'self'; style-src 'self' 'unsafe-inline';
+  img-src *; report-uri /SynapseSignOn/sts/csp/report
+
+identity:
+  version: "7.4.220"             # version stamp on the login logo
+  copyright: "Copyright © 2024-2025 FUJIFILM Healthcare Americas Corporation. All rights reserved."
+
+license:                         # "Licensed to:" block; keep coherent with the seeded institution
+  issued: "03/04/2026"
+  lines:
+    - "SYNAPSE PACS"
+    - "RADIOLOGY DEPARTMENT"
+    - "1 HOSPITAL WAY"
+    - "SPRINGFIELD, 11111"
+
+oidc:                            # "Log in with Windows instead" link; values vary by version/deploy
+  client_id: synapsebaseclient
+  client_name: SynapseBase       # display name shown in the page modelJson (pairs with client_id)
+  redirect_path: /Synapse/       # post-login target in the OIDC link (e.g. /Synapse/, /WorkflowUI/)
+  scopes: >-
+    openid offline_access profile roles privileges usersession culture dbuser
+    auth_mode full_name APService DcmApi ProxyService RPEngine StdApi
+    ThinkLogService ViewerService WorkflowEngine SubscriptionService
+    ExtApiService XDSConsumerApi FHIRCastHub

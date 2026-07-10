@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html class="hydrated"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Synapse Worklist</title>
+    <link href="{{ url_for('static', filename='synapse/head-third-party.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='synapse/head-app.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='synapse/app.css') }}" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='synapse/OpenSansFonts.css') }}">
+    <style>
+        body.sw-dark { padding-top: 60px; }
+        .worklist-wrap { padding: 20px 30px; }
+        .worklist-table { width: 100%; border-collapse: collapse; }
+        .worklist-table th, .worklist-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2E403F; }
+        .worklist-table thead th { color: #7ec699; border-bottom: 2px solid #3d5a50; font-weight: 600; }
+        .worklist-table tbody tr:hover { background: rgba(126,198,153,0.08); }
+        .folder-nav { color: #7ec699; }
+        .folder-nav li { padding: 6px 0; list-style: none; }
+    </style>
+</head>
+<body lang="en" class="sw-dark">
+    <nav class="navbar navbar-inverse navbar-fixed-top" style="position:fixed;">
+        <div class="navbar-header">
+            <span class="navbar-brand">
+                <img src="{{ url_for('static', filename='synapse/logo-fujifilm.png') }}">
+            </span>
+        </div>
+    </nav>
+    <div class="worklist-wrap">
+        <div class="row">
+            <div class="col-md-2">
+                <ul class="folder-nav list-unstyled">
+                    <li>&#128193; All Studies</li>
+                    <li>&#128193; Unread</li>
+                    <li>&#128193; Assigned to me</li>
+                    <li>&#128193; STAT</li>
+                </ul>
+            </div>
+            <div class="col-md-10">
+                <table class="worklist-table">
+                    <thead>
+                        <tr>
+                            <th>Patient Name</th>
+                            <th>Proc Description</th>
+                            <th>Study Date Time</th>
+                            <th>Modality</th>
+                            <th>Status</th>
+                            <th>Age</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in studies %}
+                        <tr>
+                            <td>{{ s.patient_name }}</td>
+                            <td>{{ s.description }}</td>
+                            <td>{{ s.study_datetime }}</td>
+                            <td>{{ s.modality }}</td>
+                            <td>{{ s.status }}</td>
+                            <td>{{ s.age }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" style="color:#888">No studies.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body></html>

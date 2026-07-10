@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
@@ -7,7 +8,9 @@ from pynetdicom import DEFAULT_TRANSFER_SYNTAXES
 from pynetdicom.presentation import AllStoragePresentationContexts
 from pynetdicom.sop_class import _QR_CLASSES, _VERIFICATION_CLASSES
 
-_DATA_PKG = "profiles.builtin"
+logger = logging.getLogger(__name__)
+
+_DATA_PKG = "profiles"
 
 # (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
@@ -34,12 +37,6 @@ class DicomConfig:
 
 
 @dataclass
-class OperatorConfig:
-    honey_url: str | None = None
-    canary_pdf: str | None = None
-
-
-@dataclass
 class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
@@ -47,7 +44,7 @@ class WebConfig:
     x_powered_by: str | None = None
     x_aspnet_version: str | None = None
     title: str | None = None
-    favicon: str | None = None       # filename under profiles/builtin/, served by the #161 web component
+    favicon: str | None = None       # filename under the profile's folder, served by the web component
 
 
 @dataclass
@@ -60,7 +57,6 @@ class ProfileConfig:
     manufacturer: str | None
     model_name: str | None
     dicom: DicomConfig
-    operator: OperatorConfig
     web: WebConfig
 
 
@@ -97,7 +93,6 @@ def default_profile() -> ProfileConfig:
             max_pdu_size=65536, # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
             ae_auth=AEAuthConfig(),
         ),
-        operator=OperatorConfig(),
         web=WebConfig(),
     )
 
@@ -115,55 +110,80 @@ def _parse_sop_class(entry: dict, where: str) -> SopClass:
 
 
 def _parse_profile(data: dict) -> ProfileConfig:
+    """Overlay a partial profile YAML onto default_profile(); missing keys use defaults, malformed entries raise."""
+    d = default_profile()
     if not isinstance(data, dict):
-        raise ValueError("Profile YAML must be a mapping at the top level")
+        data = {}
+    meta = data.get("meta") or {}
+    identity = data.get("identity") or {}
+    dicom_raw = data.get("dicom") or {}
+    web_raw = data.get("web") or {}
 
-    meta = _require(data, "meta", "top-level")
-    identity = _require(data, "identity", "top-level")
-    dicom_raw = _require(data, "dicom", "top-level")
-    operator_raw = data.get("operator", {})
-    web_raw = data.get("web", {})
+    fell_back: list[str] = []
 
-    verification = _parse_sop_class(_require(dicom_raw, "verification", "dicom"), "dicom.verification")
+    def dget(section: dict, key: str, default, label: str):
+        if key in section:
+            return section[key]
+        fell_back.append(label)
+        return default
 
-    storage_classes = [
-        _parse_sop_class(e, "dicom.storage_classes")
-        for e in _require(dicom_raw, "storage_classes", "dicom")
-    ]
+    ae_title = dget(identity, "ae_title", d.ae_title, "identity.ae_title")
+    operations = list(dget(dicom_raw, "operations", d.dicom.operations, "dicom.operations"))
+    max_associations = int(dicom_raw.get("max_associations", d.dicom.max_associations))
 
-    qr_classes = {
-        op: [_parse_sop_class(e, f"dicom.qr_classes.{op}") for e in entries]
-        for op, entries in _require(dicom_raw, "qr_classes", "dicom").items()
-    }
+    if "verification" in dicom_raw:
+        verification = _parse_sop_class(dicom_raw["verification"], "dicom.verification")
+    else:
+        verification = d.dicom.verification
+        fell_back.append("dicom.verification")
 
-    ae_auth_raw = dicom_raw.get("ae_auth", {})
+    if "storage_classes" in dicom_raw:
+        storage_classes = [_parse_sop_class(e, "dicom.storage_classes")
+                           for e in dicom_raw["storage_classes"]]
+    else:
+        storage_classes = d.dicom.storage_classes
+        fell_back.append("dicom.storage_classes")
+
+    if "qr_classes" in dicom_raw:
+        qr_classes = {op: [_parse_sop_class(e, f"dicom.qr_classes.{op}") for e in entries]
+                      for op, entries in dicom_raw["qr_classes"].items()}
+    else:
+        qr_classes = d.dicom.qr_classes
+        fell_back.append("dicom.qr_classes")
+
+    if "max_pdu_size" in dicom_raw:
+        v = dicom_raw["max_pdu_size"]
+        max_pdu_size = None if v is None else int(v)
+    else:
+        max_pdu_size = d.dicom.max_pdu_size
+
+    ae_auth_raw = dicom_raw.get("ae_auth") or {}
     ae_auth = AEAuthConfig(
         require_called_aet=bool(ae_auth_raw.get("require_called_aet", False)),
         require_calling_aet=ae_auth_raw.get("require_calling_aet"),
     )
 
-    dicom = DicomConfig(
-        operations=list(_require(dicom_raw, "operations", "dicom")),
-        verification=verification,
-        storage_classes=storage_classes,
-        qr_classes=qr_classes,
-        max_associations=int(_require(dicom_raw, "max_associations", "dicom")),
-        max_pdu_size=(v if (v := _require(dicom_raw, "max_pdu_size", "dicom")) is None else int(v)),
-        ae_auth=ae_auth,
-    )
+    name = meta.get("name", d.name)
+    if fell_back:
+        logger.warning("Profile '%s' missing keys; using defaults for: %s",
+                       name, ", ".join(fell_back))
 
     return ProfileConfig(
-        name=_require(meta, "name", "meta"),
-        kind=_require(meta, "kind", "meta"),
-        ae_title=_require(identity, "ae_title", "identity"),
-        implementation_class_uid=identity.get("implementation_class_uid"),
-        implementation_version_name=identity.get("implementation_version_name"),
-        manufacturer=identity.get("manufacturer"),
-        model_name=identity.get("model_name"),
-        dicom=dicom,
-        operator=OperatorConfig(
-            honey_url=operator_raw.get("honey_url"),
-            canary_pdf=operator_raw.get("canary_pdf"),
+        name=name,
+        kind=meta.get("kind", d.kind),
+        ae_title=ae_title,
+        implementation_class_uid=identity.get("implementation_class_uid", d.implementation_class_uid),
+        implementation_version_name=identity.get("implementation_version_name", d.implementation_version_name),
+        manufacturer=identity.get("manufacturer", d.manufacturer),
+        model_name=identity.get("model_name", d.model_name),
+        dicom=DicomConfig(
+            operations=operations,
+            verification=verification,
+            storage_classes=storage_classes,
+            qr_classes=qr_classes,
+            max_associations=max_associations,
+            max_pdu_size=max_pdu_size,
+            ae_auth=ae_auth,
         ),
         web=WebConfig(
             enabled=bool(web_raw.get("enabled", False)),
@@ -178,7 +198,7 @@ def _parse_profile(data: dict) -> ProfileConfig:
 
 
 def load_profile(source: str | None) -> ProfileConfig:
-    """None/"" -> default_profile(); a file path -> load it; else -> bundled profiles/builtin/<source>.yaml."""
+    """None/"" -> default_profile(); a file path -> load it; else -> bundled profiles/<source>/<source>.yaml."""
     if not source:  # None or "" (e.g. an unset DICOMHAWK_PROFILE env in compose)
         return default_profile()
 
@@ -187,10 +207,10 @@ def load_profile(source: str | None) -> ProfileConfig:
         text = path.read_text()
     else:
         try:
-            text = files(_DATA_PKG).joinpath(f"{source}.yaml").read_text()
-        except FileNotFoundError:
+            text = files(_DATA_PKG).joinpath(source, f"{source}.yaml").read_text()
+        except (FileNotFoundError, ModuleNotFoundError):
             raise FileNotFoundError(
-                f"No such profile: '{source}' (not a file, and no bundled {_DATA_PKG}/{source}.yaml)"
+                f"No such profile: '{source}' (not a file, and no bundled {_DATA_PKG}/{source}/{source}.yaml)"
             )
 
     return _parse_profile(yaml.safe_load(text))

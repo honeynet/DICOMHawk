@@ -1,0 +1,49 @@
+﻿.form-control, body.sw-dark .form-group input[type=text] {
+    background-color: #303F3E !important;
+    color: #dcdcdc; 
+    border: 1px solid #38946B;
+}
+.form-control, body.sw-dark .form-group textarea {
+    background-color: #303F3E !important;
+    color: #dcdcdc; 
+    border: 1px solid #38946B;
+}
+.form-control:focus, body.sw-dark .form-group input[type=text]:focus {  
+  border:1px solid #ccc;
+}
+.form-control:focus, body.sw-dark .form-group textarea:focus {  
+  border:1px solid #ccc;
+}
+.mandatory {
+    color: red;
+}
+
+body.sw-dark .important-notice {
+    color : #CC2200;
+}
+
+body.sw-light .important-notice {
+    color : darkred;
+}
+
+.navbar-brand {
+    font-size: 0.8rem;
+    line-height: 2;
+}
+
+.navbar-brand .logo {
+    width: 130px;
+    height: 20px;
+}
+
+.navbar-brand .logo, .letters {
+    fill: white;
+}
+
+.navbar-brand .logo, .stroke {
+    fill: #e61c27;
+}
+
+div.license-data {
+    word-wrap: break-word;
+}

@@ -123,7 +123,7 @@ def hash_request(evt: Event) -> str:
 
 
 class InteractionEvent:
-    """One structured JSON line in the honeypot interaction log."""
+    """One JSON line in the interaction log; `channel` tags the protocol (DIMSE/WEB/DICOMWEB)."""
 
     def __init__(
         self,
@@ -138,7 +138,70 @@ class InteractionEvent:
         log_level: str = "INFO",
     ) -> None:
         assoc = evt.assoc
-        self.session_id = cache.get_session_id(assoc)
+        # Connection events carry the peer in event.address; DIMSE/ACSE use the requestor.
+        addr = getattr(evt, "address", None)
+        ip, port = (addr[0], addr[1]) if addr is not None else \
+            (assoc.requestor.address, assoc.requestor.port)
+        self._populate(
+            channel="DIMSE",
+            session_id=cache.get_session_id(assoc),
+            request_type=request_type,
+            query_level=query_level,
+            session_parameters=session_parameters,
+            matches=matches,
+            status=status,
+            log_level=log_level,
+            version=cache.get_version(assoc),
+            ip=ip,
+            port=port,
+            local_port=getattr(assoc.acceptor, "port", None),
+        )
+
+    @classmethod
+    def from_http(
+        cls,
+        channel: str,
+        request_type: str,
+        *,
+        session_id: str,
+        ip: str | None,
+        port: int | None,
+        local_port: int | None = None,
+        session_parameters: list[str] | None = None,
+        matches: int | None = None,
+        log_level: str = "INFO",
+        method: str | None = None,
+        path: str | None = None,
+        user_agent: str | None = None,
+    ) -> "InteractionEvent":
+        """Build the same log line from an HTTP request (web / DICOMweb), no pynetdicom Event."""
+        self = cls.__new__(cls)
+        self._populate(
+            channel=channel,
+            session_id=session_id,
+            request_type=request_type,
+            query_level=None,
+            session_parameters=session_parameters,
+            matches=matches,
+            status=None,
+            log_level=log_level,
+            version=None,
+            ip=ip,
+            port=port,
+            local_port=local_port,
+            method=method,
+            path=path,
+            user_agent=user_agent,
+        )
+        return self
+
+    def _populate(
+        self, *, channel, session_id, request_type, query_level, session_parameters,
+        matches, status, log_level, version, ip, port, local_port,
+        method=None, path=None, user_agent=None,
+    ) -> None:
+        self.channel = channel
+        self.session_id = session_id
         self.request_type = request_type
         self.query_level = query_level
         self.session_parameters = session_parameters
@@ -146,20 +209,20 @@ class InteractionEvent:
         # DIMSE outcome returned to the peer; None for non-DIMSE events.
         self.status: str | None = f"{status.name} (0x{int(status):04X})" if status is not None else None
         self.log_level = log_level
-        self.version = cache.get_version(assoc)
-        # Connection events carry the peer in event.address; DIMSE/ACSE use the requestor.
-        addr = getattr(evt, "address", None)
-        if addr is not None:
-            self.ip, self.port = addr[0], addr[1]
-        else:
-            self.ip = assoc.requestor.address
-            self.port = assoc.requestor.port
-        self.local_port = getattr(assoc.acceptor, "port", None)
+        self.version = version
+        self.ip = ip
+        self.port = port
+        self.local_port = local_port
+        # HTTP-only; None for DIMSE.
+        self.method = method
+        self.path = path
+        self.user_agent = user_agent
         self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     def __str__(self) -> str:
         return ujson.dumps({
             "session_id": self.session_id,
+            "channel": self.channel,
             "request_type": self.request_type,
             "query_level": self.query_level,
             "session_parameters": self.session_parameters,
@@ -170,6 +233,9 @@ class InteractionEvent:
             "port": self.port,
             "local_port": self.local_port,
             "matches": self.matches,
+            "method": self.method,
+            "path": self.path,
+            "user_agent": self.user_agent,
             "timestamp": self.timestamp,
         }, escape_forward_slashes=False)
 
@@ -206,6 +272,7 @@ class _ConsoleFormatter(logging.Formatter):
         ts    = ie.timestamp[11:19]  # HH:MM:SS from ISO string
         parts = [
             f"{dim}{ts}{reset}",
+            f"{dim}{ie.channel}{reset}",
             f"{ie.ip}:{ie.port}",
             f":{ie.local_port}",
             f"{c}{ie.request_type:<22}{reset}",

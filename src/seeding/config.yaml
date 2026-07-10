@@ -1,0 +1,5 @@
+# Honeytoken / bait config, kept separate from the device profile. Edit and restart.
+
+honeytoken:
+  honey_url: null      # base URL injected as RetrieveURL in served datasets (e.g. https://host)
+  canary_pdf: null     # path to a PDF canary token injected as EncapsulatedDocument
