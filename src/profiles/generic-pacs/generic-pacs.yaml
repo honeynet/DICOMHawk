@@ -1,0 +1,16 @@
+# Vendor-neutral "basic" profile: everything but meta/web.enabled/web.templates_dir is
+# omitted on purpose, so it falls back to default_profile()'s generic values (see profile.py).
+meta:
+  name: generic-pacs
+  kind: pacs
+web:
+  enabled: true
+  templates_dir: generic-pacs
+  # No real vendor to stay coherent with, so a fabricated admin-bait path is fine here (design ref: v2.0's admin.routes.js).
+  honeytraps:
+    - path: /admin/
+      response: unauthorized_page
+  # Safe to disclose in login.html's source since there's no real vendor page to stay faithful to.
+  honey_credentials:
+    - username: test
+      password: test

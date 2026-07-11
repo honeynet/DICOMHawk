@@ -82,9 +82,8 @@ def handle_associate(repo: Repository, bus: Logger, cache: SessionCache, event: 
     # Only log "Association Requested" for the initial A-ASSOCIATE-RQ.
     if not isinstance(event.primitive, A_ASSOCIATE):
         return
-    # Cache version now: assoc.requestor.primitive is overwritten during
-    # negotiate_association() so the peer's version would be lost by the time
-    # any DIMSE handler runs.
+    # Cache now: negotiate_association() overwrites assoc.requestor.primitive later,
+    # losing the peer's version before any DIMSE handler runs.
     for item in event.primitive.user_information:
         if isinstance(item, ImplementationVersionNameNotification):
             v = item.implementation_version_name
@@ -155,7 +154,7 @@ def handle_find(repo: Repository, bus: Logger, cache: SessionCache, event: Event
     if stripped:
         params = (params or []) + [f"Stripped: {', '.join(stripped)}"]
 
-    result = repo.find(idt, model, inject=True)
+    result = repo.find(idt, model)
     if (err := result.error) is not None:
         bus.error(InteractionEvent(event, cache, "C-FIND", query_level=ql, session_parameters=params, matches=0, status=err.status, log_level="ERROR"))
         yield (err.status, None)
@@ -283,9 +282,8 @@ def handle_store(repo: Repository, bus: Logger, cache: SessionCache, event: Even
     yield (QRStatus.SUCCESS, None)
 
 
-# The binders below adapt our (repo, bus, cache, event) handlers to pynetdicom's
-# (event, *args) callback signature, splitting on how pynetdicom consumes the result:
-# ACSE callbacks return nothing, QR callbacks are generators, simple DIMSE return a status int.
+# Binders adapt our (repo, bus, cache, event) handlers to pynetdicom's (event, *args)
+# callback signature; they split on ACSE (no return) vs QR (generator) vs simple DIMSE (status int).
 
 def bind_acse(handler: EventHandler, repo: Repository, bus: Logger, cache: SessionCache) -> Callable:
     def binder(event: Event, *args):

@@ -32,6 +32,7 @@ dependencies = [
     "pyyaml",
     # for the web
     "flask",
+    "waitress",
     "ujson",
     "faker",
 ]
@@ -46,11 +47,11 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*"]
+include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*", "honeytoken", "honeytoken.*"]
 
 [tool.setuptools.package-data]
 seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md", "config.yaml"]
-profiles = ["*/*.yaml", "*/web/config.yaml", "*/web/templates/*.html", "*/web/static/**/*"]
+profiles = ["*/*.yaml", "*/web/templates/*.html", "*/web/static/**/*"]
 
 [project.urls]
 Homepage = "https://github.com/honeynet/DICOMHawk"
@@ -58,3 +59,6 @@ Issues = "https://github.com/honeynet/DICOMHawk/issues"
 
 [project.scripts]
 dicomhawk = "commands.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

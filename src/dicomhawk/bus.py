@@ -3,6 +3,7 @@ import logging
 import sys
 import threading
 import weakref
+from collections import deque
 
 from datetime import datetime, timezone
 from logging import Logger
@@ -30,13 +31,8 @@ _BULK_DATA_KEYWORDS: frozenset[str] = frozenset({
 
 
 class SessionCache:
-    """Tracks session IDs and requestor version names per live association.
-
-    Uses weakref.finalize so entries are purged automatically when the
-    association object is GC'd — important because attackers often drop TCP
-    connections without sending EVT_RELEASED or EVT_ABORTED, which means
-    clear() may never be called and entries would otherwise leak indefinitely.
-    """
+    """Tracks session IDs/versions per live association; weakref.finalize purges entries on
+    GC since attackers often drop the TCP connection without EVT_RELEASED/EVT_ABORTED."""
 
     def __init__(self) -> None:
         self._sessions: dict[int, str] = {}
@@ -299,6 +295,26 @@ class LevelColorFormatter(logging.Formatter):
         return f"{c}{line}{_RESET}" if c else line
 
 
+class RecentEventsHandler(logging.Handler):
+    """Bounded in-memory history of InteractionEvents, for the operator API to query."""
+
+    def __init__(self, maxlen: int = 500) -> None:
+        super().__init__()
+        self.events: deque[InteractionEvent] = deque(maxlen=maxlen)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if isinstance(record.msg, InteractionEvent):
+            self.events.append(record.msg)
+
+
+def recent_events(logger: Logger) -> RecentEventsHandler | None:
+    """Find the RecentEventsHandler new_bus() attached, if any."""
+    for h in logger.handlers:
+        if isinstance(h, RecentEventsHandler):
+            return h
+    return None
+
+
 def new_bus(
     stdout: str | None = None,
     when: str | None = None,
@@ -309,6 +325,7 @@ def new_bus(
     lg = logging.getLogger("bus")
     lg.setLevel(logging.INFO)
     lg.propagate = False  # prevent JSON lines leaking into the root/dev logger
+    lg.addHandler(RecentEventsHandler())
     if stdout:
         lg.addHandler(_build_handler(stdout, when, interval, size))
     if verbose or sys.stdout.isatty():

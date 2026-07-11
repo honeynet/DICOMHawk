@@ -1,5 +1,6 @@
 
 import logging
+import threading
 from logging import Logger
 from dataclasses import dataclass
 from pynetdicom import AE
@@ -31,6 +32,9 @@ class ServerConfig:
     MAX_PDU_SIZE: int | None # None -> pynetdicom's own default
     REQUIRE_CALLED_AET: bool = False
     REQUIRE_CALLING_AET: list[str] | None = None
+    # None -> pynetdicom's own defaults (30s/60s); tighter values shrink a garbage-connection's DoS window.
+    ACSE_TIMEOUT: float | None = None
+    NETWORK_TIMEOUT: float | None = None
 
 def new_config(
         host: str,
@@ -47,6 +51,8 @@ def new_config(
         *,
         require_called_aet: bool = False,
         require_calling_aet: list[str] | None = None,
+        acse_timeout: float | None = None,
+        network_timeout: float | None = None,
     ) -> ServerConfig:
     return ServerConfig(
         host, ports, ae_title, impl_uid, impl_name,
@@ -54,13 +60,13 @@ def new_config(
         max_associations, max_pdu_size,
         REQUIRE_CALLED_AET=require_called_aet,
         REQUIRE_CALLING_AET=require_calling_aet,
+        ACSE_TIMEOUT=acse_timeout,
+        NETWORK_TIMEOUT=network_timeout,
     )
 
 class Server:
-    listeners: list[ThreadedAssociationServer]
-
     def __init__(
-            self, 
+            self,
             bus: Logger,
             config: ServerConfig,
             handlers: list[EventHandlerType],
@@ -69,6 +75,8 @@ class Server:
         self.logger = bus
         self.config = config
         self.handlers = handlers
+        self.listeners: list[ThreadedAssociationServer] = []
+        self._stopped = threading.Event()
 
     def init(self) -> AE:
         logger.debug("Initializing AE")
@@ -108,28 +116,34 @@ class Server:
         if self.config.REQUIRE_CALLING_AET:
             ae.require_calling_aet = self.config.REQUIRE_CALLING_AET
 
+        if self.config.ACSE_TIMEOUT is not None:
+            ae.acse_timeout = self.config.ACSE_TIMEOUT
+        if self.config.NETWORK_TIMEOUT is not None:
+            ae.network_timeout = self.config.NETWORK_TIMEOUT
+
         return ae
     
     def run(self):
         # Start server on each port
         app = self.init()
 
-        threads: list[ThreadedAssociationServer] = []
         for port in self.config.PORTS:
             if worker := app.start_server(
                 (self.config.HOST, port),
                 evt_handlers=self.handlers,
                 block=False
             ):
-                threads.append(worker)
+                self.listeners.append(worker)
                 logger.info(f"Listening on {self.config.HOST}:{port}")
 
-        for th in threads:
-            th.serve_forever()
+        # start_server(block=False) already runs each listener in its own daemon
+        # thread; just keep the process alive until stop() is called.
+        self._stopped.wait()
 
     def stop(self):
         for srv in self.listeners:
             srv.shutdown()
+        self._stopped.set()
 
 def new_server(bus: Logger, config: ServerConfig, handlers: list[EventHandlerType]) -> Server:
     return Server(bus, config, handlers)

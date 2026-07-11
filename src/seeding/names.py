@@ -55,11 +55,8 @@ def faker_pools(locale: str = "en_US") -> NamePools:
 
 
 def load_name_pools(path: str | None) -> NamePools | None:
-    """Load Family^Given PN pools from JSON, or None to fall back to faker_pools().
-
-    Expected shape: {"male": [...], "female": [...], "physician": [...]}. Physician is
-    optional (defaults to male+female). Any error falls back to generated names.
-    """
+    """Load {"male": [...], "female": [...], "physician": [...]} PN pools from JSON (physician
+    optional, defaults to male+female); None or any error falls back to faker_pools()."""
     if path is None:
         return None
     try:

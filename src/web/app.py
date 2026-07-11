@@ -5,96 +5,27 @@ import logging
 import os
 import secrets
 import uuid
+from logging import Logger
 from urllib.parse import quote
 
 from flask import (
-    Flask, g, redirect, render_template, request, make_response,
-    send_from_directory,
+    Flask, current_app, g, redirect, render_template, request,
+    make_response, send_from_directory, url_for,
 )
+from pydicom.dataset import Dataset
+from pynetdicom.sop_class import StudyRootQueryRetrieveInformationModelFind
 from werkzeug.serving import WSGIRequestHandler
 
 from dicomhawk.bus import InteractionEvent
-from dicomhawk.config import overlay_config
+from dicomhawk.handlers import _FIND_LEVEL_UID
+from dicomhawk.repository import Repository
+from profiles.profile import ProfileConfig
 
-# Shared interaction logger (serve wires it to dicomhawk.log); web lines are tagged channel=WEB.
-bus = logging.getLogger("bus")
-
-# Each profile's web assets live in src/profiles/<name>/web/; the engine is generic.
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROFILE = os.environ.get("SYNAPSE_PROFILE", "fujifilm")
-PROFILE_DIR = os.path.join(_SRC, "profiles", PROFILE, "web")
-
-app = Flask(
-    __name__,
-    template_folder=os.path.join(PROFILE_DIR, "templates"),
-    static_folder=os.path.join(PROFILE_DIR, "static"),
-)
-
-# Operator-tunable values live in the profile's config.yaml; DEFAULTS are the fallback + schema.
-CONFIG_PATH = os.path.join(PROFILE_DIR, "config.yaml")
-
-DEFAULTS = {
-    "behavior": {"grant_access": False},
-    "headers": {
-        "Server": "Microsoft-IIS/10.0",
-        "X-Powered-By": "ASP.NET",
-        "X-AspNet-Version": "4.0.30319",
-        "X-Frame-Options": "SAMEORIGIN",
-        "X-Content-Type-Options": "nosniff",
-        "X-Backendserver": "SYNWEB01",
-    },
-    "html_cache_headers": {
-        "Cache-Control": "no-store, no-cache, max-age=0, private",
-        "Pragma": "no-cache",
-    },
-    "content_security_policy": (
-        "default-src 'self'; script-src 'nonce-{nonce}' 'self'; "
-        "style-src 'self' 'unsafe-inline'; img-src *; "
-        "report-uri /SynapseSignOn/sts/csp/report"
-    ),
-    "identity": {
-        "version": "7.4.220",
-        "copyright": "Copyright © 2024-2025 FUJIFILM Healthcare Americas "
-                     "Corporation. All rights reserved.",
-    },
-    "license": {
-        "issued": "01/01/2025",
-        "lines": ["SYNAPSE PACS", "RADIOLOGY DEPARTMENT", "1 HOSPITAL WAY",
-                  "SPRINGFIELD, 00000"],
-    },
-    "oidc": {
-        "client_id": "synapsebaseclient",
-        "client_name": "SynapseBase",
-        "redirect_path": "/Synapse/",
-        "scopes": ("openid offline_access profile roles privileges usersession "
-                   "culture dbuser auth_mode full_name APService DcmApi "
-                   "ProxyService RPEngine StdApi ThinkLogService ViewerService "
-                   "WorkflowEngine SubscriptionService ExtApiService "
-                   "XDSConsumerApi FHIRCastHub"),
-    },
-}
 
 
-def _load_config(path=CONFIG_PATH):
-    """Overlay the profile's web config.yaml onto DEFAULTS so partial files work."""
-    return overlay_config(DEFAULTS, path)
-
-
-CONFIG = _load_config()
-
-GRANT_ACCESS = bool(CONFIG["behavior"]["grant_access"])
-SPOOF_HEADERS = dict(CONFIG["headers"])
-HTML_CACHE_HEADERS = dict(CONFIG["html_cache_headers"])
-CSP_TEMPLATE = CONFIG["content_security_policy"]
-
-SYNAPSE_VERSION = str(CONFIG["identity"]["version"])
-SYNAPSE_COPYRIGHT = CONFIG["identity"]["copyright"]
-LICENSE_LINES = CONFIG["license"]["lines"]
-LICENSE_ISSUED = str(CONFIG["license"]["issued"])
-OIDC_CLIENT_ID = CONFIG["oidc"]["client_id"]
-OIDC_CLIENT_NAME = CONFIG["oidc"]["client_name"]
-OIDC_REDIRECT_PATH = CONFIG["oidc"]["redirect_path"]
-_OIDC_SCOPES = " ".join(CONFIG["oidc"]["scopes"].split())
+def _web():
+    return current_app.config["WEB"]
 
 
 def _synapse_nonce():
@@ -106,15 +37,17 @@ def _synapse_nonce():
 
 
 def _winlogin_url():
-    """The WinAuth/Login.aspx OIDC URL the 'Log in with Windows instead' link points to."""
-    redirect_uri = request.host_url.rstrip("/") + "/" + OIDC_REDIRECT_PATH.strip("/") + "/"
+    """The WinAuth login URL the 'Log in with Windows instead' link points to."""
+    web = _web()
+    oidc = web.oidc
+    redirect_uri = request.host_url.rstrip("/") + "/" + oidc["redirect_path"].strip("/") + "/"
     # Lowercase %-encoding to match observed Synapse.
     enc_redirect = quote(redirect_uri, safe="").replace("%3A", "%3a").replace("%2F", "%2f")
-    scope = "+".join(_OIDC_SCOPES.split())
+    scope = "+".join(oidc["scopes"].split())
     state = "OpenIdConnect.AuthenticationProperties%3d" + secrets.token_urlsafe(120)
     return (
-        "/SynapseSignOn/WinAuth/Login.aspx"
-        f"?client_id={OIDC_CLIENT_ID}"
+        f"{web.routes['winauth']}"
+        f"?client_id={oidc['client_id']}"
         f"&redirect_uri={enc_redirect}"
         "&response_mode=form_post"
         "&response_type=id_token+token"
@@ -126,26 +59,27 @@ def _winlogin_url():
 
 def _login_context(signin, error_message=""):
     """Render context for login.html, including the hydration modelJson blob."""
-    login_url = f"/SynapseSignOn/sts/login?signin={signin}"
+    web = _web()
+    login_url = f"{web.routes['login']}?signin={signin}"
     antiforgery = secrets.token_urlsafe(72)
     request_id = str(uuid.uuid4())
     model = {
         "loginUrl": login_url,
-        "antiForgery": {"name": "idsrv.xsrf", "value": antiforgery},
+        "antiForgery": {"name": web.cookies["antiforgery"], "value": antiforgery},
         "allowRememberMe": False,
         "rememberMe": False,
         "username": "",
         "externalProviders": [],
         "additionalLinks": None,
-        "clientName": OIDC_CLIENT_NAME,
+        "clientName": web.oidc["client_name"],
         "clientUrl": None,
         "clientLogoUrl": None,
         "errorMessage": error_message,
         "requestId": request_id,
-        "siteUrl": "/SynapseSignOn/sts/",
-        "siteName": "Synapse Sign-On",
+        "siteUrl": web.routes["login"].rsplit("/", 1)[0] + "/",
+        "siteName": web.identity.get("site_name", web.oidc["client_name"]),
         "currentUser": None,
-        "logoutUrl": "/SynapseSignOn/sts/logout",
+        "logoutUrl": web.routes["login"].rsplit("/", 1)[0] + "/logout",
         "custom": None,
         "synapseBtnDisplay": None,
     }
@@ -153,13 +87,18 @@ def _login_context(signin, error_message=""):
         "login_url": login_url,
         "antiforgery_token": antiforgery,
         "model_json": json.dumps(model),
-        "synapse_version": SYNAPSE_VERSION,
-        "copyright": SYNAPSE_COPYRIGHT,
-        "license_lines": LICENSE_LINES,
-        "license_issued": LICENSE_ISSUED,
-        "renew_url": "/SSOMgr/License/Renew",
+        "synapse_version": str(web.identity["version"]),
+        "copyright": web.identity["copyright"],
+        "license_lines": web.license["lines"],
+        "license_issued": str(web.license["issued"]),
         "winlogin_url": _winlogin_url(),
-        "forgot_url": "/ssomgr/password/forgotpassword",
+        "forgot_url": web.routes["forgot_password"],
+        # Plain top-level value alongside model_json's copy — Fujifilm's AngularJS
+        # login.html parses model_json client-side; a plainer template can just use this.
+        "error_message": error_message,
+        # Discoverable hint for the first honey credential, if any (design ref: v2.0's login.html).
+        "honey_hint": (f"{web.honey_credentials[0][0]} / {web.honey_credentials[0][1]}"
+                       if web.honey_credentials else ""),
     }
 
 
@@ -170,15 +109,16 @@ def _protected_blob(n=64):
 
 def _set_synapse_cookies(resp, antiforgery):
     """Set the cookies a real Synapse sign-on drops (Secure/SameSite=None as on HTTPS)."""
-    resp.set_cookie("idsrv.xsrf", antiforgery, secure=True, samesite="None", path="/")
+    cookies = _web().cookies
+    resp.set_cookie(cookies["antiforgery"], antiforgery, secure=True, samesite="None", path="/")
     sim_token = secrets.token_urlsafe(12)
-    resp.set_cookie(f"SignInMessage.{sim_token}", _protected_blob(),
+    resp.set_cookie(f"{cookies['signin_message_prefix']}{sim_token}", _protected_blob(),
                     secure=True, httponly=True, samesite="None", path="/")
     nonce_id = base64.urlsafe_b64encode(secrets.token_bytes(8)).decode().rstrip("=")
-    resp.set_cookie(f"OpenIdConnect.nonce.{nonce_id}", _protected_blob(),
+    resp.set_cookie(f"{cookies['nonce_prefix']}{nonce_id}", _protected_blob(),
                     secure=True, httponly=True, samesite="None", path="/")
     # Cleared with epoch-expiry on the login GET, as real Synapse does.
-    for name in ("IdpCookie", "IdpTokenCookie"):
+    for name in (cookies["idp"], cookies["idp_token"]):
         resp.set_cookie(name, "", expires=0, secure=True, httponly=True,
                         samesite="None", path="/")
 
@@ -188,7 +128,7 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
     params = [f"Username: {username}"]
     if password:
         params.append(f"Password: {password}")
-    bus.warning(InteractionEvent.from_http(
+    current_app.config["BUS"].warning(InteractionEvent.from_http(
         "WEB", request_type,
         session_id="web-" + (request.remote_addr or "unknown"),
         ip=request.remote_addr,
@@ -201,59 +141,146 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
     ))
 
 
+def _log_probe(request_type):
+    """Log a bare honeytrap/scan hit (no credentials involved), same channel=WEB path as _capture."""
+    current_app.config["BUS"].info(InteractionEvent.from_http(
+        "WEB", request_type,
+        session_id="web-" + (request.remote_addr or "unknown"),
+        ip=request.remote_addr,
+        port=request.environ.get("REMOTE_PORT"),
+        log_level="INFO",
+        method=request.method,
+        path=request.path,
+        user_agent=request.headers.get("User-Agent", ""),
+    ))
+
+
 def _grant():
     """Grant response: redirect into the decoy worklist with the session cookie set."""
-    resp = make_response(redirect("/Synapse", code=302))
-    resp.set_cookie("sw_authed", "1", httponly=True, samesite="Lax")
+    web = _web()
+    resp = make_response(redirect(web.routes["entry"], code=302))
+    resp.set_cookie(web.cookies["session"], "1", httponly=True, samesite="Lax")
     return resp
 
 
-@app.before_request
+def _worklist_studies():
+    """Real seeded studies via repo.find(), collapsed to one row per study (as handle_find does)."""
+    repo: Repository = current_app.config["REPO"]
+    model = StudyRootQueryRetrieveInformationModelFind
+    ds = Dataset()
+    ds.QueryRetrieveLevel = "SERIES"
+    for kw in ("StudyInstanceUID", "StudyDate", "StudyTime", "PatientID",
+               "PatientName", "SeriesInstanceUID", "Modality"):
+        setattr(ds, kw, "")
+
+    result = repo.find(ds, model)
+    if result.error is not None:
+        return []
+
+    seen, studies = set(), []
+    for m in result.matches:
+        uid = getattr(m, _FIND_LEVEL_UID["STUDY"], None)
+        if uid in seen:
+            continue
+        seen.add(uid)
+        idt = m.as_identifier(ds, model)
+        date = str(getattr(idt, "StudyDate", "") or "")
+        time = str(getattr(idt, "StudyTime", "") or "")
+        studies.append({
+            "patient_name": str(getattr(idt, "PatientName", "") or "—"),
+            "description": "—",
+            "study_datetime": f"{date} {time}".strip() or "—",
+            "modality": str(getattr(idt, "Modality", "") or "—"),
+            "status": "Unread",
+            "age": "—",
+        })
+    return studies
+
+
 def _make_nonce():
     # Per-request CSP nonce, shared with the inline <script> tags.
     g.csp_nonce = secrets.token_urlsafe(16)
 
 
-@app.context_processor
-def _inject_nonce():
-    return {"csp_nonce": g.get("csp_nonce", "")}
+def _inject_context():
+    # fingerprint_seam is the Weeks 5-6 injection point; empty unless web.fingerprint_script is set.
+    nonce = g.get("csp_nonce", "")
+    seam = ""
+    script = _web().fingerprint_script
+    if script:
+        seam = f'<script nonce="{nonce}" src="{url_for("static", filename=script)}"></script>'
+    return {"csp_nonce": nonce, "fingerprint_seam": seam}
 
 
-@app.after_request
 def _spoof(resp):
-    for k, v in SPOOF_HEADERS.items():
+    web = _web()
+    for k, v in web.headers.items():
         resp.headers[k] = v
-    csp = CSP_TEMPLATE.replace("{nonce}", g.get("csp_nonce", ""))
+    csp = web.content_security_policy.replace("{nonce}", g.get("csp_nonce", ""))
     resp.headers["Content-Security-Policy"] = csp
     resp.headers["X-Content-Security-Policy"] = csp  # legacy header real Synapse also sends
     if resp.mimetype == "text/html":  # HTML no-store; static assets stay cacheable
-        for k, v in HTML_CACHE_HEADERS.items():
+        for k, v in web.html_cache_headers.items():
             resp.headers[k] = v
     return resp
 
 
-@app.route("/favicon.ico")
 def favicon():
-    # Real Synapse PACS favicon, served at root.
-    return send_from_directory(app.static_folder, "synapse/favicon.ico",
+    # A profile may ship no favicon at all; don't crash serving one that isn't there.
+    if not _web().favicon:
+        return ("", 404)
+    return send_from_directory(current_app.static_folder, _web().favicon,
                                mimetype="image/x-icon")
 
 
-@app.route("/")
+def robots_txt():
+    lines = ["User-agent: *"] + [f"Disallow: {path}" for path, _ in _web().honeytraps]
+    return ("\n".join(lines) + "\n", 200, {"Content-Type": "text/plain"})
+
+
+# Generic bait behaviors any profile's honeytraps can point at (see WebConfig.honeytraps).
+_HONEYTRAP_RESPONSES = {
+    # Mimics a session-protected secondary app by reusing the engine's own entry-point route.
+    "login_redirect": lambda: redirect(url_for("entry")),
+    # Mimics a stock ASP.NET Web API Help Page's default "no matching action" 404 shape.
+    "api_404": lambda: ({
+        "Message": f"No HTTP resource was found that matches the request URI '{request.url}'.",
+        "MessageDetail": "No action was found on the controller that matches the request.",
+    }, 404),
+    # Static "401 - Unauthorized" bait page (design ref: v2.0's admin.routes.js); needs unauthorized.html.
+    "unauthorized_page": lambda: (render_template("unauthorized.html", entry_url=_web().routes["entry"]), 401),
+}
+
+
+def _honeytrap_view(response_kind):
+    def view(**_kwargs):
+        _log_probe(f"WEB_HONEYTRAP_{response_kind.upper()}")
+        respond = _HONEYTRAP_RESPONSES.get(response_kind)
+        return respond() if respond else ("", 404)
+    return view
+
+
+def _iis_404(err):
+    # Any unmapped path is itself a signal (a scanner walking the tree); log it and
+    # don't leak a Werkzeug default error page under the spoofed IIS identity.
+    _log_probe("WEB_404")
+    return ("404 - Not Found", 404, {"Content-Type": "text/plain"})
+
+
 def root():
-    return redirect("/Synapse", code=302)
+    return redirect(_web().routes["entry"], code=302)
 
 
-@app.route("/Synapse")
-def synapse_entry():
+def entry():
     # Authenticated session -> worklist; otherwise bounce to sign-on (real behavior).
-    if request.cookies.get("sw_authed") == "1":
-        return render_template("worklist.html", studies=_placeholder_studies())
+    web = _web()
+    if request.cookies.get(web.cookies["session"]) == "1":
+        _log_probe("WEB_WORKLIST_VIEW")
+        return render_template("worklist.html", studies=_worklist_studies())
     signin = secrets.token_hex(16)
-    return redirect(f"/SynapseSignOn/sts/login?signin={signin}", code=302)
+    return redirect(f"{web.routes['login']}?signin={signin}", code=302)
 
 
-@app.route("/SynapseSignOn/sts/login", methods=["GET"])
 def login_get():
     signin = request.args.get("signin") or secrets.token_hex(16)
     error = "Username or password is incorrect" if request.args.get("error") else ""
@@ -263,14 +290,18 @@ def login_get():
     return resp
 
 
-@app.route("/SynapseSignOn/sts/login", methods=["POST"])
 def login_post():
     username = request.form.get("username", "")
     password = request.form.get("password", "")
-    _capture(username, password)
 
+    if (username, password) in _web().honey_credentials:
+        # Bait, not a real account: grants unconditionally (unlike grant_access) and logs distinctly.
+        _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
+        return _grant()
+
+    _capture(username, password)
     signin = request.args.get("signin") or secrets.token_hex(16)
-    if GRANT_ACCESS:
+    if _web().grant_access:
         return _grant()
     # Deny: re-render the sign-on page with the real error banner.
     return render_template(
@@ -280,87 +311,80 @@ def login_post():
 
 def _winauth_challenge():
     """401 challenge (native Sign in dialog); its body is the 'Unable to log in' cancel page."""
-    resp = make_response(render_template("winauth_unable.html"), 401)
+    web = _web()
+    resp = make_response(
+        render_template("winauth_unable.html", sts_authorize_url=web.routes["sts_authorize"]), 401
+    )
     resp.headers["WWW-Authenticate"] = f'Basic realm="{request.host}"'
     # Real Synapse WinAuth stores the originally-requested URL in this cookie.
-    resp.set_cookie("WinLogin.OrigRequestUrlCookie", _protected_blob(32),
+    resp.set_cookie(web.cookies["winlogin_origurl"], _protected_blob(32),
                     secure=True, httponly=True, samesite="None", path="/")
     return resp
 
 
-@app.route("/SynapseSignOn/sts/csp/report", methods=["POST"])
 def csp_report():
     # CSP violation reports (report-uri) land here; a real endpoint just absorbs them.
     return ("", 204)
 
 
-@app.route("/synapse/error/TranslatedItems/<int:item_id>", methods=["POST", "GET"])
 def translated_items(item_id):
-    # translation.js on the 'Unable to log in' page POSTs here for localized strings.
-    return {
-        "Text1": "Synapse Log On",
-        "Text2": "Unable to log in using Windows Authentication.",
-        "Text3": "Log in directly",
-    }
+    # translation.js reads data['Text1']/['Text2']/['Text3'] — real ASP.NET PascalCase wire format.
+    m = _web().winauth_messages
+    return {"Text1": m.get("text1", ""), "Text2": m.get("text2", ""), "Text3": m.get("text3", "")}
 
 
-@app.route("/SynapseSignOn/sts/error")
 def sts_error():
     # Distinctive Synapse STS error page (heading "Error" + "Request Id:").
     return render_template(
         "error.html",
         request_id=str(uuid.uuid4()),
+        login_url=_web().routes["login"],
         error_message=("There is an error determining which application you are "
                        "attempting to sign into. Return to the application and try again."),
     )
 
 
-@app.errorhandler(500)
 def _synapse_500(err):
     # Unhandled errors render the branded page, never a Werkzeug traceback.
     return render_template(
         "error.html", request_id=str(uuid.uuid4()),
+        login_url=_web().routes["login"],
         error_message="An error occurred while processing your request.",
     ), 500
 
 
-@app.route("/SynapseSignOn/sts/connect/authorize")
 def sts_authorize():
     # 'Log in directly' on the 'Unable to log in' page lands here -> back to sign-on.
+    web = _web()
     signin = secrets.token_hex(16)
-    return redirect(f"/SynapseSignOn/sts/login?signin={signin}", code=302)
+    return redirect(f"{web.routes['login']}?signin={signin}", code=302)
 
 
-@app.route("/ssomgr/password/forgotpassword", methods=["GET"])
 def forgot_password_get():
-    return render_template("forgot_password.html", submitted=False)
+    return render_template("forgot_password.html", submitted=False, forgot_url=_web().routes["forgot_password"])
 
 
-@app.route("/ssomgr/password/forgotpassword", methods=["POST"])
 def forgot_password_post():
     # Capture the probed username; always return the generic success (anti-enumeration).
     _capture(request.form.get("username", ""), "", request_type="WEB_FORGOT_PASSWORD")
-    return render_template("forgot_password.html", submitted=True)
+    return render_template("forgot_password.html", submitted=True, forgot_url=_web().routes["forgot_password"])
 
 
-@app.route("/SynapseSignOn/WinAuth/Login.aspx")
 def winauth_login():
     # No credentials -> 401 (native dialog); submitted creds arrive in the Authorization header.
     auth = request.authorization
     if auth is None or auth.type != "basic":
         return _winauth_challenge()
-    _capture(auth.username or "", auth.password or "", request_type="WEB_WINAUTH_ATTEMPT")
-    if GRANT_ACCESS:
+    username, password = auth.username or "", auth.password or ""
+
+    if (username, password) in _web().honey_credentials:
+        _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
+        return _grant()
+
+    _capture(username, password, request_type="WEB_WINAUTH_ATTEMPT")
+    if _web().grant_access:
         return _grant()
     return _winauth_challenge()  # deny -> dialog reappears, as if credentials were wrong
-
-
-def _placeholder_studies():
-    """Placeholder rows; to be replaced by repo.find() on the seeded DB."""
-    return [
-        {"patient_name": "—", "description": "(worklist reads the seeded DICOM DB)",
-         "study_datetime": "—", "modality": "—", "status": "—", "age": "—"},
-    ]
 
 
 class _SpoofHandler(WSGIRequestHandler):
@@ -371,10 +395,63 @@ class _SpoofHandler(WSGIRequestHandler):
         self.send_response_only(code, message)
 
 
+def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
+    """Build the attacker-facing Flask app for `profile` — routes/cookies come from its own web config."""
+    profile_dir = os.path.join(_SRC, "profiles", profile.web.templates_dir, "web")
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(profile_dir, "templates"),
+        static_folder=os.path.join(profile_dir, "static"),
+    )
+    app.config["WEB"] = profile.web
+    app.config["BUS"] = bus
+    app.config["REPO"] = repo
+    app.before_request(_make_nonce)
+    app.context_processor(_inject_context)
+    app.after_request(_spoof)
+    app.register_error_handler(404, _iis_404)
+    app.register_error_handler(500, _synapse_500)
+
+    routes = profile.web.routes
+    # Every route is registered per-profile from its own web.routes — nothing here is a
+    # fixed path, so one profile's identity can never leak into another's address bar.
+    app.add_url_rule("/", "root", root)
+    app.add_url_rule("/favicon.ico", "favicon", favicon)
+    app.add_url_rule("/robots.txt", "robots_txt", robots_txt)
+    app.add_url_rule(routes["entry"], "entry", entry)
+    app.add_url_rule(routes["login"], "login_get", login_get, methods=["GET"])
+    app.add_url_rule(routes["login"], "login_post", login_post, methods=["POST"])
+    app.add_url_rule(routes["winauth"], "winauth_login", winauth_login)
+    app.add_url_rule(routes["csp_report"], "csp_report", csp_report, methods=["POST"])
+    app.add_url_rule(routes["translated_items"] + "/<int:item_id>", "translated_items",
+                      translated_items, methods=["GET", "POST"])
+    app.add_url_rule(routes["sts_error"], "sts_error", sts_error)
+    app.add_url_rule(routes["sts_authorize"], "sts_authorize", sts_authorize)
+    app.add_url_rule(routes["forgot_password"], "forgot_password_get", forgot_password_get, methods=["GET"])
+    app.add_url_rule(routes["forgot_password"], "forgot_password_post", forgot_password_post, methods=["POST"])
+
+    # Per-profile data, not engine code — a profile with none stays a plain 404 via _iis_404 above.
+    for i, (path, kind) in enumerate(profile.web.honeytraps):
+        prefix = path.rstrip("/")
+        view = _honeytrap_view(kind)
+        app.add_url_rule(prefix + "/", f"honeytrap_{i}", view, methods=["GET", "POST"])
+        app.add_url_rule(prefix + "/<path:subpath>", f"honeytrap_{i}_sub", view, methods=["GET", "POST"])
+
+    return app
+
+
 if __name__ == "__main__":
     # Standalone: configure the bus logger; host/port/log path are deployment -> env.
     from dicomhawk.bus import new_bus
+    from dicomhawk.repository import new_repo
+    from dicomhawk.storage import new_store
+    from profiles.profile import load_profile
+
+    bus_logger = logging.getLogger("bus")
     new_bus(stdout=os.environ.get("SYNAPSE_LOG", "dicomhawk.log"))
-    app.run(host=os.environ.get("SYNAPSE_HOST", "127.0.0.1"),
-            port=int(os.environ.get("SYNAPSE_PORT", "8080")),
-            debug=False, request_handler=_SpoofHandler)
+    prof = load_profile(os.environ.get("SYNAPSE_PROFILE", "fujifilm"))
+    dev_repo = new_repo(None, new_store("traces"))
+    dev_app = new_web(prof, dev_repo, bus_logger)
+    dev_app.run(host=os.environ.get("SYNAPSE_HOST", "127.0.0.1"),
+                port=int(os.environ.get("SYNAPSE_PORT", "8080")),
+                debug=False, request_handler=_SpoofHandler)

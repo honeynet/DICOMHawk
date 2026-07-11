@@ -16,7 +16,6 @@ from sqlalchemy.orm import sessionmaker, scoped_session, Session
 
 from .status import QRStatus
 from .storage import Storage
-from .middlewares import Middleware
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +40,9 @@ class FindResult:
 
 class Repository:
 
-    def __init__(self, location: str | None, storage: Storage, middlewares: list[Middleware]=[]):
+    def __init__(self, location: str | None, storage: Storage):
         self.location: str = location or ":memory:"
         self.storage: Storage = storage
-        self.middlewares: list[Middleware] = middlewares
         self.engine: Engine | None = None
         self.session: Session | None = None
         self.supported_sop: list[UID] = [
@@ -55,13 +53,10 @@ class Repository:
 
     def _new_connection(self) -> Engine:
         url = f"sqlite:///{self.location}"
-        # check_same_thread=False disables SQLite's own thread guard — safe
-        # because SQLAlchemy manages thread safety via scoped_session.
-        # StaticPool is required for :memory: so all threads share one DB;
-        # file-based paths should be used in production to avoid this entirely.
+        # check_same_thread=False is safe: SQLAlchemy's scoped_session manages thread safety.
         kwargs: dict = {"connect_args": {"check_same_thread": False}}
         if self.location == ":memory:":
-            kwargs["poolclass"] = StaticPool
+            kwargs["poolclass"] = StaticPool  # required so all threads share one in-memory DB
         else:
             Path(self.location).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(url, **kwargs)
@@ -79,11 +74,6 @@ class Repository:
         if not self.session:
             self.session = self._new_session()
         return self.session
-    
-    def _apply_middlewares(self, instance: Dataset) -> Dataset:
-        for mw in self.middlewares:
-            instance = mw(instance)
-        return instance
     
     @property
     def conn(self):
@@ -114,7 +104,7 @@ class Repository:
             return QRError(f"request identifier not supported: {ds}", missing_level_status)
         return None
     
-    def find(self, ds: Dataset, model, inject: bool = False) -> QRResult:
+    def find(self, ds: Dataset, model) -> QRResult:
         # Zero-length keys = Universal Matching (PS3.4 C.2.2.2.3), but decode to "" which
         # db.search single-value-matches → 0 results. Null them so empty queries match all.
         for elem in ds:
@@ -129,10 +119,6 @@ class Repository:
         except Exception as exc:
             conn.rollback()
             return QRResult(error=QRError(f"Exception occurred while querying database: {exc}"))
-
-        # Quarantined files stay visible here; find_instance() below still blocks the bytes.
-        if inject:
-            matches = [self._apply_middlewares(m) for m in matches]
 
         return QRResult(matches=matches)
 
@@ -192,7 +178,7 @@ class Repository:
             logger.error("Unable to add instance to the database")
             logger.exception(exc)
 
-    def find_instance(self, match: Dataset, decompress: bool = False, inject: bool = True) -> FindResult:
+    def find_instance(self, match: Dataset, decompress: bool = False) -> FindResult:
         if self.storage.is_quarantined(match.filename):
             return FindResult(error=QRError(f"Refusing to serve quarantined instance: {match.filename}", QRStatus.STORE_ERROR))
 
@@ -210,11 +196,8 @@ class Repository:
                     QRStatus.READ_ERROR,
                 ))
 
-        if inject:
-            instance = self._apply_middlewares(instance)
-
         return FindResult(dataset=instance)
-    
 
-def new_repo(db: str | None, store: Storage, mws: list[Middleware]) -> Repository:
-    return Repository(db, store, mws)
+
+def new_repo(db: str | None, store: Storage) -> Repository:
+    return Repository(db, store)

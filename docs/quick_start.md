@@ -23,7 +23,7 @@ Flags used:
 
 The server logs `Listening in [11112]` to stdout once the bus is up.
 
-To impersonate a specific device, add `--profile fujifilm` (bundled Fujifilm Synapse PACS) or a path to a custom profile YAML — see [commands](./commands.md#dicomhawk-serve). Without it, a generic default is used.
+To impersonate a specific device, add `--profile fujifilm` (bundled Fujifilm Synapse PACS) or a path to a custom profile YAML — see [commands](./commands.md#dicomhawk-serve). Without it, a generic default is used. To build your own profile (identity + optional web login/worklist), see [Adding a profile](./profiles.md).
 
 ## Run via Docker
 

@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
 
@@ -34,17 +34,34 @@ class DicomConfig:
     max_associations: int
     max_pdu_size: int | None # None -> pynetdicom's own default; no real value to mimic
     ae_auth: AEAuthConfig
+    # Tighter than pynetdicom's 30s/60s defaults — a raw connection with no valid PDU
+    # still holds a max_associations slot until these expire (DoS window).
+    acse_timeout: float | None
+    network_timeout: float | None
 
 
 @dataclass
 class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
-    server_header: str | None = None
-    x_powered_by: str | None = None
-    x_aspnet_version: str | None = None
-    title: str | None = None
-    favicon: str | None = None       # filename under the profile's folder, served by the web component
+    grant_access: bool = False
+    headers: dict[str, str] = field(default_factory=dict)
+    html_cache_headers: dict[str, str] = field(default_factory=dict)
+    content_security_policy: str | None = None
+    identity: dict[str, str] = field(default_factory=dict)
+    license: dict = field(default_factory=dict)
+    oidc: dict[str, str] = field(default_factory=dict)
+    favicon: str | None = None       # filename under the profile's web/static/, served by the web component
+    # (path, response_kind); a profile with none declared gets no honeytrap routes at all.
+    honeytraps: list[tuple[str, str]] = field(default_factory=list)
+    fingerprint_script: str | None = None  # static-asset filename; Weeks 5-6 injection seam only, no collector yet
+    # (username, password) bait pairs; using one grants access unconditionally (see login_post).
+    honey_credentials: list[tuple[str, str]] = field(default_factory=list)
+    # URL paths for every route the engine serves; keeps one profile's identity out of another's address bar.
+    routes: dict[str, str] = field(default_factory=dict)
+    # Cookie names the engine sets; same isolation reasoning as routes.
+    cookies: dict[str, str] = field(default_factory=dict)
+    winauth_messages: dict[str, str] = field(default_factory=dict)  # text1/text2/text3 for the WinAuth translation fetch
 
 
 @dataclass
@@ -92,8 +109,52 @@ def default_profile() -> ProfileConfig:
             max_associations=100,
             max_pdu_size=65536, # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
             ae_auth=AEAuthConfig(),
+            acse_timeout=10, # tighter than pynetdicom's 30s default — shrinks a garbage connection's DoS window
+            network_timeout=15, # tighter than pynetdicom's 60s default, same reason
         ),
-        web=WebConfig(),
+        web=WebConfig(
+            # Generic fallback content — real values for any pacs profile that omits
+            # its own web.* keys, so a sparse custom profile can't crash the engine.
+            headers={
+                "Server": "Apache",
+                "X-Frame-Options": "SAMEORIGIN",
+                "X-Content-Type-Options": "nosniff",
+            },
+            html_cache_headers={
+                "Cache-Control": "no-store, no-cache, max-age=0, private",
+                "Pragma": "no-cache",
+            },
+            content_security_policy="default-src 'self'; script-src 'nonce-{nonce}' 'self'; style-src 'self' 'unsafe-inline'",
+            identity={"version": "1.0", "copyright": ""},
+            license={"issued": "", "lines": []},
+            oidc={"client_id": "", "client_name": "", "redirect_path": "/", "scopes": ""},
+            # Generic, non-vendor-specific route/cookie names — never "Synapse"-shaped,
+            # so a profile that doesn't override these can't leak Fujifilm's identity.
+            routes={
+                "entry": "/portal",
+                "login": "/portal/login",
+                "winauth": "/portal/winauth",
+                "forgot_password": "/portal/forgot-password",
+                "sts_error": "/portal/error",
+                "sts_authorize": "/portal/authorize",
+                "csp_report": "/portal/csp-report",
+                "translated_items": "/portal/translations",
+            },
+            cookies={
+                "antiforgery": "portal.xsrf",
+                "session": "portal_authed",
+                "signin_message_prefix": "PortalSignIn.",
+                "nonce_prefix": "PortalNonce.",
+                "idp": "PortalIdp",
+                "idp_token": "PortalIdpToken",
+                "winlogin_origurl": "PortalWinOrigUrl",
+            },
+            winauth_messages={
+                "text1": "Portal Log On",
+                "text2": "Unable to log in using Windows Authentication.",
+                "text3": "Log in directly",
+            },
+        ),
     )
 
 
@@ -157,6 +218,18 @@ def _parse_profile(data: dict) -> ProfileConfig:
     else:
         max_pdu_size = d.dicom.max_pdu_size
 
+    if "acse_timeout" in dicom_raw:
+        v = dicom_raw["acse_timeout"]
+        acse_timeout = None if v is None else float(v)
+    else:
+        acse_timeout = d.dicom.acse_timeout
+
+    if "network_timeout" in dicom_raw:
+        v = dicom_raw["network_timeout"]
+        network_timeout = None if v is None else float(v)
+    else:
+        network_timeout = d.dicom.network_timeout
+
     ae_auth_raw = dicom_raw.get("ae_auth") or {}
     ae_auth = AEAuthConfig(
         require_called_aet=bool(ae_auth_raw.get("require_called_aet", False)),
@@ -164,9 +237,40 @@ def _parse_profile(data: dict) -> ProfileConfig:
     )
 
     name = meta.get("name", d.name)
+
+    web_enabled = bool(web_raw.get("enabled", False))
+    if web_enabled and not web_raw.get("templates_dir"):
+        raise ValueError(
+            f"Profile '{name}' has web.enabled=true but no web.templates_dir "
+            "(there's no generic fallback for a template directory that doesn't exist)"
+        )
+    if web_enabled:
+        # Only worth reporting if the web component will actually run with these values.
+        for key in ("headers", "html_cache_headers", "content_security_policy",
+                    "identity", "license", "oidc", "routes", "cookies", "winauth_messages"):
+            if key not in web_raw:
+                fell_back.append(f"web.{key}")
+
     if fell_back:
         logger.warning("Profile '%s' missing keys; using defaults for: %s",
                        name, ", ".join(fell_back))
+
+    if "honeytraps" in web_raw:
+        honeytraps = [
+            (str(_require(h, "path", "web.honeytraps")), str(_require(h, "response", "web.honeytraps")))
+            for h in web_raw["honeytraps"]
+        ]
+    else:
+        honeytraps = d.web.honeytraps
+
+    if "honey_credentials" in web_raw:
+        honey_credentials = [
+            (str(_require(c, "username", "web.honey_credentials")),
+             str(_require(c, "password", "web.honey_credentials")))
+            for c in web_raw["honey_credentials"]
+        ]
+    else:
+        honey_credentials = d.web.honey_credentials
 
     return ProfileConfig(
         name=name,
@@ -184,15 +288,27 @@ def _parse_profile(data: dict) -> ProfileConfig:
             max_associations=max_associations,
             max_pdu_size=max_pdu_size,
             ae_auth=ae_auth,
+            acse_timeout=acse_timeout,
+            network_timeout=network_timeout,
         ),
         web=WebConfig(
-            enabled=bool(web_raw.get("enabled", False)),
+            enabled=web_enabled,
             templates_dir=web_raw.get("templates_dir"),
-            server_header=web_raw.get("server_header"),
-            x_powered_by=web_raw.get("x_powered_by"),
-            x_aspnet_version=web_raw.get("x_aspnet_version"),
-            title=web_raw.get("title"),
+            grant_access=bool(web_raw.get("grant_access", False)),
+            # Per-key overlay (a profile can override just one header/oidc key), like overlay_config().
+            headers={**d.web.headers, **(web_raw.get("headers") or {})},
+            html_cache_headers={**d.web.html_cache_headers, **(web_raw.get("html_cache_headers") or {})},
+            content_security_policy=web_raw.get("content_security_policy", d.web.content_security_policy),
+            identity={**d.web.identity, **(web_raw.get("identity") or {})},
+            license={**d.web.license, **(web_raw.get("license") or {})},
+            oidc={**d.web.oidc, **(web_raw.get("oidc") or {})},
             favicon=web_raw.get("favicon"),
+            honeytraps=honeytraps,
+            fingerprint_script=web_raw.get("fingerprint_script"),
+            honey_credentials=honey_credentials,
+            routes={**d.web.routes, **(web_raw.get("routes") or {})},
+            cookies={**d.web.cookies, **(web_raw.get("cookies") or {})},
+            winauth_messages={**d.web.winauth_messages, **(web_raw.get("winauth_messages") or {})},
         ),
     )
 

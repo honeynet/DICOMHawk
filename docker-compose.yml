@@ -10,6 +10,9 @@ services:
     ports:
       - "11112:11112"
       - "1104:104"
+      - "8080:8080"             # attacker-facing web (pacs profiles with web.enabled only)
+      - "127.0.0.1:8081:8081"   # operator API — this host-side binding is the real loopback-only
+                                 # restriction; the process binds 0.0.0.0 inside the container (see --operator-host)
     command:
       - dicomhawk
       - serve
@@ -25,6 +28,12 @@ services:
       - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
       - -l
       - /var/log/dicomhawk/dicomhawk.log
+      - --web-port
+      - "${DICOMHAWK_WEB_PORT:-8080}"
+      - --operator-port
+      - "${DICOMHAWK_OPERATOR_PORT:-8081}"
+      - --operator-host
+      - "${DICOMHAWK_OPERATOR_HOST:-0.0.0.0}"
       - -v
     volumes:
       - dicom_storage:${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}

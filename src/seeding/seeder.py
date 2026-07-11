@@ -7,6 +7,7 @@ from datetime import date
 from pydicom import dcmread
 
 from dicomhawk.repository import Repository
+from honeytoken.injector import Middleware
 
 from .fallback import load_fallback_datasets
 from .locations import Location, _DEFAULT_LOCATIONS
@@ -22,9 +23,8 @@ def resolve_rotation(
     rotate: bool,
     epoch: str | None = None,
 ) -> tuple[str, str, str]:
-    # NOTE: rotate off is fully deterministic (first entries, empty epoch), matching
-    # pre-rotation behaviour. Rotate on picks the source and salts identities by ISO
-    # week, so a stateless weekly cron yields data that is fresh but idempotent in-week.
+    # Rotate off: deterministic (first entries, no epoch). Rotate on: source + identity
+    # salt both change by ISO week, so a stateless weekly cron stays fresh but idempotent in-week.
     if not rotate:
         return collections[0], modalities[0], ""
     year, week, _ = date.today().isocalendar()
@@ -79,6 +79,7 @@ class Seeder:
         locations: list[Location] | None = None,
         locale: str = "en_US",
         name_pools: NamePools | None = None,
+        honeytoken: Middleware | None = None,
     ):
         self._repo = repo
         self._client = TciaClient()
@@ -86,6 +87,16 @@ class Seeder:
         self._male_pool, self._female_pool, self._physician_pool = (
             name_pools or faker_pools(locale)
         )
+        self._honeytoken = honeytoken
+        self._honeytoken_planted = False
+
+    def _tag_honeytoken(self, ds):
+        # Plants the bait (RetrieveURL/canary PDF) into exactly one instance per seed() run,
+        # baked into the stored file — not a per-retrieval overlay, so most instances stay real.
+        if self._honeytoken and not self._honeytoken_planted:
+            ds = self._honeytoken(ds)
+            self._honeytoken_planted = True
+        return ds
 
     def seed(
         self,
@@ -95,16 +106,15 @@ class Seeder:
         modality: str = "CT",
         epoch: str = "",
     ) -> int:
-        # getSeries carries no usable instance count, so there is nothing to sort on —
-        # we sample instead. A per-epoch seeded RNG keeps selection idempotent within a
-        # week (same series + institution) while varying across weeks. Slice-depth realism
-        # (how many instances an IMAGE-level C-FIND returns) comes from max_images.
+        # getSeries has no usable instance count, so we sample instead of sorting; a
+        # per-epoch seeded RNG keeps selection idempotent within a week but varying across weeks.
         rng = random.Random(epoch or collection)
         loc = rng.choice(self._locations)
         series_list = self._client.get_series(collection, modality)
 
         requested = max_series > 0 and max_images > 0  # 0 means "fetch nothing", not "TCIA is down"
 
+        self._honeytoken_planted = False
         stored = 0
         if series_list and requested:
             uids = [uid for s in series_list if (uid := s.get("SeriesInstanceUID"))]
@@ -148,6 +158,7 @@ class Seeder:
             ds = _patch_location(
                 ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
             )
+            ds = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
             if err is None:
                 stored += 1
@@ -162,6 +173,7 @@ class Seeder:
             ds = _patch_location(
                 ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
             )
+            ds = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
             if err is None:
                 stored += 1
@@ -175,5 +187,6 @@ def new_seeder(
     locations: list[Location] | None = None,
     locale: str = "en_US",
     name_pools: NamePools | None = None,
+    honeytoken: Middleware | None = None,
 ) -> Seeder:
-    return Seeder(repo, locations=locations, locale=locale, name_pools=name_pools)
+    return Seeder(repo, locations=locations, locale=locale, name_pools=name_pools, honeytoken=honeytoken)

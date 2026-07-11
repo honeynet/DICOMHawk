@@ -3,7 +3,9 @@ import typer
 
 from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
+from honeytoken.injector import new_honeytoken_injector
 
+from .config import load_seeding_config
 from .locations import load_locations
 from .names import load_name_pools
 from .osm import OsmClient
@@ -109,6 +111,16 @@ def seed(
         "--interval",
         help="Re-seed every N minutes in the background (0 = run once and exit)",
     ),
+    honey_url: str | None = typer.Option(
+        None,
+        "--honey-url",
+        help="URL baked as RetrieveURL into one seeded instance per run (overrides seeding/config.yaml)",
+    ),
+    canary_pdf: str | None = typer.Option(
+        None,
+        "--canary-pdf",
+        help="Path to a PDF canary token baked into one seeded instance per run (overrides seeding/config.yaml)",
+    ),
 ):
     collections = [c.strip() for c in collection.split(",") if c.strip()]
     modalities = [m.strip() for m in modality.split(",") if m.strip()]
@@ -131,11 +143,22 @@ def seed(
         loc_list = load_locations(locations)
 
     store = new_store(traces)
-    repo = new_repo(database, store, [])
+    repo = new_repo(database, store)
     repo.start()
 
+    honeytoken_cfg = load_seeding_config()["honeytoken"]
+    resolved_honey_url = honey_url or honeytoken_cfg["honey_url"]
+    resolved_canary_pdf = canary_pdf or honeytoken_cfg["canary_pdf"]
+    injector = (
+        new_honeytoken_injector(resolved_honey_url, resolved_canary_pdf)
+        if resolved_honey_url or resolved_canary_pdf else None
+    )
+
     try:
-        seeder = new_seeder(repo, locations=loc_list, locale=locale, name_pools=load_name_pools(names))
+        seeder = new_seeder(
+            repo, locations=loc_list, locale=locale, name_pools=load_name_pools(names),
+            honeytoken=injector,
+        )
 
         if interval > 0:
             scheduler = SeedScheduler(seeder, collections, interval, max_series, max_images, modalities, rotate)

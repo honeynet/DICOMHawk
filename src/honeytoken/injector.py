@@ -1,11 +1,13 @@
 import logging
 from typing import Callable
+
 from pydicom.dataset import Dataset
 from pydicom import uid
 
 logger = logging.getLogger(__name__)
 
 type Middleware = Callable[[Dataset], Dataset]
+
 
 def new_honeytoken_injector(honey_url: str | None = None, pdf_path: str | None = None) -> Middleware:
     canary_data = None
@@ -24,7 +26,7 @@ def new_honeytoken_injector(honey_url: str | None = None, pdf_path: str | None =
                 ds.RetrieveURL = f"{str(honey_url).rstrip('/')}/{study_uid}"
             except Exception as e:
                 logger.error(f"Failed to inject Honey URL: {e}")
-            
+
         if canary_data:
             try:
                 ds.SOPClassUID = uid.EncapsulatedPDFStorage
@@ -32,7 +34,7 @@ def new_honeytoken_injector(honey_url: str | None = None, pdf_path: str | None =
                 ds.EncapsulatedDocument = canary_data
             except Exception as e:
                 logger.error(f"Failed to inject Canary PDF: {e}")
-            
+
         return ds
 
     return inject_honeytoken

@@ -4,14 +4,13 @@ import sys
 import typer
 from dicomhawk.app import new_dicomhawk
 from dicomhawk.handlers import new_dimse_factory
-from dicomhawk.middlewares import Middleware, new_honeytoken_injector
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
 from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
 
 from profiles.profile import load_profile
-from seeding.config import load_seeding_config
+from web.component import new_web_component
 
 logger = logging.getLogger(__name__)
 
@@ -71,20 +70,25 @@ def serve(
             envvar="DICOMHAWK_TRACES",
             help="Where to store traces (defaults to $DICOMHAWK_TRACES)"
         ),
-        honey_url: str | None = typer.Option(
-            None,
-            "--honey-url",
-            help="URL to inject as RetrieveURL for Honey URLs (overrides the profile default)"
-        ),
-        canary_pdf: str | None = typer.Option(
-            None,
-            "--canary-pdf",
-            help="Path to an Encapsulated PDF Canary to inject into datasets (overrides the profile default)"
-        ),
         dev_log_path: str | None = typer.Option(
             None,
             "--dev-log",
             help="Path to the developer/internal log file (Python warnings and errors)"
+        ),
+        web_port: int = typer.Option(
+            8080,
+            "--web-port",
+            help="Port for the attacker-facing web UI (pacs profiles with web.enabled only)"
+        ),
+        operator_port: int = typer.Option(
+            8081,
+            "--operator-port",
+            help="Port for the operator API"
+        ),
+        operator_host: str = typer.Option(
+            "127.0.0.1",
+            "--operator-host",
+            help="Bind address for the operator API (loopback-only by default; Docker needs 0.0.0.0 here, see docs/commands.md)"
         ),
         verbose: bool = typer.Option(
             False,
@@ -115,18 +119,12 @@ def serve(
         prof.dicom.max_pdu_size,
         require_called_aet=prof.dicom.ae_auth.require_called_aet,
         require_calling_aet=prof.dicom.ae_auth.require_calling_aet,
+        acse_timeout=prof.dicom.acse_timeout,
+        network_timeout=prof.dicom.network_timeout,
     )
 
     store = new_store(traces)
-
-    honeytoken = load_seeding_config()["honeytoken"]
-    injector = new_honeytoken_injector(
-        honey_url or honeytoken["honey_url"],
-        canary_pdf or honeytoken["canary_pdf"],
-    )
-    mws: list[Middleware] = [injector]
-
-    repo = new_repo(database, store, mws)
+    repo = new_repo(database, store)
     bus = new_bus(log_path, verbose=verbose)
     if dev_log_path:
         new_dev_log(dev_log_path)
@@ -153,6 +151,10 @@ def serve(
         if h := dimse_fact.get(always_on):
             handlers.append(h)
 
+    components = []
+    if prof.kind == "pacs" and prof.web.enabled:
+        components.append(new_web_component(prof, repo, bus, host, web_port, operator_port, operator_host))
+
     srv = new_server(bus, config, handlers)
-    hp = new_dicomhawk(srv, []) # TODO: fix this, add components?
+    hp = new_dicomhawk(srv, components)
     hp.start()
