@@ -13,33 +13,26 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pydicom",
-    "pynetdicom",
-    "pylibjpeg",
-    "pylibjpeg-libjpeg",
-    "pylibjpeg-openjpeg",
-    "requests",
-    "redis",
-    "schedule",
-    "jwt",
-    "dependency-injector",
-    "aenum",
-    "pytz",
-    "overpy",
-    "sqlalchemy",
-    "typer",
-    "numpy",
-    "pyyaml",
+    "pydicom>=3.0,<4",
+    "pynetdicom>=3.0,<4",
+    "pylibjpeg>=2.0,<3",
+    "pylibjpeg-libjpeg>=2.0,<3",
+    "pylibjpeg-openjpeg>=2.0,<3",
+    "requests>=2.32,<3",
+    "sqlalchemy>=2.0,<3",
+    "typer>=0.15,<1",
+    "pyyaml>=6,<7",
     # for the web
-    "flask",
-    "waitress",
-    "ujson",
-    "faker",
+    "flask>=3.0,<4",
+    "waitress>=3.0,<4",
+    "ujson>=5.0,<6",
+    "faker>=30,<50",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
+    "pytest>=8,<10",
+    "black>=24",
 ]
 
 [tool.setuptools]
@@ -62,3 +55,6 @@ dicomhawk = "commands.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.black]
+target-version = ["py312"]

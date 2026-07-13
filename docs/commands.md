@@ -14,15 +14,32 @@ Start the DICOM honeypot server.
 | `--database` | `-db` | *(in-memory)* | Path to SQLite database file — **must match `seed --database`** |
 | `--traces` | `-t` | `traces` | Directory for received DICOM files and quarantined uploads |
 | `--log-path` | `-l` | `data/dicomhawk.log` | JSON interaction event log (one record per line) |
+| `--log-max-bytes` | | `52428800` | Rotate the event log after this many bytes; `0` disables size rotation |
+| `--log-backups` | | `5` | Number of rotated event logs to keep |
 | `--dev-log` | | | Path for Python-level warnings, errors, and pynetdicom protocol events |
 | `--web-port` | | `8080` | Port for the attacker-facing web UI (`pacs`-kind profiles with `web.enabled` only) |
 | `--operator-port` | | `8081` | Port for the read-only operator API (`/api/sessions`, `/api/events`, `/api/profiles`) |
 | `--operator-host` | | `127.0.0.1` | Bind address for the operator API. Keep the default for a bare-metal deployment — it's what makes the API loopback-only. In Docker, override to `0.0.0.0` and enforce loopback-only via the host-side port mapping instead (a container's own `127.0.0.1` is a separate network namespace host port publishing can't reach) — see `docker-compose.yml`. |
+| `--backend-server` | | *(profile value)* | Per-deployment `X-Backendserver` value; also read from `DICOMHAWK_BACKEND_SERVER` |
+| `--public-base-url` | | *(request origin)* | External HTTP(S) origin for generated OIDC redirect URIs; also read from `DICOMHAWK_PUBLIC_BASE_URL` |
 | `--verbose` | `-v` | | Print a compact colored event summary to stdout; auto-enabled when stdout is a TTY |
 
 **Profiles** decide which device the honeypot impersonates. With no `--profile`, it runs a generic default (AE title `ORTHANC`, all storage classes, no web surface). `--profile fujifilm` makes it present as a Fujifilm Synapse PACS — that device's identity, supported SOP classes, status codes, and a matching web login/worklist. `--profile generic-pacs` is a vendor-neutral second profile with the same web surface but plain, unbranded pages and generic headers — useful as a starting point for a custom profile. To impersonate a different device, write a profile YAML in the same format and pass its path — see [Adding a profile](./profiles.md) for the full schema and how to build the optional web surface.
 
 **Note:** with the default in-memory database, seeded data does not persist between restarts. Pass `--database` for any deployment intended to survive a restart.
+
+The built-in web listener is HTTP/1.1. A public high-fidelity deployment should terminate
+TLS at a reverse proxy on the target product's observed port (normally 443, and DICOM TLS
+on 2762 where configured), set `--public-base-url` to that external origin, preserve the original `Host`, and keep the operator
+API unpublished. Do not expose plaintext port 8080 as the only web surface for a profile
+that is normally seen over HTTPS; protocol and port mismatches are easy fingerprints.
+
+Incoming, untrusted C-STORE objects are deliberately quarantined. Their metadata may be
+indexed for C-FIND realism, but C-GET will not send the quarantined bytes back. This is a
+safety boundary and therefore a known round-trip difference from a production PACS—not a
+claim of perfect emulation. Seeded objects (`safe=True`) remain retrievable. Profiles also
+cap each incoming instance with `dicom.max_store_bytes` (512 MiB by default); use a finite
+filesystem/volume quota as the aggregate bound against many smaller stores.
 
 ---
 

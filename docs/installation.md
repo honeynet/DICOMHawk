@@ -48,14 +48,19 @@ docker compose logs -f dicomhawk
 
 Compose publishes:
 
-- container port `11112` → host `11112`
-- container port `104` → host `1104` (non-privileged default; avoids `CAP_NET_BIND_SERVICE`)
+- container port `104` → host `104`
+- attacker web port `8080` → host `8080`
+- operator port `8081` → host loopback `127.0.0.1:8081`
 
 `DICOMHAWK_PORTS` in `.env` controls which ports the server process listens on *inside* the container. The host-side publishing above is fixed in `docker-compose.yml`; edit it directly if you need different host ports.
+
+Port 104 is privileged on many hosts. Docker normally has the capability needed to
+publish it; rootless installations may need a higher host port or host configuration.
+For an Internet-facing vendor profile, place a TLS reverse proxy in front of the web
+listener rather than presenting port 8080 as the final endpoint.
 
 To stop and clean up:
 
 ```bash
 docker compose down -v
 ```
-

@@ -1,116 +1,64 @@
 # Web engine
 
-A generic, profile-driven Flask engine that serves a profile's web honeypot — a
-faithful reproduction of the target device's web UI (sign-on, Windows-auth, forgot
-password, error pages). Submitted credentials are captured to the shared interaction
-log. The engine is vendor-neutral; each profile supplies its own templates, static
-assets, and config.
+`web.app` is the shared attacker-facing Flask engine. It does not contain a vendor
+identity: routes, cookies, response headers, templates, assets, OIDC values, honeytraps,
+and text all come from the active `ProfileConfig`. The read-only operator API is a
+separate Flask app bound to loopback by default.
 
-## Layout
-
-```
-src/web/app.py                     # the engine (routes, headers, CSP, capture) — one copy
-src/profiles/<name>/web/           # one folder per profile
-  config.yaml                      # operator-tunable values
-  templates/*.html                 # the profile's pages
-  static/                          # the profile's assets (css/js/fonts/favicon)
-```
-
-`SYNAPSE_PROFILE=<name>` selects which profile's `web/` folder the engine serves
-(default `fujifilm`). Adding a profile is a new folder under `src/profiles/` — no engine
-changes, and it inherits credential capture and logging automatically.
-
-## Run
+Use the normal command rather than running this package directly:
 
 ```bash
-cd DICOMHawk
-.venv/bin/python src/web/app.py
-# open http://127.0.0.1:8080/
-
-# select a profile:  SYNAPSE_PROFILE=<name> .venv/bin/python src/web/app.py
-# host/port/log:     SYNAPSE_HOST=0.0.0.0 SYNAPSE_PORT=80 SYNAPSE_LOG=dicomhawk.log .venv/bin/python src/web/app.py
+dicomhawk serve --profile fujifilm --web-port 8080
 ```
 
-Deployment values (host, port, log path) come from those environment variables, not from
-`config.yaml`.
+The filesystem layout and complete schema are documented in
+[`docs/profiles.md`](../../docs/profiles.md). Bundled assets live at
+`src/profiles/<name>/web/{templates,static}`. External profile YAML files may put a
+`web/` directory beside the YAML.
 
-## Configuration (`<profile>/web/config.yaml`)
+## Behavior
 
-Operator-tunable values live in the profile's `config.yaml` — edit and restart, no code
-changes. Partial files are fine: anything omitted falls back to the in-code `DEFAULTS`
-(which also document the schema), and a missing file runs entirely on defaults.
+- Unauthenticated entry requests receive a realistic sign-on redirect with a fresh
+  flow token.
+- Login, forgotten-password, Windows-auth, scanner 404, honeytrap, oversized-request,
+  and worklist activity are recorded in the shared JSON interaction log.
+- Ordinary credentials are denied unless `grant_access` is enabled. Declared honey
+  credentials always enter the decoy and produce a distinct high-confidence event.
+- Successful Fujifilm flows land under `/WorkflowUI/`; deep links below that prefix
+  remain in the authenticated shell.
+- The worklist reads trusted seeded studies from the same repository used by DIMSE.
+- Request bodies are bounded by `web.max_request_bytes` (1 MiB by default), and logged
+  attacker-controlled fields are truncated.
 
-| Section | Keys | Controls |
-|---|---|---|
-| `behavior` | `grant_access` | log + deny (`false`) vs grant into the decoy worklist (`true`) |
-| `headers` | any header name → value | static response headers; add/rename freely. `X-Backendserver` is site-specific — set per deploy |
-| `html_cache_headers` | `Cache-Control`, `Pragma` | cache headers for HTML pages (static assets stay cacheable) |
-| `content_security_policy` | — | the CSP string (also emitted as legacy `X-Content-Security-Policy`); keep the `{nonce}` placeholder |
-| `identity` | `version`, `copyright` | version stamp + footer copyright |
-| `license` | `issued`, `lines` | the "Licensed to:" block; keep coherent with the seeded institution |
-| `oidc` | `client_id`, `client_name`, `redirect_path`, `scopes` | the Windows-auth link and modelJson client name |
+## Fingerprint boundaries
 
-Structural values stay in code/templates on purpose (changing them breaks the disguise):
-cookie names, route paths, page titles, the vendor's real error/success strings, and the
-form markup.
+Only profiles that explicitly set `legacy_csp_header: true` emit the legacy
+`X-Content-Security-Policy` header. This prevents a Synapse-specific header from
+leaking into generic or future profiles. `content_security_policy: null` disables CSP
+entirely when that is faithful to a target.
 
-## Logging
+The Fujifilm profile sets the observed IIS/ASP.NET headers, cookie prefixes, paths,
+7.4.300 version, OIDC scopes, and CSP. `X-Backendserver` is site-specific; override it
+per deployment with `DICOMHAWK_BACKEND_SERVER` or `--backend-server`.
 
-Captured credentials and web events are written to the shared interaction log
-(`dicomhawk.log`) with `channel: WEB`, in the same schema as the DIMSE lines — one log,
-not a separate file. The engine logs through the shared `bus` logger, so a profile needs
-no logging code of its own.
+The browser assets intentionally do not attempt HTTP password encryption unless both
+a public key and `JSEncrypt` are actually present. That guard prevents the copied page
+from throwing a console-visible `ReferenceError` on the built-in HTTP listener.
 
-## Routes
+## Deployment
 
-| Route | Behavior |
-|---|---|
-| `GET /`, `GET /Synapse` | 302 → `/SynapseSignOn/sts/login?signin=<hex>` |
-| `GET /SynapseSignOn/sts/login` | the sign-on page |
-| `POST /SynapseSignOn/sts/login` | captures username/password, then denies (default) or grants → worklist |
-| `GET /Synapse` (authed) | the post-login worklist |
-| `GET /SynapseSignOn/WinAuth/Login.aspx` | Windows auth: 401 `WWW-Authenticate` → native Sign in dialog; submitted creds captured. The 401 body is the "Unable to log in" page shown on Cancel |
-| `GET/POST /ssomgr/password/forgotpassword` | captures the probed username, always returns the generic "reset email sent" message (anti-enumeration) |
-| `GET /SynapseSignOn/sts/error` | the branded `Error` / `Request Id:` page (also the 500 handler, so errors never leak a stack trace) |
+Waitress provides HTTP/1.1. For a public vendor-profile deployment, terminate TLS at a
+reverse proxy on the expected external port, set `DICOMHAWK_PUBLIC_BASE_URL` so OIDC
+redirect URIs retain the public HTTPS origin, and do not publish the operator API.
+Presenting `:8080` plaintext as the final endpoint is a protocol/port fingerprint.
 
-`grant_access` (config) is the deny model: `false` logs every credential and rejects with
-the real error banner; `true` lets the client into the decoy worklist to observe deeper
-behavior.
+The component creates both listening sockets before starting their threads. A bind
+failure is therefore reported during startup and any listener already created is
+closed. SIGINT/SIGTERM shuts down Waitress, DIMSE listeners, and the repository.
 
-### Windows auth: Basic vs NTLM/Negotiate
+## Known fidelity boundary
 
-The Windows-auth route challenges with HTTP **Basic**, which produces the browser's native
-Sign in dialog and returns credentials in **plaintext**. Real IIS Windows Auth typically
-challenges with `Negotiate`/`NTLM` (same dialog, but credentials arrive as an NTLM hash via
-a multi-step handshake). Basic is used here for the plaintext capture; matching the exact
-`Negotiate`/`NTLM` header is a possible future upgrade on this route.
-
-## Fingerprint headers & cookies
-
-Every response carries `Server`, `X-Powered-By`, `X-AspNet-Version`, `X-Frame-Options`,
-`X-Content-Type-Options`, `X-Backendserver`, and a nonce-based CSP (under both
-`Content-Security-Policy` and legacy `X-Content-Security-Policy`). The per-request nonce is
-stamped on every inline `<script>` so the policy doesn't break the page;
-`/SynapseSignOn/sts/csp/report` absorbs CSP violation reports. HTML pages also get the
-no-store cache headers; static assets stay cacheable.
-
-The sign-on drops the cookies a real deployment sets — `idsrv.xsrf` (JS-readable
-double-submit token, matching the hidden form field), `SignInMessage.<token>` and
-`OpenIdConnect.nonce.<b64>` (HttpOnly blobs), `IdpCookie`/`IdpTokenCookie` (cleared with
-epoch-expiry on the login GET), and `WinLogin.OrigRequestUrlCookie` on the Windows-auth
-challenge. All `Secure; SameSite=None`; auth cookies are set only on sign-on responses,
-not on static assets.
-
-## Templates & assets
-
-The templates are sanitized reproductions of real captured pages: browser-extension
-scripts removed, the original site's host and customer data replaced with config-driven
-values, and per-request tokens (`idsrv.xsrf`, `requestId`, OIDC `nonce`/`state`)
-regenerated. The real CSS/JS is served verbatim so the markup, cookie names, and version
-stamp stay faithful.
-
-Web fonts were not part of the page captures and are vendored under `static/fonts/`:
-Font Awesome 4.7.0 (`fontawesome-webfont.*`, SIL OFL 1.1) for the password-visibility icon,
-and Open Sans 400/600 + italics (`@fontsource/open-sans`, Apache 2.0) for the body font.
-The favicon at `static/synapse/favicon.ico` must match the target product's icon (its hash
-is a discovery fingerprint).
+The Windows-auth endpoint uses Basic authentication to capture submitted credentials.
+Real IIS commonly uses multi-round `Negotiate`/NTLM. The native browser dialog is
+similar, but the wire protocol is distinguishable; do not describe that route as
+packet-perfect NTLM emulation.

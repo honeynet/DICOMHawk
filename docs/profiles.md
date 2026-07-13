@@ -44,9 +44,11 @@ src/profiles/<name>/
     └── static/               # your CSS/JS/images/favicon
 ```
 
-`<name>` must match `web.templates_dir` in the YAML (see below) and is how you select
+For a bundled profile, `<name>` normally matches `web.templates_dir` in the YAML and is how you select
 the profile: `dicomhawk serve --profile <name>`. `--profile` also accepts a filesystem
-path to a YAML file outside this layout, for a fully custom or private profile.
+path to a YAML file outside this layout. For an external profile, place `web/` beside
+the YAML (or `<templates_dir>/web/` below it); the loader resolves and validates those
+assets instead of silently serving a bundled profile with the same name.
 
 ## DICOM identity
 
@@ -66,6 +68,7 @@ dicom:
   max_pdu_size: 16384
   acse_timeout: 10     # seconds; null -> pynetdicom's own default (30)
   network_timeout: 15  # seconds; null -> pynetdicom's own default (60)
+  max_store_bytes: 536870912  # per-instance C-STORE cap; null disables it
   storage_classes:
     - uid: 1.2.840.10008.5.1.4.1.1.2   # CT Image Storage
       transfer_syntaxes: [1.2.840.10008.1.2, 1.2.840.10008.1.2.1]
@@ -110,7 +113,7 @@ C-FIND response.
 
 ### Required templates
 
-All five must exist under `web/templates/` or the corresponding page 500s:
+All five must exist under `web/templates/`; the profile fails at startup if one is missing:
 
 | Template | Rendered for | Key context variables |
 |---|---|---|
@@ -141,6 +144,9 @@ web:
     Server: MyWebServer/1.0
   html_cache_headers: {...}  # HTML responses only; static assets stay cacheable
   content_security_policy: "default-src 'self'; script-src 'nonce-{nonce}' 'self'"
+  legacy_csp_header: false  # emit X-Content-Security-Policy only when the target does
+  secure_cookies: true      # for targets deployed behind HTTPS
+  max_request_bytes: 1048576
   identity: {version: "1.0", copyright: "..."}
   license: {issued: "...", lines: [...]}
   oidc: {client_id: "...", client_name: "...", redirect_path: "...", scopes: "..."}
@@ -169,6 +175,7 @@ guesses as inferred):
 web:
   routes:
     entry: /MyPortal
+    worklist: /MyPortal/worklist
     login: /MyPortal/signin
     winauth: /MyPortal/winauth
     forgot_password: /MyPortal/forgot-password

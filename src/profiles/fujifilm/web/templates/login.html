@@ -107,7 +107,7 @@
                         <div class="col-md-6">
                             <form name="form" id="form" method="post" action="{{ login_url }}">
                                 <div class="shadow-box" style="display: block;">
-                                    <input id="antiForgery" type="hidden" value="{{ antiforgery_token }}" name="idsrv.xsrf">
+                                    <input id="antiForgery" type="hidden" value="{{ antiforgery_token }}" name="{{ antiforgery_name }}">
                                     <div class="form-group">
                                         <label for="username">Username</label>
                                         <input required="" title="This field is required." name="username" autofocus="" id="username" type="text" class="form-control" placeholder="Username" maxlength="100" autocomplete="off" list="autocompleteOff">

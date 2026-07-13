@@ -53,6 +53,7 @@ class _FakeQREvent:
 
 # --- store() ---
 
+
 def test_store_safe_writes_under_storage_dir(repo):
     ds = _ct_dataset()
     assert repo.store(ds, safe=True) is None
@@ -96,7 +97,22 @@ def test_store_with_missing_identity_keys_writes_file_but_skips_indexing(repo):
     assert indexed == 0
 
 
+def test_store_reports_database_index_failure(repo, monkeypatch):
+    ds = _ct_dataset()
+
+    def fail_index(*_args, **_kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(qrdb, "add_instance", fail_index)
+    err = repo.store(ds, safe=True)
+
+    assert err is not None
+    assert err.status == QRStatus.STORE_ERROR
+    assert "database unavailable" in err.error
+
+
 # --- find() ---
+
 
 def test_find_universal_matching_returns_all_when_keys_empty(repo):
     a, b = _ct_dataset(), _ct_dataset()
@@ -130,6 +146,7 @@ def test_find_filters_by_a_specific_key(repo):
 
 # --- eval_qr() ---
 
+
 def test_eval_qr_rejects_unsupported_sop_class(repo):
     ds = Dataset()
     ds.QueryRetrieveLevel = "STUDY"
@@ -147,8 +164,10 @@ def test_eval_qr_rejects_missing_query_retrieve_level(repo):
 
 def test_eval_qr_honors_custom_missing_level_status(repo):
     ds = Dataset()
-    err = repo.eval_qr(_FakeQREvent(StudyRootQueryRetrieveInformationModelFind, ds),
-                        missing_level_status=QRStatus.INVALID_REQUEST)
+    err = repo.eval_qr(
+        _FakeQREvent(StudyRootQueryRetrieveInformationModelFind, ds),
+        missing_level_status=QRStatus.INVALID_REQUEST,
+    )
     assert err is not None
     assert err.status == QRStatus.INVALID_REQUEST
 
@@ -156,10 +175,14 @@ def test_eval_qr_honors_custom_missing_level_status(repo):
 def test_eval_qr_accepts_a_valid_request(repo):
     ds = Dataset()
     ds.QueryRetrieveLevel = "STUDY"
-    assert repo.eval_qr(_FakeQREvent(StudyRootQueryRetrieveInformationModelFind, ds)) is None
+    assert (
+        repo.eval_qr(_FakeQREvent(StudyRootQueryRetrieveInformationModelFind, ds))
+        is None
+    )
 
 
 # --- find_instance() ---
+
 
 def test_find_instance_blocks_quarantined_instances(repo):
     ds = _ct_dataset()

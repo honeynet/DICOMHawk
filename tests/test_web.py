@@ -12,6 +12,11 @@ from web.app import new_web
 @pytest.fixture
 def bus():
     logger = logging.getLogger("bus")
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+    logger.propagate = True
+    logger.setLevel(logging.INFO)
     logger.addHandler(logging.NullHandler())
     return logger
 
@@ -52,7 +57,9 @@ def test_fingerprint_seam_injects_configured_script(repo, bus):
 
 def test_honey_credential_grants_unconditionally_and_logs_distinctly(repo, bus, caplog):
     profile = load_profile("generic-pacs")
-    assert profile.web.grant_access is False  # the point: bait works even though real logins don't
+    assert (
+        profile.web.grant_access is False
+    )  # the point: bait works even though real logins don't
     client = new_web(profile, repo, bus).test_client()
 
     with caplog.at_level(logging.WARNING, logger="bus"):
@@ -60,19 +67,25 @@ def test_honey_credential_grants_unconditionally_and_logs_distinctly(repo, bus, 
             "/portal/login?signin=x", data={"username": "test", "password": "test"}
         )
     assert resp.status_code == 302
-    assert resp.headers["Location"] == "/portal"
+    assert resp.headers["Location"] == "/portal/worklist"
     assert "WEB_HONEY_CREDENTIAL_USED" in caplog.text
 
 
 def test_honey_hint_visible_on_generic_pacs_not_fujifilm(repo, bus):
-    generic_body = new_web(load_profile("generic-pacs"), repo, bus).test_client().get(
-        "/portal/login?signin=x"
-    ).get_data(as_text=True)
+    generic_body = (
+        new_web(load_profile("generic-pacs"), repo, bus)
+        .test_client()
+        .get("/portal/login?signin=x")
+        .get_data(as_text=True)
+    )
     assert "test / test" in generic_body
 
-    fuji_body = new_web(load_profile("fujifilm"), repo, bus).test_client().get(
-        "/SynapseSignOn/sts/login?signin=x"
-    ).get_data(as_text=True)
+    fuji_body = (
+        new_web(load_profile("fujifilm"), repo, bus)
+        .test_client()
+        .get("/SynapseSignOn/sts/login?signin=x")
+        .get_data(as_text=True)
+    )
     assert "test / test" not in fuji_body
 
 
@@ -98,7 +111,10 @@ def test_generic_pacs_routes_and_cookies_are_not_synapse_shaped(repo, bus):
     assert "Synapse" not in body
     assert "SynapseSignOn" not in body
     cookie_names = [c.split("=")[0] for c in login_resp.headers.getlist("Set-Cookie")]
-    assert not any("idsrv" in c or "SignInMessage" in c or "OpenIdConnect" in c for c in cookie_names)
+    assert not any(
+        "idsrv" in c or "SignInMessage" in c or "OpenIdConnect" in c
+        for c in cookie_names
+    )
 
     winauth_resp = client.get("/portal/winauth")
     assert winauth_resp.status_code == 401
@@ -125,7 +141,9 @@ def test_error_and_forgot_password_pages_use_overridden_routes(tmp_path, repo, b
     profile = load_profile(str(custom))
     client = new_web(profile, repo, bus).test_client()
 
-    error_body = client.get("/portal/error").get_data(as_text=True)  # sts_error kept its default route
+    error_body = client.get("/portal/error").get_data(
+        as_text=True
+    )  # sts_error kept its default route
     assert 'href="/custom/login"' in error_body
     assert "/SynapseSignOn/sts/login" not in error_body
 
@@ -140,6 +158,59 @@ def test_login_get_spoofs_iis_headers(client):
     assert resp.headers["Server"] == "Microsoft-IIS/10.0"
     assert resp.headers["X-Powered-By"] == "ASP.NET"
     assert "nonce-" in resp.headers["Content-Security-Policy"]
+    assert (
+        resp.headers["X-Content-Security-Policy"]
+        == resp.headers["Content-Security-Policy"]
+    )
+
+
+def test_generic_profile_does_not_leak_synapse_legacy_csp(repo, bus):
+    resp = (
+        new_web(load_profile("generic-pacs"), repo, bus)
+        .test_client()
+        .get("/portal/login?signin=abc")
+    )
+    assert "X-Content-Security-Policy" not in resp.headers
+
+
+def test_signin_token_is_script_safe_and_cookie_matches_flow(client):
+    resp = client.get("/SynapseSignOn/sts/login?signin=flow-123")
+    assert "SignInMessage.flow-123=" in "\n".join(resp.headers.getlist("Set-Cookie"))
+
+    hostile = client.get(
+        "/SynapseSignOn/sts/login?signin=%3C/script%3E%3Cscript%3Eboom%3C/script%3E"
+    )
+    assert b"</script><script>boom</script>" not in hostile.data
+    assert b"boom" not in hostile.data
+
+
+def test_oversized_login_is_rejected_and_logged(repo, bus, caplog):
+    profile = load_profile("generic-pacs")
+    profile.web.max_request_bytes = 32
+    client = new_web(profile, repo, bus).test_client()
+    with caplog.at_level(logging.INFO, logger="bus"):
+        resp = client.post("/portal/login", data={"username": "x" * 100})
+    assert resp.status_code == 413
+    assert b"Werkzeug" not in resp.data
+    assert "WEB_REQUEST_TOO_LARGE" in caplog.text
+
+
+def test_http_login_javascript_does_not_assume_missing_rsa_library(client):
+    script = client.get("/static/synapse/login.js").get_data(as_text=True)
+    assert 'typeof JSEncrypt !== "undefined"' in script
+
+
+def test_public_base_url_keeps_oidc_redirect_on_external_https(repo, bus):
+    profile = load_profile("fujifilm")
+    profile.web.public_base_url = "https://pacs.example.org"
+    body = (
+        new_web(profile, repo, bus)
+        .test_client()
+        .get("/SynapseSignOn/sts/login?signin=abc")
+        .get_data(as_text=True)
+    )
+    assert "https%3a%2f%2fpacs.example.org%2fWorkflowUI%2f" in body
+    assert "http%3a%2f%2flocalhost%2fWorkflowUI%2f" not in body
 
 
 def test_login_post_denies_and_captures(client, caplog):
@@ -165,10 +236,12 @@ def test_winauth_honey_credential_grants_and_logs_distinctly(repo, bus, caplog):
     creds = base64.b64encode(b"test:test").decode()
 
     with caplog.at_level(logging.WARNING, logger="bus"):
-        resp = client.get("/portal/winauth", headers={"Authorization": f"Basic {creds}"})
+        resp = client.get(
+            "/portal/winauth", headers={"Authorization": f"Basic {creds}"}
+        )
 
     assert resp.status_code == 302
-    assert resp.headers["Location"] == "/portal"
+    assert resp.headers["Location"] == "/portal/worklist"
     assert "WEB_HONEY_CREDENTIAL_USED" in caplog.text
 
 
@@ -206,10 +279,14 @@ def test_swat_probe_bounces_toward_signon_and_logs(client, caplog):
     with caplog.at_level(logging.INFO, logger="bus"):
         resp = client.get("/Swat/anything/here")
     assert resp.status_code == 302
-    assert resp.headers["Location"] == "/Synapse"  # engine's own entry point, not a hardcoded URL
+    assert (
+        resp.headers["Location"] == "/Synapse"
+    )  # engine's own entry point, not a hardcoded URL
     assert "WEB_HONEYTRAP_LOGIN_REDIRECT" in caplog.text
 
-    resp = client.get("/Swat/api/sso/signoff")  # nested paths fold into the same catch-all
+    resp = client.get(
+        "/Swat/api/sso/signoff"
+    )  # nested paths fold into the same catch-all
     assert resp.status_code == 302
 
 
@@ -260,7 +337,9 @@ def test_new_profile_can_declare_its_own_honeytrap(tmp_path, repo, bus):
 
     resp = client.get("/osirixAdmin/anything")
     assert resp.status_code == 302
-    assert resp.headers["Location"] == "/portal"  # this custom profile didn't override web.routes either
+    assert (
+        resp.headers["Location"] == "/portal"
+    )  # this custom profile didn't override web.routes either
 
 
 def test_unmapped_path_gets_spoofed_headers_not_werkzeug_default(client, caplog):
@@ -292,12 +371,19 @@ def test_sparse_profile_serves_without_crashing(tmp_path, repo, bus):
     app = new_web(profile, repo, bus)
     client = app.test_client()
 
-    assert client.get("/portal").status_code == 302  # no routes override -> generic default, not /Synapse
+    assert (
+        client.get("/portal").status_code == 302
+    )  # no routes override -> generic default, not /Synapse
     assert client.get("/portal/login?signin=x").status_code == 200
-    assert client.get("/favicon.ico").status_code == 404  # no favicon configured -> 404, not a crash
-    assert client.post(
-        "/portal/login?signin=x", data={"username": "a", "password": "b"}
-    ).status_code == 200
+    assert (
+        client.get("/favicon.ico").status_code == 404
+    )  # no favicon configured -> 404, not a crash
+    assert (
+        client.post(
+            "/portal/login?signin=x", data={"username": "a", "password": "b"}
+        ).status_code
+        == 200
+    )
 
 
 def test_worklist_reads_seeded_studies(repo, bus, caplog):
@@ -317,14 +403,21 @@ def test_worklist_reads_seeded_studies(repo, bus, caplog):
         data={"username": "a", "password": "b"},
     )
     assert login.status_code == 302
+    login_cookies = "\n".join(login.headers.getlist("Set-Cookie"))
+    assert "IdpCookie=" in login_cookies
+    assert "Secure" in login_cookies
+    assert "sw_authed" not in login_cookies
 
-    client.set_cookie("sw_authed", "1")
+    client.set_cookie("IdpCookie", "1")
     with caplog.at_level(logging.INFO, logger="bus"):
-        resp = client.get("/Synapse")
+        resp = client.get("/WorkflowUI/")
     assert resp.status_code == 200
     assert b"worklist-table" in resp.data
     assert b"No studies." not in resp.data
     assert "WEB_WORKLIST_VIEW" in caplog.text
+
+    deep = client.get("/WorkflowUI/PowerJacket/?PJType=POWERJACKET")
+    assert deep.status_code == 200
 
 
 def test_generic_pacs_profile_serves_all_pages(repo, bus):
@@ -365,5 +458,11 @@ def test_fujifilm_and_generic_pacs_dont_leak_into_each_other(repo, bus):
     fuji_client = new_web(load_profile("fujifilm"), repo, bus).test_client()
     generic_client = new_web(load_profile("generic-pacs"), repo, bus).test_client()
 
-    assert fuji_client.get("/SynapseSignOn/sts/login?signin=x").headers["Server"] == "Microsoft-IIS/10.0"
-    assert generic_client.get("/SynapseSignOn/sts/login?signin=x").headers["Server"] == "Apache"
+    assert (
+        fuji_client.get("/SynapseSignOn/sts/login?signin=x").headers["Server"]
+        == "Microsoft-IIS/10.0"
+    )
+    assert (
+        generic_client.get("/SynapseSignOn/sts/login?signin=x").headers["Server"]
+        == "Apache"
+    )

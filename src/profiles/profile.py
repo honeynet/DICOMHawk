@@ -1,9 +1,10 @@
 import logging
+import re
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
-
 import yaml
+from pydicom.uid import UID
 from pynetdicom import DEFAULT_TRANSFER_SYNTAXES
 from pynetdicom.presentation import AllStoragePresentationContexts
 from pynetdicom.sop_class import _QR_CLASSES, _VERIFICATION_CLASSES
@@ -11,12 +12,24 @@ from pynetdicom.sop_class import _QR_CLASSES, _VERIFICATION_CLASSES
 logger = logging.getLogger(__name__)
 
 _DATA_PKG = "profiles"
+_OPERATIONS = frozenset({"echo", "find", "get", "move", "store"})
+_HONEYTRAP_RESPONSES = frozenset({"login_redirect", "api_404", "unauthorized_page"})
+_REQUIRED_TEMPLATES = frozenset(
+    {
+        "login.html",
+        "forgot_password.html",
+        "error.html",
+        "winauth_unable.html",
+        "worklist.html",
+    }
+)
 
 # (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
 
 # _QR_CLASSES class-name suffix -> operation name in `operations`/`qr_classes`.
 _QR_SUFFIX_TO_OP: dict[str, str] = {"Find": "find", "Move": "move", "Get": "get"}
+_COOKIE_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 
 @dataclass
@@ -32,12 +45,13 @@ class DicomConfig:
     storage_classes: list[SopClass]
     qr_classes: dict[str, list[SopClass]]
     max_associations: int
-    max_pdu_size: int | None # None -> pynetdicom's own default; no real value to mimic
+    max_pdu_size: int | None  # None -> pynetdicom's own default; no real value to mimic
     ae_auth: AEAuthConfig
     # Tighter than pynetdicom's 30s/60s defaults — a raw connection with no valid PDU
     # still holds a max_associations slot until these expire (DoS window).
     acse_timeout: float | None
     network_timeout: float | None
+    max_store_bytes: int | None
 
 
 @dataclass
@@ -48,20 +62,33 @@ class WebConfig:
     headers: dict[str, str] = field(default_factory=dict)
     html_cache_headers: dict[str, str] = field(default_factory=dict)
     content_security_policy: str | None = None
+    legacy_csp_header: bool = False
+    secure_cookies: bool = False
     identity: dict[str, str] = field(default_factory=dict)
     license: dict = field(default_factory=dict)
     oidc: dict[str, str] = field(default_factory=dict)
-    favicon: str | None = None       # filename under the profile's web/static/, served by the web component
+    favicon: str | None = (
+        None  # filename under the profile's web/static/, served by the web component
+    )
     # (path, response_kind); a profile with none declared gets no honeytrap routes at all.
     honeytraps: list[tuple[str, str]] = field(default_factory=list)
-    fingerprint_script: str | None = None  # static-asset filename; Weeks 5-6 injection seam only, no collector yet
+    fingerprint_script: str | None = (
+        None  # static-asset filename; Weeks 5-6 injection seam only, no collector yet
+    )
     # (username, password) bait pairs; using one grants access unconditionally (see login_post).
     honey_credentials: list[tuple[str, str]] = field(default_factory=list)
     # URL paths for every route the engine serves; keeps one profile's identity out of another's address bar.
     routes: dict[str, str] = field(default_factory=dict)
     # Cookie names the engine sets; same isolation reasoning as routes.
     cookies: dict[str, str] = field(default_factory=dict)
-    winauth_messages: dict[str, str] = field(default_factory=dict)  # text1/text2/text3 for the WinAuth translation fetch
+    winauth_messages: dict[str, str] = field(
+        default_factory=dict
+    )  # text1/text2/text3 for the WinAuth translation fetch
+    max_request_bytes: int = 1_048_576
+    assets_dir: str | None = None
+    # Deployment topology, not device identity — set per-deployment via serve.py's
+    # --public-base-url/$DICOMHAWK_PUBLIC_BASE_URL, never from profile YAML.
+    public_base_url: str | None = None
 
 
 @dataclass
@@ -103,14 +130,18 @@ def default_profile() -> ProfileConfig:
         model_name=None,
         dicom=DicomConfig(
             operations=["echo", "find", "get", "move", "store"],
-            verification=(_VERIFICATION_CLASSES["Verification"], DEFAULT_TRANSFER_SYNTAXES),
+            verification=(
+                _VERIFICATION_CLASSES["Verification"],
+                DEFAULT_TRANSFER_SYNTAXES,
+            ),
             storage_classes=storage_classes,
             qr_classes=qr_classes,
             max_associations=100,
-            max_pdu_size=65536, # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
+            max_pdu_size=65536,  # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
             ae_auth=AEAuthConfig(),
-            acse_timeout=10, # tighter than pynetdicom's 30s default — shrinks a garbage connection's DoS window
-            network_timeout=15, # tighter than pynetdicom's 60s default, same reason
+            acse_timeout=10,  # tighter than pynetdicom's 30s default — shrinks a garbage connection's DoS window
+            network_timeout=15,  # tighter than pynetdicom's 60s default, same reason
+            max_store_bytes=512 * 1024 * 1024,
         ),
         web=WebConfig(
             # Generic fallback content — real values for any pacs profile that omits
@@ -127,11 +158,17 @@ def default_profile() -> ProfileConfig:
             content_security_policy="default-src 'self'; script-src 'nonce-{nonce}' 'self'; style-src 'self' 'unsafe-inline'",
             identity={"version": "1.0", "copyright": ""},
             license={"issued": "", "lines": []},
-            oidc={"client_id": "", "client_name": "", "redirect_path": "/", "scopes": ""},
+            oidc={
+                "client_id": "",
+                "client_name": "",
+                "redirect_path": "/",
+                "scopes": "",
+            },
             # Generic, non-vendor-specific route/cookie names — never "Synapse"-shaped,
             # so a profile that doesn't override these can't leak Fujifilm's identity.
             routes={
                 "entry": "/portal",
+                "worklist": "/portal/worklist",
                 "login": "/portal/login",
                 "winauth": "/portal/winauth",
                 "forgot_password": "/portal/forgot-password",
@@ -164,21 +201,79 @@ def _require(d: dict, key: str, where: str):
     return d[key]
 
 
+def _mapping(value, where: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"Profile section '{where}' must be a mapping")
+    return value
+
+
+def _number(value, where: str, converter, *, nullable: bool = False):
+    if value is None and nullable:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"Profile '{where}' must be numeric")
+    try:
+        return converter(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Profile '{where}' must be numeric") from exc
+
+
 def _parse_sop_class(entry: dict, where: str) -> SopClass:
+    if not isinstance(entry, dict):
+        raise ValueError(f"Profile entry '{where}' must be a mapping")
     uid = _require(entry, "uid", where)
     ts = _require(entry, "transfer_syntaxes", where)
-    return (str(uid), [str(t) for t in ts])
+    if not isinstance(ts, list) or not ts:
+        raise ValueError(
+            f"Profile '{where}.transfer_syntaxes' must be a non-empty list"
+        )
+    uid_text = str(uid)
+    transfer_syntaxes = [str(t) for t in ts]
+    if not UID(uid_text).is_valid or any(
+        not UID(t).is_valid for t in transfer_syntaxes
+    ):
+        raise ValueError(f"Profile entry '{where}' contains an invalid DICOM UID")
+    return (uid_text, transfer_syntaxes)
 
 
-def _parse_profile(data: dict) -> ProfileConfig:
+def _resolve_web_assets(templates_dir: str, source_dir: Path | None, honeytraps) -> str:
+    requested = Path(templates_dir)
+    candidates: list[Path] = []
+    if requested.is_absolute():
+        candidates.extend((requested, requested / "web"))
+    elif source_dir is not None:
+        candidates.extend((source_dir / requested / "web", source_dir / "web"))
+    try:
+        candidates.append(Path(str(files(_DATA_PKG).joinpath(templates_dir, "web"))))
+    except ModuleNotFoundError:
+        pass
+
+    required = set(_REQUIRED_TEMPLATES)
+    if any(kind == "unauthorized_page" for _, kind in honeytraps):
+        required.add("unauthorized.html")
+    for candidate in candidates:
+        template_dir = candidate / "templates"
+        if candidate.is_dir() and all(
+            (template_dir / name).is_file() for name in required
+        ):
+            return str(candidate.resolve())
+    raise ValueError(
+        f"Profile web templates not found for '{templates_dir}' "
+        f"(required: {', '.join(sorted(required))})"
+    )
+
+
+def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     """Overlay a partial profile YAML onto default_profile(); missing keys use defaults, malformed entries raise."""
     d = default_profile()
     if not isinstance(data, dict):
-        data = {}
-    meta = data.get("meta") or {}
-    identity = data.get("identity") or {}
-    dicom_raw = data.get("dicom") or {}
-    web_raw = data.get("web") or {}
+        raise ValueError("Profile YAML must contain a top-level mapping")
+    meta = _mapping(data.get("meta"), "meta")
+    identity = _mapping(data.get("identity"), "identity")
+    dicom_raw = _mapping(data.get("dicom"), "dicom")
+    web_raw = _mapping(data.get("web"), "web")
 
     fell_back: list[str] = []
 
@@ -189,8 +284,26 @@ def _parse_profile(data: dict) -> ProfileConfig:
         return default
 
     ae_title = dget(identity, "ae_title", d.ae_title, "identity.ae_title")
-    operations = list(dget(dicom_raw, "operations", d.dicom.operations, "dicom.operations"))
-    max_associations = int(dicom_raw.get("max_associations", d.dicom.max_associations))
+    operations_raw = dget(
+        dicom_raw, "operations", d.dicom.operations, "dicom.operations"
+    )
+    if not isinstance(operations_raw, list) or not operations_raw:
+        raise ValueError("Profile 'dicom.operations' must be a non-empty list")
+    operations = [str(op).lower() for op in operations_raw]
+    unknown_operations = set(operations) - _OPERATIONS
+    if unknown_operations:
+        raise ValueError(
+            f"Profile has unknown DICOM operations: {', '.join(sorted(unknown_operations))}"
+        )
+    if len(set(operations)) != len(operations):
+        raise ValueError("Profile 'dicom.operations' must not contain duplicates")
+    max_associations = _number(
+        dicom_raw.get("max_associations", d.dicom.max_associations),
+        "dicom.max_associations",
+        int,
+    )
+    if max_associations < 1:
+        raise ValueError("Profile 'dicom.max_associations' must be at least 1")
 
     if "verification" in dicom_raw:
         verification = _parse_sop_class(dicom_raw["verification"], "dicom.verification")
@@ -199,46 +312,145 @@ def _parse_profile(data: dict) -> ProfileConfig:
         fell_back.append("dicom.verification")
 
     if "storage_classes" in dicom_raw:
-        storage_classes = [_parse_sop_class(e, "dicom.storage_classes")
-                           for e in dicom_raw["storage_classes"]]
+        if not isinstance(dicom_raw["storage_classes"], list):
+            raise ValueError("Profile 'dicom.storage_classes' must be a list")
+        storage_classes = [
+            _parse_sop_class(e, "dicom.storage_classes")
+            for e in dicom_raw["storage_classes"]
+        ]
     else:
         storage_classes = d.dicom.storage_classes
         fell_back.append("dicom.storage_classes")
 
     if "qr_classes" in dicom_raw:
-        qr_classes = {op: [_parse_sop_class(e, f"dicom.qr_classes.{op}") for e in entries]
-                      for op, entries in dicom_raw["qr_classes"].items()}
+        qr_raw = _mapping(dicom_raw["qr_classes"], "dicom.qr_classes")
+        unknown_qr = set(qr_raw) - {"find", "move", "get"}
+        if unknown_qr:
+            raise ValueError(
+                f"Profile has unknown Q/R groups: {', '.join(sorted(unknown_qr))}"
+            )
+        qr_classes = {**d.dicom.qr_classes}
+        for op, entries in qr_raw.items():
+            if not isinstance(entries, list):
+                raise ValueError(f"Profile 'dicom.qr_classes.{op}' must be a list")
+            qr_classes[op] = [
+                _parse_sop_class(e, f"dicom.qr_classes.{op}") for e in entries
+            ]
     else:
         qr_classes = d.dicom.qr_classes
         fell_back.append("dicom.qr_classes")
 
     if "max_pdu_size" in dicom_raw:
         v = dicom_raw["max_pdu_size"]
-        max_pdu_size = None if v is None else int(v)
+        max_pdu_size = _number(v, "dicom.max_pdu_size", int, nullable=True)
     else:
         max_pdu_size = d.dicom.max_pdu_size
+    if max_pdu_size is not None and max_pdu_size < 1:
+        raise ValueError("Profile 'dicom.max_pdu_size' must be positive or null")
 
     if "acse_timeout" in dicom_raw:
         v = dicom_raw["acse_timeout"]
-        acse_timeout = None if v is None else float(v)
+        acse_timeout = _number(v, "dicom.acse_timeout", float, nullable=True)
     else:
         acse_timeout = d.dicom.acse_timeout
+    if acse_timeout is not None and acse_timeout <= 0:
+        raise ValueError("Profile 'dicom.acse_timeout' must be positive or null")
 
     if "network_timeout" in dicom_raw:
         v = dicom_raw["network_timeout"]
-        network_timeout = None if v is None else float(v)
+        network_timeout = _number(v, "dicom.network_timeout", float, nullable=True)
     else:
         network_timeout = d.dicom.network_timeout
+    if network_timeout is not None and network_timeout <= 0:
+        raise ValueError("Profile 'dicom.network_timeout' must be positive or null")
 
-    ae_auth_raw = dicom_raw.get("ae_auth") or {}
+    max_store_bytes = _number(
+        dicom_raw.get("max_store_bytes", d.dicom.max_store_bytes),
+        "dicom.max_store_bytes",
+        int,
+        nullable=True,
+    )
+    if max_store_bytes is not None and max_store_bytes < 1:
+        raise ValueError("Profile 'dicom.max_store_bytes' must be positive or null")
+
+    ae_auth_raw = _mapping(dicom_raw.get("ae_auth"), "dicom.ae_auth")
+    if "require_called_aet" in ae_auth_raw and not isinstance(
+        ae_auth_raw["require_called_aet"], bool
+    ):
+        raise ValueError("Profile 'dicom.ae_auth.require_called_aet' must be boolean")
+    require_calling_aet = ae_auth_raw.get("require_calling_aet")
+    if require_calling_aet is not None and not isinstance(require_calling_aet, list):
+        raise ValueError(
+            "Profile 'dicom.ae_auth.require_calling_aet' must be a list or null"
+        )
+    if require_calling_aet and any(
+        not str(aet).strip()
+        or len(str(aet)) > 16
+        or any(ord(ch) < 32 or ord(ch) > 126 for ch in str(aet))
+        for aet in require_calling_aet
+    ):
+        raise ValueError("Every required calling AE title must contain 1-16 characters")
     ae_auth = AEAuthConfig(
         require_called_aet=bool(ae_auth_raw.get("require_called_aet", False)),
-        require_calling_aet=ae_auth_raw.get("require_calling_aet"),
+        require_calling_aet=(
+            [str(aet) for aet in require_calling_aet] if require_calling_aet else None
+        ),
     )
 
-    name = meta.get("name", d.name)
+    name = str(meta.get("name", d.name))
+    kind = str(meta.get("kind", d.kind))
+    if kind not in {"dicom", "pacs"}:
+        raise ValueError("Profile 'meta.kind' must be 'dicom' or 'pacs'")
+    if not name.strip():
+        raise ValueError("Profile 'meta.name' must not be empty")
+    ae_title = str(ae_title)
+    if (
+        not ae_title.strip()
+        or len(ae_title) > 16
+        or any(ord(ch) < 32 or ord(ch) > 126 for ch in ae_title)
+    ):
+        raise ValueError("Profile 'identity.ae_title' must contain 1-16 characters")
 
-    web_enabled = bool(web_raw.get("enabled", False))
+    implementation_class_uid = identity.get(
+        "implementation_class_uid", d.implementation_class_uid
+    )
+    if implementation_class_uid is not None:
+        implementation_class_uid = str(implementation_class_uid)
+        if not UID(implementation_class_uid).is_valid:
+            raise ValueError(
+                "Profile 'identity.implementation_class_uid' is not a valid DICOM UID"
+            )
+    implementation_version_name = identity.get(
+        "implementation_version_name", d.implementation_version_name
+    )
+    if implementation_version_name is not None:
+        implementation_version_name = str(implementation_version_name)
+        if not implementation_version_name or len(implementation_version_name) > 16:
+            raise ValueError(
+                "Profile 'identity.implementation_version_name' must contain 1-16 characters"
+            )
+
+    for operation in operations:
+        if operation in {"store", "get"} and not storage_classes:
+            raise ValueError(
+                f"Profile enables '{operation}' but has no storage classes"
+            )
+        if operation in {"find", "move", "get"} and not qr_classes[operation]:
+            raise ValueError(
+                f"Profile enables '{operation}' but has no Q/R classes for it"
+            )
+
+    if "enabled" in web_raw and not isinstance(web_raw["enabled"], bool):
+        raise ValueError("Profile 'web.enabled' must be boolean")
+    if "grant_access" in web_raw and not isinstance(web_raw["grant_access"], bool):
+        raise ValueError("Profile 'web.grant_access' must be boolean")
+    if "legacy_csp_header" in web_raw and not isinstance(
+        web_raw["legacy_csp_header"], bool
+    ):
+        raise ValueError("Profile 'web.legacy_csp_header' must be boolean")
+    if "secure_cookies" in web_raw and not isinstance(web_raw["secure_cookies"], bool):
+        raise ValueError("Profile 'web.secure_cookies' must be boolean")
+    web_enabled = web_raw.get("enabled", False)
     if web_enabled and not web_raw.get("templates_dir"):
         raise ValueError(
             f"Profile '{name}' has web.enabled=true but no web.templates_dir "
@@ -246,38 +458,152 @@ def _parse_profile(data: dict) -> ProfileConfig:
         )
     if web_enabled:
         # Only worth reporting if the web component will actually run with these values.
-        for key in ("headers", "html_cache_headers", "content_security_policy",
-                    "identity", "license", "oidc", "routes", "cookies", "winauth_messages"):
+        for key in (
+            "headers",
+            "html_cache_headers",
+            "content_security_policy",
+            "identity",
+            "license",
+            "oidc",
+            "routes",
+            "cookies",
+            "winauth_messages",
+        ):
             if key not in web_raw:
                 fell_back.append(f"web.{key}")
 
     if fell_back:
-        logger.warning("Profile '%s' missing keys; using defaults for: %s",
-                       name, ", ".join(fell_back))
+        logger.warning(
+            "Profile '%s' missing keys; using defaults for: %s",
+            name,
+            ", ".join(fell_back),
+        )
 
     if "honeytraps" in web_raw:
+        if not isinstance(web_raw["honeytraps"], list):
+            raise ValueError("Profile 'web.honeytraps' must be a list")
         honeytraps = [
-            (str(_require(h, "path", "web.honeytraps")), str(_require(h, "response", "web.honeytraps")))
+            (
+                str(_require(item, "path", "web.honeytraps")),
+                str(_require(item, "response", "web.honeytraps")),
+            )
             for h in web_raw["honeytraps"]
+            for item in [_mapping(h, "web.honeytraps")]
         ]
     else:
         honeytraps = d.web.honeytraps
+    for path, response in honeytraps:
+        if not path.startswith("/"):
+            raise ValueError(f"Honeytrap path must start with '/': {path}")
+        if response not in _HONEYTRAP_RESPONSES:
+            raise ValueError(f"Unknown honeytrap response: {response}")
 
     if "honey_credentials" in web_raw:
+        if not isinstance(web_raw["honey_credentials"], list):
+            raise ValueError("Profile 'web.honey_credentials' must be a list")
         honey_credentials = [
-            (str(_require(c, "username", "web.honey_credentials")),
-             str(_require(c, "password", "web.honey_credentials")))
+            (
+                str(_require(item, "username", "web.honey_credentials")),
+                str(_require(item, "password", "web.honey_credentials")),
+            )
             for c in web_raw["honey_credentials"]
+            for item in [_mapping(c, "web.honey_credentials")]
         ]
     else:
         honey_credentials = d.web.honey_credentials
 
+    def web_dict(key: str, default: dict) -> dict:
+        return {**default, **_mapping(web_raw.get(key), f"web.{key}")}
+
+    headers = web_dict("headers", d.web.headers)
+    html_cache_headers = web_dict("html_cache_headers", d.web.html_cache_headers)
+    web_identity = web_dict("identity", d.web.identity)
+    license_data = web_dict("license", d.web.license)
+    oidc = web_dict("oidc", d.web.oidc)
+    routes = web_dict("routes", d.web.routes)
+    cookies = web_dict("cookies", d.web.cookies)
+    winauth_messages = web_dict("winauth_messages", d.web.winauth_messages)
+    if any(
+        not isinstance(path, str)
+        or not path.startswith("/")
+        or "?" in path
+        or "#" in path
+        or any(ord(ch) < 32 for ch in path)
+        for path in routes.values()
+    ):
+        raise ValueError("Every 'web.routes' value must be an absolute URL path")
+    if len(set(routes.values())) != len(routes):
+        raise ValueError("Profile 'web.routes' values must be unique")
+    if any(
+        not isinstance(cookie, str) or not cookie or not _COOKIE_NAME.fullmatch(cookie)
+        for cookie in cookies.values()
+    ):
+        raise ValueError("Every 'web.cookies' value must be a non-empty string")
+    if not isinstance(license_data.get("lines"), list) or any(
+        not isinstance(line, str) for line in license_data["lines"]
+    ):
+        raise ValueError("Profile 'web.license.lines' must be a list")
+    for section_name, values in (
+        ("headers", headers),
+        ("html_cache_headers", html_cache_headers),
+    ):
+        if any(
+            not isinstance(key, str)
+            or not isinstance(value, str)
+            or "\n" in key
+            or "\r" in key
+            or "\n" in value
+            or "\r" in value
+            for key, value in values.items()
+        ):
+            raise ValueError(
+                f"Profile 'web.{section_name}' keys and values must be single-line strings"
+            )
+
+    content_security_policy = web_raw.get(
+        "content_security_policy", d.web.content_security_policy
+    )
+    if content_security_policy is not None and not isinstance(
+        content_security_policy, str
+    ):
+        raise ValueError(
+            "Profile 'web.content_security_policy' must be a string or null"
+        )
+    max_request_bytes = _number(
+        web_raw.get("max_request_bytes", d.web.max_request_bytes),
+        "web.max_request_bytes",
+        int,
+    )
+    if max_request_bytes < 1:
+        raise ValueError("Profile 'web.max_request_bytes' must be positive")
+    assets_dir = (
+        _resolve_web_assets(str(web_raw["templates_dir"]), source_dir, honeytraps)
+        if web_enabled
+        else None
+    )
+    if assets_dir:
+        static_dir = Path(assets_dir) / "static"
+        for label, asset in (
+            ("favicon", web_raw.get("favicon")),
+            ("fingerprint_script", web_raw.get("fingerprint_script")),
+        ):
+            if asset is None:
+                continue
+            asset_path = (static_dir / str(asset)).resolve()
+            if (
+                not asset_path.is_relative_to(static_dir.resolve())
+                or not asset_path.is_file()
+            ):
+                raise ValueError(
+                    f"Profile 'web.{label}' does not name a file under the profile static directory"
+                )
+
     return ProfileConfig(
         name=name,
-        kind=meta.get("kind", d.kind),
+        kind=kind,
         ae_title=ae_title,
-        implementation_class_uid=identity.get("implementation_class_uid", d.implementation_class_uid),
-        implementation_version_name=identity.get("implementation_version_name", d.implementation_version_name),
+        implementation_class_uid=implementation_class_uid,
+        implementation_version_name=implementation_version_name,
         manufacturer=identity.get("manufacturer", d.manufacturer),
         model_name=identity.get("model_name", d.model_name),
         dicom=DicomConfig(
@@ -290,25 +616,32 @@ def _parse_profile(data: dict) -> ProfileConfig:
             ae_auth=ae_auth,
             acse_timeout=acse_timeout,
             network_timeout=network_timeout,
+            max_store_bytes=max_store_bytes,
         ),
         web=WebConfig(
             enabled=web_enabled,
             templates_dir=web_raw.get("templates_dir"),
             grant_access=bool(web_raw.get("grant_access", False)),
             # Per-key overlay (a profile can override just one header/oidc key), like overlay_config().
-            headers={**d.web.headers, **(web_raw.get("headers") or {})},
-            html_cache_headers={**d.web.html_cache_headers, **(web_raw.get("html_cache_headers") or {})},
-            content_security_policy=web_raw.get("content_security_policy", d.web.content_security_policy),
-            identity={**d.web.identity, **(web_raw.get("identity") or {})},
-            license={**d.web.license, **(web_raw.get("license") or {})},
-            oidc={**d.web.oidc, **(web_raw.get("oidc") or {})},
+            headers=headers,
+            html_cache_headers=html_cache_headers,
+            content_security_policy=content_security_policy,
+            legacy_csp_header=bool(
+                web_raw.get("legacy_csp_header", d.web.legacy_csp_header)
+            ),
+            secure_cookies=bool(web_raw.get("secure_cookies", d.web.secure_cookies)),
+            identity=web_identity,
+            license=license_data,
+            oidc=oidc,
             favicon=web_raw.get("favicon"),
             honeytraps=honeytraps,
             fingerprint_script=web_raw.get("fingerprint_script"),
             honey_credentials=honey_credentials,
-            routes={**d.web.routes, **(web_raw.get("routes") or {})},
-            cookies={**d.web.cookies, **(web_raw.get("cookies") or {})},
-            winauth_messages={**d.web.winauth_messages, **(web_raw.get("winauth_messages") or {})},
+            routes=routes,
+            cookies=cookies,
+            winauth_messages=winauth_messages,
+            max_request_bytes=max_request_bytes,
+            assets_dir=assets_dir,
         ),
     )
 
@@ -320,13 +653,16 @@ def load_profile(source: str | None) -> ProfileConfig:
 
     path = Path(source)
     if path.is_file():
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
+        source_dir = path.resolve().parent
     else:
         try:
-            text = files(_DATA_PKG).joinpath(source, f"{source}.yaml").read_text()
+            resource = files(_DATA_PKG).joinpath(source, f"{source}.yaml")
+            text = resource.read_text(encoding="utf-8")
+            source_dir = Path(str(resource)).parent
         except (FileNotFoundError, ModuleNotFoundError):
             raise FileNotFoundError(
                 f"No such profile: '{source}' (not a file, and no bundled {_DATA_PKG}/{source}/{source}.yaml)"
             )
 
-    return _parse_profile(yaml.safe_load(text))
+    return _parse_profile(yaml.safe_load(text), source_dir=source_dir)

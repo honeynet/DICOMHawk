@@ -180,7 +180,8 @@
 
 			let rsaPublicKeyElement = document.getElementById("publicKey");
 
-			if (location.protocol === "http:" && rsaPublicKeyElement) {
+			if (location.protocol === "http:" && rsaPublicKeyElement &&
+				typeof JSEncrypt !== "undefined" && rsaPublicKeyElement.getAttribute("value")) {
 				rsa = new JSEncrypt();
 				rsaPublicKey = rsaPublicKeyElement.getAttribute("value");
 				let loginForm = document.getElementById("form");

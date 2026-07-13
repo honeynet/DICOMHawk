@@ -21,7 +21,7 @@ Flags used:
 - `-t ./traces` — directory where received DICOM files and quarantined uploads land.
 - `-l ./data/dicomhawk.log` — JSON event log path (one event per line).
 
-The server logs `Listening in [11112]` to stdout once the bus is up.
+The server logs `Listening on 0.0.0.0:11112` once the listener is ready.
 
 To impersonate a specific device, add `--profile fujifilm` (bundled Fujifilm Synapse PACS) or a path to a custom profile YAML — see [commands](./commands.md#dicomhawk-serve). Without it, a generic default is used. To build your own profile (identity + optional web login/worklist), see [Adding a profile](./profiles.md).
 
@@ -46,10 +46,13 @@ python -m pynetdicom storescu 127.0.0.1 11112 ./some-test.dcm \
     -aet TESTSCU -aec ORTHANC
 ```
 
-A successful C-STORE produces:
+A successful untrusted C-STORE produces:
 
-- a `.dcm` file under `./traces/storage/`
+- a forensic copy under `./traces/quarantine/` (plus a compressed raw capture)
 - a JSON line in `./data/dicomhawk.log` describing the request and the SCP response
+
+Quarantined uploads are not returned by C-GET. Data written by the trusted seeder lives
+under `storage/` and is retrievable.
 
 ## Seed the database
 
@@ -97,7 +100,7 @@ dicomhawk seed --database ./data/dicomhawk.db --traces ./traces \
     --locations ./my-locations.json
 ```
 
-If TCIA is unreachable the command logs a warning and exits cleanly with 0 instances stored. With `--interval` it retries automatically on the next tick.
+If TCIA is unreachable the command logs a warning and seeds the bundled offline fallback. With `--interval` it retries the live source on the next tick.
 
 ## Where to look
 

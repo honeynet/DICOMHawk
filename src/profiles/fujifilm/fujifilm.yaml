@@ -250,6 +250,7 @@ web:
   templates_dir: fujifilm
   favicon: synapse/favicon.ico
   grant_access: false                            # false = log + deny; true = grant into the decoy worklist
+  secure_cookies: true                           # observed HTTPS deployment cookie behavior
 
   # Real Synapse paths, sourced from public passive recon; response kinds are defined in web/app.py::_HONEYTRAP_RESPONSES.
   honeytraps:
@@ -273,14 +274,15 @@ web:
     Cache-Control: "no-store, no-cache, max-age=0, private"
     Pragma: no-cache
 
-  # Emitted as both Content-Security-Policy and legacy X-Content-Security-Policy.
+  # The observed deployment emits both the modern and legacy CSP header.
+  legacy_csp_header: true
   # Keep the {nonce} placeholder — filled per request so inline scripts run.
   content_security_policy: >-
     default-src 'self'; script-src 'nonce-{nonce}' 'self'; style-src 'self' 'unsafe-inline';
     img-src *; report-uri /SynapseSignOn/sts/csp/report
 
   identity:
-    version: "7.4.220"                           # version stamp on the login logo
+    version: "7.4.300"                           # version stamp on the login logo
     copyright: "Copyright © 2024-2025 FUJIFILM Healthcare Americas Corporation. All rights reserved."
     site_name: "Synapse Sign-On"                 # AngularJS model_json's siteName field
 
@@ -295,10 +297,10 @@ web:
   oidc:                                          # "Log in with Windows instead" link; values vary by version/deploy
     client_id: synapsebaseclient
     client_name: SynapseBase
-    redirect_path: /Synapse/
+    redirect_path: /WorkflowUI/
     scopes: >-
       openid offline_access profile roles privileges usersession culture dbuser
-      auth_mode full_name APService DcmApi ProxyService RPEngine StdApi
+      auth_mode full_name user_domain APService DcmApi ProxyService RPEngine StdApi
       ThinkLogService ViewerService WorkflowEngine SubscriptionService
       ExtApiService XDSConsumerApi FHIRCastHub
 
@@ -309,6 +311,7 @@ web:
   # routes/cookies are profile data: this is what makes fujifilm's address bar/cookies genuinely Synapse's.
   routes:
     entry: /Synapse
+    worklist: /WorkflowUI/
     login: /SynapseSignOn/sts/login
     winauth: /SynapseSignOn/WinAuth/Login.aspx
     forgot_password: /ssomgr/password/forgotpassword
@@ -318,7 +321,7 @@ web:
     translated_items: /synapse/error/TranslatedItems
   cookies:
     antiforgery: idsrv.xsrf
-    session: sw_authed
+    session: IdpCookie
     signin_message_prefix: "SignInMessage."
     nonce_prefix: "OpenIdConnect.nonce."
     idp: IdpCookie

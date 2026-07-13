@@ -14,10 +14,18 @@ logger = logging.getLogger(__name__)
 
 
 class WebComponent(Component):
-    """Attacker-facing + operator-facing Flask apps, each served by waitress in its own daemon thread."""
+    """Attacker-facing and loopback operator apps with explicit server lifecycles."""
 
-    def __init__(self, profile: ProfileConfig, repo: Repository, bus: logging.Logger,
-                 host: str, web_port: int, operator_port: int, operator_host: str = "127.0.0.1"):
+    def __init__(
+        self,
+        profile: ProfileConfig,
+        repo: Repository,
+        bus: logging.Logger,
+        host: str,
+        web_port: int,
+        operator_port: int,
+        operator_host: str = "127.0.0.1",
+    ):
         self.profile = profile
         self.repo = repo
         self.bus = bus
@@ -25,28 +33,75 @@ class WebComponent(Component):
         self.web_port = web_port
         self.operator_port = operator_port
         self.operator_host = operator_host
+        self._servers = []
+        self._threads: list[threading.Thread] = []
 
     def start(self) -> None:
+        if self._servers:
+            return
         web_app = new_web(self.profile, self.repo, self.bus)
         operator_app = new_operator_api(self.profile, self.repo, self.bus)
-        for name, app, host, port in (
-            ("web", web_app, self.host, self.web_port),
-            ("operator", operator_app, self.operator_host, self.operator_port),
-        ):
-            threading.Thread(
-                target=waitress.serve, args=(app,),
-                kwargs={"host": host, "port": port},
-                daemon=True, name=f"dicomhawk-{name}",
-            ).start()
-        logger.info(f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}")
+        specs = (
+            (
+                "web",
+                web_app,
+                self.host,
+                self.web_port,
+                self.profile.web.max_request_bytes,
+            ),
+            (
+                "operator",
+                operator_app,
+                self.operator_host,
+                self.operator_port,
+                1_048_576,
+            ),
+        )
+        try:
+            for name, app, host, port, max_body in specs:
+                server = waitress.create_server(
+                    app,
+                    host=host,
+                    port=port,
+                    max_request_body_size=max_body,
+                )
+                self._servers.append(server)
+                self._threads.append(
+                    threading.Thread(
+                        target=server.run,
+                        daemon=True,
+                        name=f"dicomhawk-{name}",
+                    )
+                )
+        except Exception:
+            self.stop()
+            raise
+        for thread in self._threads:
+            thread.start()
+        logger.info(
+            f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}"
+        )
 
     def stop(self) -> None:
-        # No cross-thread waitress stop; daemon threads exit with the process
-        # (graceful SIGTERM shutdown is the Weeks 11-12 hardening item, not this component's job).
-        pass
+        for server in self._servers:
+            server.close()
+            server.task_dispatcher.shutdown(cancel_pending=True, timeout=5)
+        for thread in self._threads:
+            if thread.is_alive() and thread is not threading.current_thread():
+                thread.join(timeout=5)
+        self._servers.clear()
+        self._threads.clear()
 
 
-def new_web_component(profile: ProfileConfig, repo: Repository, bus: logging.Logger,
-                       host: str, web_port: int, operator_port: int,
-                       operator_host: str = "127.0.0.1") -> WebComponent:
-    return WebComponent(profile, repo, bus, host, web_port, operator_port, operator_host)
+def new_web_component(
+    profile: ProfileConfig,
+    repo: Repository,
+    bus: logging.Logger,
+    host: str,
+    web_port: int,
+    operator_port: int,
+    operator_host: str = "127.0.0.1",
+) -> WebComponent:
+    return WebComponent(
+        profile, repo, bus, host, web_port, operator_port, operator_host
+    )

@@ -1,6 +1,7 @@
 import gc
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 
 from dicomhawk.bus import (
     InteractionEvent,
@@ -8,6 +9,7 @@ from dicomhawk.bus import (
     SessionCache,
     _extract_params,
     hash_request,
+    new_bus,
     recent_events,
 )
 from dicomhawk.status import QRStatus
@@ -85,6 +87,15 @@ def test_extract_params_returns_none_when_nothing_to_report():
     assert _extract_params(ds) is None
 
 
+def test_extract_params_bounds_attacker_controlled_values():
+    ds = Dataset()
+    ds.QueryRetrieveLevel = "STUDY"
+    ds.PatientID = "x" * 10000
+    params = _extract_params(ds)
+    assert len(params[0]) < 4200
+    assert params[0].endswith("...[truncated]")
+
+
 def test_hash_request_matches_sha256_and_preserves_stream_position():
     import hashlib
     from io import BytesIO
@@ -104,10 +115,16 @@ def test_hash_request_matches_sha256_and_preserves_stream_position():
 
 def test_interaction_event_from_http_round_trips_through_json():
     ie = InteractionEvent.from_http(
-        "WEB", "WEB_LOGIN_ATTEMPT",
-        session_id="web-1.2.3.4", ip="1.2.3.4", port=5555,
-        session_parameters=["Username: attacker"], log_level="WARNING",
-        method="POST", path="/login", user_agent="curl/8.0",
+        "WEB",
+        "WEB_LOGIN_ATTEMPT",
+        session_id="web-1.2.3.4",
+        ip="1.2.3.4",
+        port=5555,
+        session_parameters=["Username: attacker"],
+        log_level="WARNING",
+        method="POST",
+        path="/login",
+        user_agent="curl/8.0",
     )
 
     data = json.loads(str(ie))
@@ -141,7 +158,9 @@ class _FakeDimseEvent:
 
 
 def test_interaction_event_dimse_constructor_formats_status_with_hex_code():
-    ie = InteractionEvent(_FakeDimseEvent(), SessionCache(), "C-ECHO", status=QRStatus.SUCCESS)
+    ie = InteractionEvent(
+        _FakeDimseEvent(), SessionCache(), "C-ECHO", status=QRStatus.SUCCESS
+    )
     assert ie.channel == "DIMSE"
     assert ie.ip == "1.2.3.4"
     assert ie.port == 5000
@@ -157,7 +176,11 @@ def test_recent_events_handler_only_keeps_interaction_events_and_respects_maxlen
 
     logger.info("a plain string, not an InteractionEvent")
     for i in range(3):
-        logger.info(InteractionEvent.from_http("WEB", f"EVT{i}", session_id="s", ip="1.2.3.4", port=1))
+        logger.info(
+            InteractionEvent.from_http(
+                "WEB", f"EVT{i}", session_id="s", ip="1.2.3.4", port=1
+            )
+        )
 
     assert len(handler.events) == 2  # bounded by maxlen
     assert [e.request_type for e in handler.events] == ["EVT1", "EVT2"]
@@ -170,3 +193,13 @@ def test_recent_events_finds_attached_handler_or_none():
     handler = RecentEventsHandler()
     logger.addHandler(handler)
     assert recent_events(logger) is handler
+
+
+def test_new_bus_replaces_its_handlers_instead_of_duplicating(tmp_path):
+    logger = new_bus(str(tmp_path / "one.log"), verbose=False)
+    logger = new_bus(str(tmp_path / "two.log"), verbose=False)
+    assert sum(isinstance(h, RecentEventsHandler) for h in logger.handlers) == 1
+    assert sum(getattr(h, "_dicomhawk_owned", False) for h in logger.handlers) == 2
+    rotating = next(h for h in logger.handlers if isinstance(h, RotatingFileHandler))
+    assert rotating.maxBytes == 50 * 1024 * 1024
+    assert rotating.backupCount == 5

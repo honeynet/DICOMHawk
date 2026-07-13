@@ -4,6 +4,7 @@ protocol-shaped behaviors are exercised over a real loopback pynetdicom associat
 faking pynetdicom's Event/Association objects for these risks testing a guess about
 the API instead of the real thing. Small pure-logic pieces (the loopback skip,
 sublevel-tag stripping) use lightweight fakes since they don't need real sockets."""
+
 import io
 import logging
 import tempfile
@@ -33,10 +34,11 @@ from dicomhawk.handlers import (
     new_dimse_factory,
 )
 from dicomhawk.repository import new_repo
+from dicomhawk.status import QRStatus
 from dicomhawk.storage import new_store
 
-
 # --- fakes for the small ACSE handlers (pure logic, no real socket needed) ---
+
 
 class _FakeRequestor:
     def __init__(self, address="10.0.0.5", port=5000):
@@ -82,7 +84,9 @@ def test_handle_connect_logs_non_loopback_addresses(acse_bus, cache, caplog):
     assert "Connection Opened" in caplog.text
 
 
-def test_handle_associate_caches_version_and_logs_called_calling(acse_bus, cache, caplog):
+def test_handle_associate_caches_version_and_logs_called_calling(
+    acse_bus, cache, caplog
+):
     prim = A_ASSOCIATE()
     prim.called_ae_title = "CALLEDAE"
     prim.calling_ae_title = "CALLINGAE"
@@ -154,7 +158,9 @@ def test_strip_sublevel_tags_removes_attrs_below_query_level():
     ds.SeriesInstanceUID = "1.2.3.4"  # SERIES-level, below STUDY
     ds.Modality = "CT"  # also SERIES-level
 
-    filtered, stripped = _strip_sublevel_tags(ds, StudyRootQueryRetrieveInformationModelFind)
+    filtered, stripped = _strip_sublevel_tags(
+        ds, StudyRootQueryRetrieveInformationModelFind
+    )
 
     assert "SeriesInstanceUID" not in filtered
     assert "Modality" not in filtered
@@ -167,13 +173,16 @@ def test_strip_sublevel_tags_no_op_at_deepest_level():
     ds.QueryRetrieveLevel = "IMAGE"
     ds.SOPInstanceUID = "1.2.3.4.5"
 
-    filtered, stripped = _strip_sublevel_tags(ds, StudyRootQueryRetrieveInformationModelFind)
+    filtered, stripped = _strip_sublevel_tags(
+        ds, StudyRootQueryRetrieveInformationModelFind
+    )
 
     assert stripped == []
     assert filtered is ds
 
 
 # --- real loopback DIMSE tests: our own handlers behind a real pynetdicom AE ---
+
 
 def _ct_dataset(patient_id="TESTPAT", study_uid=None, series_uid=None):
     """A CT instance that behaves like a real file-backed dataset (has a preamble),
@@ -213,7 +222,9 @@ class _Loopback:
         scu.add_requested_context(StudyRootQueryRetrieveInformationModelMove)
         roles = [build_role(CTImageStorage, scu_role=True, scp_role=True)]
         evt_handlers = [(evt.EVT_C_STORE, store_handler)] if store_handler else []
-        return scu.associate("127.0.0.1", self.port, ext_neg=roles, evt_handlers=evt_handlers, **kwargs)
+        return scu.associate(
+            "127.0.0.1", self.port, ext_neg=roles, evt_handlers=evt_handlers, **kwargs
+        )
 
 
 @pytest.fixture
@@ -228,10 +239,14 @@ def loopback(tmp_path):
     scp.add_supported_context(Verification)
     scp.add_supported_context(CTImageStorage, scu_role=True, scp_role=True)
     scp.add_supported_context(StudyRootQueryRetrieveInformationModelFind)
-    scp.add_supported_context(StudyRootQueryRetrieveInformationModelGet, scu_role=True, scp_role=True)
-    scp.add_supported_context(StudyRootQueryRetrieveInformationModelMove, scu_role=True, scp_role=True)
+    scp.add_supported_context(
+        StudyRootQueryRetrieveInformationModelGet, scu_role=True, scp_role=True
+    )
+    scp.add_supported_context(
+        StudyRootQueryRetrieveInformationModelMove, scu_role=True, scp_role=True
+    )
 
-    handlers = list(new_dimse_factory(repo, bus).values())
+    handlers = list(new_dimse_factory(repo, bus, max_store_bytes=4096).values())
     server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
     port = server.socket.getsockname()[1]
 
@@ -265,14 +280,42 @@ def test_c_store_quarantines_visible_in_find_but_blocked_on_get(loopback):
     store_status = assoc.send_c_store(ds)
     assert store_status.Status == 0x0000
 
-    find_results = list(assoc.send_c_find(_find_query(ds.StudyInstanceUID), StudyRootQueryRetrieveInformationModelFind))
+    find_results = list(
+        assoc.send_c_find(
+            _find_query(ds.StudyInstanceUID), StudyRootQueryRetrieveInformationModelFind
+        )
+    )
     pending = [r for r in find_results if r[0].Status == 0xFF00]
     assert len(pending) == 1
     assert pending[0][1].PatientID == "TESTPAT"
 
-    get_results = list(assoc.send_c_get(_find_query(ds.StudyInstanceUID), StudyRootQueryRetrieveInformationModelGet))
+    get_results = list(
+        assoc.send_c_get(
+            _find_query(ds.StudyInstanceUID), StudyRootQueryRetrieveInformationModelGet
+        )
+    )
     assert any(status.Status == 0xA700 for status, _ in get_results)
     assoc.release()
+
+
+def test_c_store_rejects_instance_over_configured_size(loopback):
+    ds = _ct_dataset(patient_id="TOOBIG")
+    ds.Rows = 100
+    ds.Columns = 100
+    ds.SamplesPerPixel = 1
+    ds.BitsAllocated = 8
+    ds.BitsStored = 8
+    ds.HighBit = 7
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.PixelRepresentation = 0
+    ds.PixelData = b"\0" * 10_000
+
+    assoc = loopback.associate()
+    status = assoc.send_c_store(ds)
+    assoc.release()
+
+    assert status.Status == int(QRStatus.STORE_ERROR)
+    assert not (loopback.repo.storage.quarantine_dir / str(ds.SOPInstanceUID)).exists()
 
 
 def test_c_get_retrieves_a_safely_seeded_instance(loopback):
@@ -282,9 +325,15 @@ def test_c_get_retrieves_a_safely_seeded_instance(loopback):
     assert loopback.repo.store(ds, safe=True) is None
 
     received = []
-    assoc = loopback.associate(store_handler=lambda e: (received.append(e.dataset), 0x0000)[1])
+    assoc = loopback.associate(
+        store_handler=lambda e: (received.append(e.dataset), 0x0000)[1]
+    )
 
-    get_results = list(assoc.send_c_get(_find_query(ds.StudyInstanceUID), StudyRootQueryRetrieveInformationModelGet))
+    get_results = list(
+        assoc.send_c_get(
+            _find_query(ds.StudyInstanceUID), StudyRootQueryRetrieveInformationModelGet
+        )
+    )
     assert all(status.Status in (0xFF00, 0x0000) for status, _ in get_results)
     assert len(received) == 1
     assert received[0].SOPInstanceUID == ds.SOPInstanceUID
@@ -300,7 +349,11 @@ def test_c_find_dedups_to_one_row_per_study(loopback):
     loopback.repo.store(_ct_dataset(study_uid=study_uid), safe=True)
 
     assoc = loopback.associate()
-    results = list(assoc.send_c_find(_find_query(study_uid), StudyRootQueryRetrieveInformationModelFind))
+    results = list(
+        assoc.send_c_find(
+            _find_query(study_uid), StudyRootQueryRetrieveInformationModelFind
+        )
+    )
     pending = [r for r in results if r[0].Status == 0xFF00]
     assert len(pending) == 1
     assoc.release()
@@ -312,7 +365,13 @@ def test_c_move_always_captures_and_rejects(loopback):
     loopback.repo.store(ds, safe=True)
 
     assoc = loopback.associate()
-    results = list(assoc.send_c_move(_find_query(ds.StudyInstanceUID), "SOMEWHERE", StudyRootQueryRetrieveInformationModelMove))
+    results = list(
+        assoc.send_c_move(
+            _find_query(ds.StudyInstanceUID),
+            "SOMEWHERE",
+            StudyRootQueryRetrieveInformationModelMove,
+        )
+    )
     assert results[-1][0].Status == 0xA801
     assoc.release()
 
