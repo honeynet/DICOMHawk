@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worklist</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #1f4e79;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #d3d3d3;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9eef2;
+            color: #1f4e79;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #f9fbfd;
+        }
+    </style>
+    {{ fingerprint_seam|safe }}
+</head>
+<body>
+    <div class="container">
+        <h1>Worklist</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Patient Name</th>
+                    <th>Description</th>
+                    <th>Study Date Time</th>
+                    <th>Modality</th>
+                    <th>Status</th>
+                    <th>Age</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in studies %}
+                <tr>
+                    <td>{{ s.patient_name }}</td>
+                    <td>{{ s.description }}</td>
+                    <td>{{ s.study_datetime }}</td>
+                    <td>{{ s.modality }}</td>
+                    <td>{{ s.status }}</td>
+                    <td>{{ s.age }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6">No studies.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

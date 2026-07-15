@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log On</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 20%; background: #f0f0f0; }
+        h1 { color: #1f4e79; font-size: 20px; }
+        a { color: #007bff; }
+    </style>
+    {{ fingerprint_seam|safe }}
+</head>
+<body>
+    <h1>Unable to log in using Windows Authentication.</h1>
+    <a href="{{ sts_authorize_url }}?winloginstatus=failure">Log in directly</a>
+</body>
+</html>

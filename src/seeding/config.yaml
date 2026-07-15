@@ -1,0 +1,6 @@
+# Honeytoken / bait config, kept separate from the device profile. Edit and restart.
+# Baked into one seeded instance per `seed` run (see seeding/seeder.py); not a per-retrieval overlay.
+
+honeytoken:
+  honey_url: null      # base URL baked in as RetrieveURL (e.g. https://host)
+  canary_pdf: null     # path to a PDF canary token baked in as EncapsulatedDocument

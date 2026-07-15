@@ -8,15 +8,17 @@ services:
     env_file:
       - .env
     ports:
-      - "11112:11112"
-      - "1104:104"
+      - "104:104"               # standard unencrypted DICOM port; use host privileges/capabilities as required
+      - "8080:8080"             # attacker-facing web (pacs profiles with web.enabled only)
+      - "127.0.0.1:8081:8081"   # operator API — this host-side binding is the real loopback-only
+                                 # restriction; the process binds 0.0.0.0 inside the container (see --operator-host)
     command:
       - dicomhawk
       - serve
       - --profile
       - "${DICOMHAWK_PROFILE:-}"        # empty = generic default; e.g. "fujifilm" or a mounted /path.yaml
       - -p
-      - "${DICOMHAWK_PORTS:-104,11112}"
+      - "${DICOMHAWK_PORTS:-104}"
       - -ae
       - "${DICOMHAWK_AE_TITLE:-}"       # empty = use the profile's AE title; set to override it
       - -db
@@ -25,12 +27,18 @@ services:
       - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
       - -l
       - /var/log/dicomhawk/dicomhawk.log
+      - --web-port
+      - "${DICOMHAWK_WEB_PORT:-8080}"
+      - --operator-port
+      - "${DICOMHAWK_OPERATOR_PORT:-8081}"
+      - --operator-host
+      - "${DICOMHAWK_OPERATOR_HOST:-0.0.0.0}"
       - -v
     volumes:
       - dicom_storage:${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}
       - logs:/var/log/dicomhawk
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 11112)); s.close()\""]
+      test: ["CMD-SHELL", "python -c \"import os,socket; p=int(os.environ.get('DICOMHAWK_PORTS','104').split(',')[0]); s=socket.create_connection(('127.0.0.1',p),2); s.close()\""]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -45,8 +45,12 @@ def faker_pools(locale: str = "en_US") -> NamePools:
     # "^" = DICOM PN separator (Family^Given). first_name_male/female is absent for
     # some locales, so fall back to name().
     try:
-        male = tuple(f"{faker.last_name()}^{faker.first_name_male()}" for _ in range(100))
-        female = tuple(f"{faker.last_name()}^{faker.first_name_female()}" for _ in range(100))
+        male = tuple(
+            f"{faker.last_name()}^{faker.first_name_male()}" for _ in range(100)
+        )
+        female = tuple(
+            f"{faker.last_name()}^{faker.first_name_female()}" for _ in range(100)
+        )
     except AttributeError:
         names = tuple(faker.name() for _ in range(200))
         male, female = names[:100], names[100:]
@@ -55,10 +59,8 @@ def faker_pools(locale: str = "en_US") -> NamePools:
 
 
 def load_name_pools(path: str | None) -> NamePools | None:
-    """Load Family^Given PN pools from JSON, or None to fall back to faker_pools().
-
-    Expected shape: {"male": [...], "female": [...], "physician": [...]}. Physician is
-    optional (defaults to male+female). Any error falls back to generated names.
+    """Load {"male": [...], "female": [...], "physician": [...]} PN pools from JSON (physician
+    optional, defaults to male+female); None or any error falls back to faker_pools().
     """
     if path is None:
         return None
@@ -70,7 +72,9 @@ def load_name_pools(path: str | None) -> NamePools | None:
         physician = tuple(data.get("physician") or male + female)
         return male, female, physician
     except Exception as exc:
-        logger.warning(f"Failed to load names from '{path}': {exc}; using generated names")
+        logger.warning(
+            f"Failed to load names from '{path}': {exc}; using generated names"
+        )
         return None
 
 
@@ -84,7 +88,9 @@ def _patch_location(
 ) -> Dataset:
     # NOTE: epoch salts every derived key, so the same image becomes a fresh but
     # internally-consistent identity each rotation.
-    patient_key = str(getattr(ds, "PatientID", "") or getattr(ds, "PatientName", "") or "")
+    patient_key = str(
+        getattr(ds, "PatientID", "") or getattr(ds, "PatientName", "") or ""
+    )
     study_key = str(getattr(ds, "StudyInstanceUID", patient_key) or patient_key)
     pkey = f"{patient_key}{epoch}"
     skey = f"{study_key}{epoch}"
@@ -97,11 +103,17 @@ def _patch_location(
     ds.SpecificCharacterSet = "ISO_IR 192"
     ds.InstitutionName = loc.institution
     ds.InstitutionAddress = loc.address
-    ds.StationName = f"{getattr(ds, 'Modality', 'XX')}01"
+    modality = str(getattr(ds, "Modality", "XX") or "XX")[:4].upper()
+    station_number = (
+        int(md5(f"{loc.institution}{modality}".encode()).hexdigest(), 16) % 8 + 1
+    )
+    ds.StationName = f"{modality}{station_number:02d}"
     ds.PatientName = _stable_pick(name_pool, pkey)
     ds.PatientID = md5(pkey.encode()).hexdigest()[:8].upper()
     ds.PatientSex = sex
-    ds.PatientBirthDate = _stable_date(_BIRTH_DATE_START, _BIRTH_DATE_RANGE, pkey, "dob")
+    ds.PatientBirthDate = _stable_date(
+        _BIRTH_DATE_START, _BIRTH_DATE_RANGE, pkey, "dob"
+    )
     ds.StudyDate = _stable_date(_STUDY_DATE_START, _STUDY_DATE_RANGE, skey, "std")
     ds.SeriesDate = ds.StudyDate
     ds.ReferringPhysicianName = _stable_pick(physician_pool, skey)

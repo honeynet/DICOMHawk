@@ -5,8 +5,10 @@ import threading
 from datetime import date
 
 from pydicom import dcmread
+from pydicom.dataset import Dataset
 
 from dicomhawk.repository import Repository
+from honeytoken.injector import Middleware
 
 from .fallback import load_fallback_datasets
 from .locations import Location, _DEFAULT_LOCATIONS
@@ -22,14 +24,17 @@ def resolve_rotation(
     rotate: bool,
     epoch: str | None = None,
 ) -> tuple[str, str, str]:
-    # NOTE: rotate off is fully deterministic (first entries, empty epoch), matching
-    # pre-rotation behaviour. Rotate on picks the source and salts identities by ISO
-    # week, so a stateless weekly cron yields data that is fresh but idempotent in-week.
+    # Rotate off: deterministic (first entries, no epoch). Rotate on: source + identity
+    # salt both change by ISO week, so a stateless weekly cron stays fresh but idempotent in-week.
     if not rotate:
         return collections[0], modalities[0], ""
     year, week, _ = date.today().isocalendar()
     epoch = epoch if epoch is not None else f"{year}W{week:02d}"
-    return collections[week % len(collections)], modalities[week % len(modalities)], epoch
+    return (
+        collections[week % len(collections)],
+        modalities[week % len(modalities)],
+        epoch,
+    )
 
 
 class SeedScheduler(threading.Thread):
@@ -48,7 +53,9 @@ class SeedScheduler(threading.Thread):
         super().__init__(daemon=True, name="dicomhawk-seeder")
         self._seeder = seeder
         self._collections = collections
-        self._modalities = modalities or ["CT"]  # only cli.py's caller-validated lists reach here
+        self._modalities = modalities or [
+            "CT"
+        ]  # only cli.py's caller-validated lists reach here
         self._interval = interval_minutes * 60
         self._max_series = max_series
         self._max_images = max_images
@@ -65,7 +72,9 @@ class SeedScheduler(threading.Thread):
             collection, modality, epoch = resolve_rotation(
                 self._collections, self._modalities, self._rotate
             )
-            n = self._seeder.seed(collection, self._max_series, self._max_images, modality, epoch)
+            n = self._seeder.seed(
+                collection, self._max_series, self._max_images, modality, epoch
+            )
             logger.info(f"Scheduled seed completed: {n} instances stored")
 
     def stop(self) -> None:
@@ -79,6 +88,7 @@ class Seeder:
         locations: list[Location] | None = None,
         locale: str = "en_US",
         name_pools: NamePools | None = None,
+        honeytoken: Middleware | None = None,
     ):
         self._repo = repo
         self._client = TciaClient()
@@ -86,6 +96,15 @@ class Seeder:
         self._male_pool, self._female_pool, self._physician_pool = (
             name_pools or faker_pools(locale)
         )
+        self._honeytoken = honeytoken
+        self._honeytoken_planted = False
+
+    def _tag_honeytoken(self, ds: Dataset) -> tuple[Dataset, bool]:
+        # Plants the bait (RetrieveURL/canary PDF) into exactly one instance per seed() run,
+        # baked into the stored file — not a per-retrieval overlay, so most instances stay real.
+        if self._honeytoken and not self._honeytoken_planted:
+            return self._honeytoken(ds), True
+        return ds, False
 
     def seed(
         self,
@@ -95,16 +114,17 @@ class Seeder:
         modality: str = "CT",
         epoch: str = "",
     ) -> int:
-        # getSeries carries no usable instance count, so there is nothing to sort on —
-        # we sample instead. A per-epoch seeded RNG keeps selection idempotent within a
-        # week (same series + institution) while varying across weeks. Slice-depth realism
-        # (how many instances an IMAGE-level C-FIND returns) comes from max_images.
+        # getSeries has no usable instance count, so we sample instead of sorting; a
+        # per-epoch seeded RNG keeps selection idempotent within a week but varying across weeks.
         rng = random.Random(epoch or collection)
         loc = rng.choice(self._locations)
         series_list = self._client.get_series(collection, modality)
 
-        requested = max_series > 0 and max_images > 0  # 0 means "fetch nothing", not "TCIA is down"
+        requested = (
+            max_series > 0 and max_images > 0
+        )  # 0 means "fetch nothing", not "TCIA is down"
 
+        self._honeytoken_planted = False
         stored = 0
         if series_list and requested:
             uids = [uid for s in series_list if (uid := s.get("SeriesInstanceUID"))]
@@ -132,7 +152,9 @@ class Seeder:
         )
         return stored
 
-    def _ingest_series(self, series_uid: str, loc: Location, max_images: int, epoch: str) -> int:
+    def _ingest_series(
+        self, series_uid: str, loc: Location, max_images: int, epoch: str
+    ) -> int:
         sop_uids = self._client.get_sop_uids(series_uid)
 
         stored = 0
@@ -148,8 +170,11 @@ class Seeder:
             ds = _patch_location(
                 ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
             )
+            ds, tagged = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
             if err is None:
+                if tagged:
+                    self._honeytoken_planted = True
                 stored += 1
             else:
                 logger.warning(f"Failed to store {sop_uid}: {err.error}")
@@ -162,8 +187,11 @@ class Seeder:
             ds = _patch_location(
                 ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
             )
+            ds, tagged = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
             if err is None:
+                if tagged:
+                    self._honeytoken_planted = True
                 stored += 1
             else:
                 logger.warning(f"Failed to store fallback instance: {err.error}")
@@ -175,5 +203,12 @@ def new_seeder(
     locations: list[Location] | None = None,
     locale: str = "en_US",
     name_pools: NamePools | None = None,
+    honeytoken: Middleware | None = None,
 ) -> Seeder:
-    return Seeder(repo, locations=locations, locale=locale, name_pools=name_pools)
+    return Seeder(
+        repo,
+        locations=locations,
+        locale=locale,
+        name_pools=name_pools,
+        honeytoken=honeytoken,
+    )

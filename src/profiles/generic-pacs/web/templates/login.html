@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACS Web Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .login-container {
+            background-color: #f7f9fc;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 360px;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 22px;
+            color: #1f4e79;
+        }
+        .error {
+            color: #b00;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 80%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #a0b0c0;
+            border-radius: 4px;
+            background-color: #f1f4f8;
+            color: #333;
+        }
+        button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .login-container p {
+            margin-top: 16px;
+            font-size: 13px;
+            color: #666;
+        }
+    </style>
+    {{ fingerprint_seam|safe }}
+    <!-- honey_hint is only ever set by an operator opting into web.honey_credentials -->
+    {% if honey_hint %}<!-- TODO(ops): remove test account before go-live -- {{ honey_hint }} -->{% endif %}
+</head>
+<body>
+    <div class="login-container">
+        <h1>PACS Web Login</h1>
+        {% if error_message %}<p class="error">{{ error_message }}</p>{% endif %}
+        <form method="post" action="{{ login_url }}">
+            <input type="text" name="username" placeholder="Username" autocomplete="off" required>
+            <input type="password" name="password" placeholder="Password" autocomplete="off" required>
+            <br><button type="submit">Log in</button>
+        </form>
+        <p><a href="{{ forgot_url }}">Forgot password</a></p>
+        <p>{{ copyright }}</p>
+    </div>
+</body>
+</html>

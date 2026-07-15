@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Unauthorized</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 20%; background: #f0f0f0; }
+        h1 { color: #b00; }
+        p { font-size: 18px; color: #333; }
+    </style>
+    {{ fingerprint_seam|safe }}
+</head>
+<body>
+    <h1>401 - Unauthorized</h1>
+    <p>You are not authorized to access this page.</p>
+    <p>Redirecting to the login page in <span id="countdown">3</span> seconds...</p>
+    <script nonce="{{ csp_nonce }}">
+        let seconds = 3;
+        setInterval(function () {
+            document.getElementById('countdown').innerText = seconds;
+            seconds--;
+            if (seconds < 0) { window.location.href = '{{ entry_url }}'; }
+        }, 1000);
+    </script>
+</body>
+</html>
