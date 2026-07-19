@@ -13,8 +13,7 @@ from dicomhawk.storage import new_store
 
 
 def _ct_dataset(patient_id="TESTPAT", study_uid=None, series_uid=None):
-    """Real file-backed dataset (has a preamble) -- matches how seeded/stored data
-    actually round-trips; a bare Dataset() can't be read back with plain dcmread()."""
+    """Build a file-backed CT dataset readable by dcmread()."""
     ds = Dataset()
     ds.file_meta = FileMetaDataset()
     ds.file_meta.MediaStorageSOPClassUID = CTImageStorage

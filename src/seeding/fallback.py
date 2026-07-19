@@ -11,8 +11,7 @@ _FALLBACK_PKG = "seeding.fallback_data"
 
 
 def load_fallback_datasets(modality: str | None = None) -> list[Dataset]:
-    # NOTE: importlib.resources so this resolves from a wheel install too; one folder
-    # per collection. Datasets without a Modality tag pass the filter.
+    # importlib.resources also resolves fallback data from wheel installs.
     datasets: list[Dataset] = []
     try:
         root = files(_FALLBACK_PKG)

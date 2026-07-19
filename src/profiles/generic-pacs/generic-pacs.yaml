@@ -1,5 +1,4 @@
-# Vendor-neutral "basic" profile: everything but meta/web.enabled/web.templates_dir is
-# omitted on purpose, so it falls back to default_profile()'s generic values (see profile.py).
+# Sparse vendor-neutral profile; omitted fields use generic defaults.
 meta:
   name: generic-pacs
   kind: pacs

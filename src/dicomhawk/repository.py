@@ -62,7 +62,6 @@ class Repository:
 
     def _new_connection(self) -> Engine:
         url = f"sqlite:///{self.location}"
-        # check_same_thread=False is safe: SQLAlchemy's scoped_session manages thread safety.
         kwargs: dict = {"connect_args": {"check_same_thread": False}}
         if self.location == ":memory:":
             kwargs["poolclass"] = (
@@ -124,8 +123,7 @@ class Repository:
         return None
 
     def find(self, ds: Dataset, model) -> QRResult:
-        # Zero-length keys = Universal Matching (PS3.4 C.2.2.2.3), but decode to "" which
-        # db.search single-value-matches → 0 results. Null them so empty queries match all.
+        # qrscp treats "" as a literal; DICOM defines it as universal matching.
         for elem in ds:
             if (
                 elem.keyword != "QueryRetrieveLevel"
@@ -214,8 +212,7 @@ class Repository:
         *,
         raw_bytes: bytes | None = None,
     ) -> QRError | None:
-        # NOTE: anything not safe is zipped and quarantined — capture the raw
-        # attacker payload for forensics even if the rest of the store fails.
+        # Capture before validation so failed attacker payloads remain available.
         if not safe:
             try:
                 if raw_bytes is not None:
@@ -259,8 +256,7 @@ class Repository:
                 QRStatus.STORE_ERROR,
             )
 
-        # add_instance raises KeyError if these identity keys are missing (common in attacker
-        # uploads); skip indexing — the raw payload is already quarantined.
+        # Missing identity prevents indexing, but the raw payload is already quarantined.
         missing = [kw for kw in INDEX_REQUIRED_KEYS if kw not in ds]
         if missing:
             logger.warning(

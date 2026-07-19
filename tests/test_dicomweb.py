@@ -469,8 +469,55 @@ def test_stow_stores_and_returns_referenced_sequence(apps):
     assert body["00081199"]["Value"][0]["00081155"]["Value"] == [ds.SOPInstanceUID]
 
 
+def test_stow_emits_one_structured_terminal_artifact_per_part(apps, caplog):
+    ds = _ct_dataset()
+    raw = _part10(ds)
+    with caplog.at_level(logging.INFO, logger="bus"):
+        response = _client(apps, STOW).post(
+            "/stow-rs/studies",
+            data=_stow_body(ds),
+            content_type=_STOW_CT,
+            headers=_CREDS,
+        )
+    assert response.status_code == 200
+    events = [json.loads(record.getMessage()) for record in caplog.records]
+    terminal = [
+        event
+        for event in events
+        if event.get("request_type") == "DICOMWEB_STOW_PAYLOAD"
+    ]
+    assert len(terminal) == 1
+    artifact = terminal[0]["artifact"]
+    assert artifact["bytes"] == len(raw)
+    assert artifact["sop_instance_uid"] == ds.SOPInstanceUID
+    assert artifact["sop_class_uid"] == ds.SOPClassUID
+    assert artifact["captured"] is True
+    assert artifact["disposition"] == "stored"
+
+
+def test_stow_rejection_emits_structured_terminal_artifact(apps, caplog):
+    ds = _ct_dataset()
+    raw = _part10(ds)
+    with caplog.at_level(logging.WARNING, logger="bus"):
+        response = _client(apps, STOW).post(
+            "/stow-rs/studies",
+            data=_stow_body(ds, part_type="application/dicom+xml"),
+            content_type=_STOW_CT,
+            headers=_CREDS,
+        )
+    assert response.status_code == 202
+    events = [json.loads(record.getMessage()) for record in caplog.records]
+    terminal = next(
+        event
+        for event in events
+        if event.get("request_type") == "DICOMWEB_STOW_PAYLOAD"
+    )
+    assert terminal["artifact"]["disposition"] == "rejected"
+    assert terminal["artifact"]["captured"] is True
+    assert terminal["artifact"]["bytes"] == len(raw)
+
+
 def test_storage_jail_stow_upload_not_retrievable_via_wado(repo, apps):
-    """The storage jail must hold over DICOMweb: a STOW'd instance is never served back by WADO-RS."""
     ds = _ct_dataset(name="Attacker^Exfil")
     stow_resp = _client(apps, STOW).post(
         "/stow-rs/studies", data=_stow_body(ds), content_type=_STOW_CT, headers=_CREDS

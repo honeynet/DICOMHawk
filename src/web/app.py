@@ -1,4 +1,4 @@
-"""Generic, profile-driven Flask engine serving a profile's web assets from src/profiles/<name>/web/; captures credentials and always fails auth unless grant_access is set."""
+"""Profile-driven attacker-facing web application."""
 
 import base64
 import hashlib
@@ -109,8 +109,7 @@ def _login_context(signin, error_message=""):
         "login_url": login_url,
         "antiforgery_token": antiforgery,
         "antiforgery_name": web.cookies["antiforgery"],
-        # This JSON is embedded in a script element. Escaping HTML-significant
-        # characters prevents a hostile signin value from closing that element.
+        # Prevent a hostile signin value from closing the script element.
         "model_json": json.dumps(model)
         .replace("<", "\\u003c")
         .replace(">", "\\u003e")
@@ -121,8 +120,7 @@ def _login_context(signin, error_message=""):
         "license_issued": str(web.license["issued"]),
         "winlogin_url": _winlogin_url(),
         "forgot_url": web.routes["forgot_password"],
-        # Plain top-level value alongside model_json's copy — Fujifilm's AngularJS
-        # login.html parses model_json client-side; a plainer template can just use this.
+        # Plain templates use this instead of parsing Fujifilm's model_json.
         "error_message": error_message,
         # Discoverable hint for the first honey credential, if any (design ref: v2.0's login.html).
         "honey_hint": (
@@ -230,7 +228,7 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
     )
 
 
-def _log_probe(request_type, params=None, *, matches=None, level="INFO"):
+def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifact=None):
     """Log a bare honeytrap/scan/browse hit (no credentials), same channel=WEB path as _capture."""
     log = current_app.config["BUS"]
     emit = log.warning if level == "WARNING" else log.info
@@ -248,6 +246,7 @@ def _log_probe(request_type, params=None, *, matches=None, level="INFO"):
             method=request.method,
             path=_bounded(request.full_path.rstrip("?")),
             user_agent=_bounded(request.headers.get("User-Agent", "")),
+            artifact=artifact,
         )
     )
 
@@ -429,8 +428,7 @@ def _honeytrap_view(response_kind):
 
 
 def _iis_404(err):
-    # Any unmapped path is itself a signal (a scanner walking the tree); log it and
-    # don't leak a Werkzeug default error page under the spoofed IIS identity.
+    # Log scans and hide Werkzeug's default page behind the spoofed identity.
     _log_probe("WEB_404")
     return ("404 - Not Found", 404, {"Content-Type": "text/plain"})
 
@@ -449,8 +447,7 @@ def root():
 
 
 def entry():
-    # The application launch URL performs sign-on discovery; the authenticated
-    # shell itself lives under WorkflowUI on the Fujifilm profile.
+    # Fujifilm launches the authenticated shell under WorkflowUI.
     web = _web()
     if _session_ok():
         landing = web.routes["console"] if web.browse else web.routes["worklist"]
@@ -474,9 +471,7 @@ def worklist(subpath=None):
 
 # --- Browse console (profiles with web.browse; every view is session-gated) ---
 
-# level -> (QueryRetrieveLevel, return keys, dedup column on the qrscp Instance row).
-# Study Root model has no PATIENT level, so "patients" queries STUDY and dedups per patient;
-# keys are limited to columns the qrscp index actually holds (as_identifier can't fill others).
+# Study Root has no PATIENT level, so patients query STUDY and deduplicate by patient.
 _BROWSE_LEVELS = {
     "patients": ("STUDY", ("PatientID", "PatientName"), "patient_id"),
     "studies": (
@@ -728,6 +723,16 @@ def upload_post():
                 params=params,
                 matches=0,
                 level="WARNING",
+                artifact={
+                    "filename": _bounded(f.filename),
+                    "bytes": len(raw),
+                    "sha256": digest,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": None,
+                    "captured": capture_error is None,
+                    "disposition": "rejected",
+                    "reject_reason": "file-count limit",
+                },
             )
     seen_sops = set()
     for f in files[:max_files]:
@@ -755,6 +760,16 @@ def upload_post():
                 params=params,
                 matches=0,
                 level="WARNING",
+                artifact={
+                    "filename": _bounded(f.filename),
+                    "bytes": len(raw),
+                    "sha256": digest,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": None,
+                    "captured": capture_error is None,
+                    "disposition": "rejected",
+                    "reject_reason": _bounded(exc),
+                },
             )
             continue
         # safe=False -> quarantined; raw_bytes preserves the exact attacker payload.
@@ -770,6 +785,17 @@ def upload_post():
             + ([f"Rejected: {_bounded(err.error)}"] if err else []),
             matches=1 if err is None else 0,
             level="WARNING" if err else "INFO",
+            artifact={
+                "filename": _bounded(f.filename),
+                "bytes": len(raw),
+                "sha256": digest,
+                "sop_instance_uid": _bounded(sop),
+                "sop_class_uid": _bounded(ds.SOPClassUID),
+                "captured": err is None
+                or not err.error.startswith("Failed to quarantine incoming payload"),
+                "disposition": "rejected" if err else "stored",
+                "reject_reason": _bounded(err.error) if err else None,
+            },
         )
     message = (
         f"{stored} file(s) received, {failed} rejected."
@@ -965,8 +991,7 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
     app.register_error_handler(500, _synapse_500)
 
     routes = profile.web.routes
-    # Every route is registered per-profile from its own web.routes — nothing here is a
-    # fixed path, so one profile's identity can never leak into another's address bar.
+    # Profile-owned paths prevent vendor identities leaking between profiles.
     app.add_url_rule("/", "root", root)
     app.add_url_rule("/favicon.ico", "favicon", favicon)
     app.add_url_rule("/robots.txt", "robots_txt", robots_txt)
@@ -1001,8 +1026,7 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
         methods=["POST"],
     )
 
-    # Browse console — only registered when the profile opts in, so it never appears on a
-    # capture-only profile (e.g. fujifilm) that leaves web.browse off.
+    # Capture-only profiles do not register browse routes.
     if profile.web.browse:
         app.add_url_rule(routes["console"], "console", console)
         app.add_url_rule(routes["patients"], "patients", patients)

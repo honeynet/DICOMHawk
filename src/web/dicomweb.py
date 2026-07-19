@@ -1,9 +1,4 @@
-"""Profile-driven DICOMweb (QIDO-RS/WADO-RS/STOW-RS/WADO-URI). API-only — no HTML/cookies/CSP.
-
-Reuses the DIMSE Repository, its quarantine jail (WADO refuses quarantined bytes, STOW
-quarantines uploads), and the interaction log (channel=DICOMWEB). Routes/ports come only
-from profile.dicomweb, so profiles stay isolated.
-"""
+"""Profile-driven DICOMweb with quarantined STOW storage."""
 
 import copy
 import fnmatch
@@ -102,7 +97,9 @@ def _session_id() -> str:
     )
 
 
-def _log(request_type, *, level="INFO", matches=None, params=None) -> None:
+def _log(
+    request_type, *, level="INFO", matches=None, params=None, artifact=None
+) -> None:
     bus: Logger = current_app.config["BUS"]
     event = InteractionEvent.from_http(
         "DICOMWEB",
@@ -117,6 +114,7 @@ def _log(request_type, *, level="INFO", matches=None, params=None) -> None:
         method=request.method,
         path=_bounded(request.full_path.rstrip("?")),
         user_agent=_bounded(request.headers.get("User-Agent", "")),
+        artifact=artifact,
     )
     {"WARNING": bus.warning, "ERROR": bus.error}.get(level, bus.info)(event)
 
@@ -907,18 +905,22 @@ def wado_uri():
 
 def _multipart_parts(content_type: str, repo: Repository):
     parser = BytesFeedParser(policy=email_policy)
+    digest = hashlib.sha256()
+    size = 0
     parser.feed(f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode())
     with repo.storage.capture_stream(suffix=".stow-request") as raw_capture:
         while chunk := request.stream.read(1024 * 1024):
             raw_capture.write(chunk)
             parser.feed(chunk)
+            digest.update(chunk)
+            size += len(chunk)
     message = parser.close()
     if not message.is_multipart():
-        raise ValueError("Malformed multipart body")
+        return None, size, digest.hexdigest(), "Malformed multipart body"
     parts = list(message.iter_parts())
     if len(parts) > current_app.config["MAX_STOW_PARTS"]:
-        raise ValueError("Too many multipart items")
-    return parts
+        return None, size, digest.hexdigest(), "Too many multipart items"
+    return parts, size, digest.hexdigest(), None
 
 
 def _stow_response(stored, failed) -> dict:
@@ -976,11 +978,63 @@ def _validate_stow_dataset(ds: Dataset, study: str | None) -> tuple[str, str]:
     return sop_class, sop_instance
 
 
-def _capture_rejected(repo: Repository, raw: bytes) -> None:
+def _capture_rejected(repo: Repository, raw: bytes) -> bool:
     try:
         repo.storage.capture(raw, suffix=".stow-part")
     except Exception as exc:
         _log("DICOMWEB_STOW_CAPTURE_FAILURE", level="ERROR", params=[_bounded(exc)])
+        return False
+    return True
+
+
+def _stow_artifact(
+    raw: bytes,
+    *,
+    disposition: str,
+    captured: bool,
+    reject_reason: str | None = None,
+    sop_instance_uid: str | None = None,
+    sop_class_uid: str | None = None,
+) -> dict:
+    return {
+        "filename": None,
+        "bytes": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "sop_instance_uid": _bounded(sop_instance_uid) or None,
+        "sop_class_uid": _bounded(sop_class_uid) or None,
+        "captured": captured,
+        "disposition": disposition,
+        "reject_reason": _bounded(reject_reason) or None,
+    }
+
+
+def _log_stow_rejection(
+    repo: Repository,
+    raw: bytes,
+    reason: str,
+    *,
+    sop_instance_uid: str | None = None,
+    sop_class_uid: str | None = None,
+) -> None:
+    captured = _capture_rejected(repo, raw)
+    _log(
+        "DICOMWEB_STOW_PAYLOAD",
+        level="WARNING",
+        matches=0,
+        params=[
+            f"Bytes: {len(raw)}",
+            f"SHA256: {hashlib.sha256(raw).hexdigest()}",
+            f"Rejected: {_bounded(reason)}",
+        ],
+        artifact=_stow_artifact(
+            raw,
+            disposition="rejected",
+            captured=captured,
+            reject_reason=reason,
+            sop_instance_uid=sop_instance_uid,
+            sop_class_uid=sop_class_uid,
+        ),
+    )
 
 
 def stow_studies(study=None):
@@ -992,55 +1046,127 @@ def stow_studies(study=None):
         or params.get("type", "").lower() != "application/dicom"
     ):
         raw = request.get_data(cache=False)
+        captured = False
         if raw:
             try:
                 repo.storage.capture(raw, suffix=".stow-request")
+                captured = True
             except Exception:
                 logger.exception("Failed capturing a rejected STOW request")
         _log(
-            "DICOMWEB_STOW_STORE",
+            "DICOMWEB_STOW_REQUEST",
             level="WARNING",
             params=[f"Bad Content-Type: {_bounded(content_type)}"],
+            artifact=_stow_artifact(
+                raw,
+                disposition="rejected",
+                captured=captured,
+                reject_reason="Bad Content-Type",
+            ),
         )
         return _problem(
             415, 'Content-Type must be multipart/related; type="application/dicom"'
         )
     if not params.get("boundary"):
         raw = request.get_data(cache=False)
+        captured = False
         if raw:
             try:
                 repo.storage.capture(raw, suffix=".stow-request")
+                captured = True
             except Exception:
                 logger.exception("Failed capturing a boundary-less STOW request")
         _log(
-            "DICOMWEB_STOW_STORE",
+            "DICOMWEB_STOW_REQUEST",
             level="WARNING",
             params=["Missing multipart boundary"],
+            artifact=_stow_artifact(
+                raw,
+                disposition="rejected",
+                captured=captured,
+                reject_reason="Missing multipart boundary",
+            ),
         )
         return _problem(400, "Missing multipart boundary")
 
     stored, failed = [], []
     try:
-        parts = _multipart_parts(content_type, repo)
+        parts, request_bytes, request_sha256, parse_error = _multipart_parts(
+            content_type, repo
+        )
     except Exception as exc:
-        _log("DICOMWEB_STOW_STORE", level="WARNING", params=[_bounded(exc)])
+        _log(
+            "DICOMWEB_STOW_REQUEST",
+            level="WARNING",
+            matches=0,
+            params=[f"Rejected: {_bounded(exc)}"],
+            artifact={
+                "filename": None,
+                "bytes": None,
+                "sha256": None,
+                "sop_instance_uid": None,
+                "sop_class_uid": None,
+                "captured": False,
+                "disposition": "rejected",
+                "reject_reason": _bounded(exc),
+            },
+        )
+        return _problem(400, "Malformed multipart request")
+    if parse_error:
+        _log(
+            "DICOMWEB_STOW_REQUEST",
+            level="WARNING",
+            matches=0,
+            params=[
+                f"Bytes: {request_bytes}",
+                f"SHA256: {request_sha256}",
+                f"Rejected: {_bounded(parse_error)}",
+            ],
+            artifact={
+                "filename": None,
+                "bytes": request_bytes,
+                "sha256": request_sha256,
+                "sop_instance_uid": None,
+                "sop_class_uid": None,
+                "captured": True,
+                "disposition": "rejected",
+                "reject_reason": _bounded(parse_error),
+            },
+        )
         return _problem(400, "Malformed multipart request")
     if not parts:
-        _log("DICOMWEB_STOW_STORE", level="WARNING", params=["No DICOM parts"])
+        _log(
+            "DICOMWEB_STOW_REQUEST",
+            level="WARNING",
+            matches=0,
+            params=["No DICOM parts"],
+            artifact={
+                "filename": None,
+                "bytes": request_bytes,
+                "sha256": request_sha256,
+                "sop_instance_uid": None,
+                "sop_class_uid": None,
+                "captured": True,
+                "disposition": "rejected",
+                "reject_reason": "No DICOM parts",
+            },
+        )
         return _problem(400, "At least one application/dicom part is required")
 
     seen_sops = set()
     for part in parts:
         if part.get_content_type().lower() != "application/dicom":
             raw = part.get_payload(decode=True) or b""
-            _capture_rejected(repo, raw)
-            failed.append(("?", 0x0110, "Part Content-Type is not application/dicom"))
+            reason = "Part Content-Type is not application/dicom"
+            _log_stow_rejection(repo, raw, reason)
+            failed.append(("?", 0x0110, reason))
             continue
         transfer_encoding = str(part.get("Content-Transfer-Encoding", "binary")).lower()
         if transfer_encoding not in {"binary", "8bit"}:
             raw = part.get_payload(decode=True) or b""
-            _capture_rejected(repo, raw)
-            failed.append(("?", 0x0110, "Unsupported Content-Transfer-Encoding"))
+            reason = "Unsupported Content-Transfer-Encoding"
+            _log_stow_rejection(repo, raw, reason)
+            failed.append(("?", 0x0110, reason))
             continue
         raw = part.get_payload(decode=True) or b""
         digest = hashlib.sha256(raw).hexdigest()
@@ -1049,37 +1175,70 @@ def stow_studies(study=None):
             params=[f"Bytes: {len(raw)}", f"SHA256: {digest}"],
         )
         if len(raw) > current_app.config["MAX_STORE_INSTANCE_BYTES"]:
-            _capture_rejected(repo, raw)
-            failed.append(("?", 0xA700, "DICOM instance exceeds the configured limit"))
+            reason = "DICOM instance exceeds the configured limit"
+            _log_stow_rejection(repo, raw, reason)
+            failed.append(("?", 0xA700, reason))
             continue
         try:
             ds = dcmread(BytesIO(raw))
         except Exception as exc:
-            _capture_rejected(repo, raw)
-            failed.append(("?", 0x0110, f"Undecodable Part-10 object: {exc}"))
+            reason = f"Undecodable Part-10 object: {exc}"
+            _log_stow_rejection(repo, raw, reason)
+            failed.append(("?", 0x0110, reason))
             continue
         sop = str(getattr(ds, "SOPInstanceUID", "?"))
+        sop_class = str(getattr(ds, "SOPClassUID", "")) or None
         try:
             sop_class, sop = _validate_stow_dataset(ds, study)
         except LookupError as exc:
-            _capture_rejected(repo, raw)
+            _log_stow_rejection(
+                repo, raw, str(exc), sop_instance_uid=sop, sop_class_uid=sop_class
+            )
             failed.append((sop, 0x0122, str(exc)))
             continue
         except RuntimeError as exc:
-            _capture_rejected(repo, raw)
+            _log_stow_rejection(
+                repo, raw, str(exc), sop_instance_uid=sop, sop_class_uid=sop_class
+            )
             failed.append((sop, 0xA900, str(exc)))
             continue
         except ValueError as exc:
-            _capture_rejected(repo, raw)
+            _log_stow_rejection(
+                repo, raw, str(exc), sop_instance_uid=sop, sop_class_uid=sop_class
+            )
             failed.append((sop, 0x0117, str(exc)))
             continue
         if sop in seen_sops:
-            _capture_rejected(repo, raw)
-            failed.append((sop, 0x0111, "Duplicate SOP Instance in one request"))
+            reason = "Duplicate SOP Instance in one request"
+            _log_stow_rejection(
+                repo, raw, reason, sop_instance_uid=sop, sop_class_uid=sop_class
+            )
+            failed.append((sop, 0x0111, reason))
             continue
         seen_sops.add(sop)
         err = repo.store(ds, raw_bytes=raw)  # exact raw trace + quarantine/index
         if err is not None:
+            _log(
+                "DICOMWEB_STOW_PAYLOAD",
+                level="WARNING",
+                matches=0,
+                params=[
+                    f"SOPInstanceUID: {sop}",
+                    f"Bytes: {len(raw)}",
+                    f"SHA256: {digest}",
+                    f"Rejected: {_bounded(err.error)}",
+                ],
+                artifact=_stow_artifact(
+                    raw,
+                    disposition="rejected",
+                    captured=not err.error.startswith(
+                        "Failed to quarantine incoming payload"
+                    ),
+                    reject_reason=err.error,
+                    sop_instance_uid=sop,
+                    sop_class_uid=sop_class,
+                ),
+            )
             failed.append((sop, 0x0110, err.error))
         else:
             stored.append((sop_class, sop))
@@ -1091,6 +1250,13 @@ def stow_studies(study=None):
                     f"Bytes: {len(raw)}",
                     f"SHA256: {digest}",
                 ],
+                artifact=_stow_artifact(
+                    raw,
+                    disposition="stored",
+                    captured=True,
+                    sop_instance_uid=sop,
+                    sop_class_uid=sop_class,
+                ),
             )
 
     params = [f"Stored: {len(stored)}", f"Failed: {len(failed)}"]

@@ -103,8 +103,24 @@ If `kind: pacs` and `web.enabled: true`, `dicomhawk serve` starts two Flask apps
 your profile automatically — you write templates and config, not routes:
 
 - **Attacker-facing** (`--web-port`, default 8080) — your profile's login/worklist.
-- **Operator API** (`--operator-port`, default 8081, loopback-only) — `/api/sessions`,
-  `/api/events`, `/api/profiles`, read-only, for whoever operates the honeypot.
+- **Operator surface** (`--operator-port`, default 8081, loopback-only) — the dashboard at `/`
+  and its read-only API. `/api/overview` feeds the dashboard in one request; `/api/stats` is the
+  activity summary; `/api/attackers` rolls up sources and tactics; `/api/credentials` deduplicates
+  captured username/password pairs; `/api/uploads` reports terminal WEB/STOW/C-STORE payload
+  outcomes; `/api/events`, `/api/sessions`, and `/api/profiles` expose the underlying views.
+
+The API reads the active interaction log plus retained rotated backups (and also supports rotation
+being disabled), validates malformed JSONL records, and caches parsed events until a file changes.
+Every list endpoint accepts `?limit=` and `?offset=` and reports `X-Total-Count`; events additionally
+accept exact `?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters. Captured attacker
+credentials are shown in full — the plaintext an attacker submitted is the intelligence this
+loopback-only surface exists to expose. Responses are non-cacheable and carry a strict operator CSP.
+
+Keep the default loopback bind on bare metal. Non-loopback binds fail closed unless
+`--allow-remote-operator` is supplied. Set `--operator-token`/`DICOMHAWK_OPERATOR_TOKEN` whenever
+anything beyond the local host can reach the listener; it accepts Basic auth (any username, token as
+password) or a Bearer token. Docker needs a container-internal `0.0.0.0` bind, but the supplied
+Compose file explicitly opts in and maps it only to host `127.0.0.1`.
 
 Both are built by the shared engine — you don't touch that code, only supply your
 profile's assets. It reuses the same DICOM database your profile's DIMSE side sees, so a
@@ -355,6 +371,12 @@ dicomhawk serve --profile my-vendor
 curl -I http://localhost:8080/portal        # or your web.routes.entry — check headers/redirect
 curl http://localhost:8080/robots.txt       # check honeytrap Disallow entries
 curl http://localhost:8081/api/profiles     # confirm the loaded config, loopback-only
+curl http://localhost:8081/api/stats        # activity summary across all channels
+curl http://localhost:8081/api/attackers    # per-source-IP rollup with a threat label
+curl http://localhost:8081/api/credentials  # captured username/password pairs, in full
+curl 'http://localhost:8081/api/events?channel=WEB&limit=50&offset=0'
+# With DICOMHAWK_OPERATOR_TOKEN set:
+curl -H 'Authorization: Bearer YOUR_TOKEN' http://localhost:8081/api/credentials
 curl http://localhost:10080/qido-rs/studies # Fujifilm QIDO-RS default -> application/json
 ```
 

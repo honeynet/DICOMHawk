@@ -45,8 +45,9 @@ where = ["src"]
 include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*", "honeytoken", "honeytoken.*"]
 
 [tool.setuptools.package-data]
-seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md", "config.yaml"]
+seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md", "config.yaml", "locations.json"]
 profiles = ["*/*.yaml", "*/web/templates/*.html", "*/web/static/**/*"]
+web = ["templates/*.html", "static/*"]
 
 [project.urls]
 Homepage = "https://github.com/honeynet/DICOMHawk"

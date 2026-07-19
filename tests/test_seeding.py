@@ -7,9 +7,11 @@ from dicomhawk.repository import QRError, new_repo
 from dicomhawk.storage import new_store
 from honeytoken.injector import new_honeytoken_injector
 from seeding.fallback import load_fallback_datasets
-from seeding.locations import _DEFAULT_LOCATIONS
+from seeding.locations import load_locations
 from seeding.names import _patch_location
 from seeding.seeder import new_seeder
+
+_LOCATIONS = load_locations(None)
 
 
 @pytest.fixture
@@ -38,13 +40,13 @@ def test_station_names_are_stable_but_vary_by_location():
     pools = (("Patient^Male",), ("Patient^Female",), ("Doctor^One",))
     names = {
         _patch_location(deepcopy(source), location, *pools).StationName
-        for location in _DEFAULT_LOCATIONS
+        for location in _LOCATIONS
     }
-    repeated = _patch_location(deepcopy(source), _DEFAULT_LOCATIONS[0], *pools)
+    repeated = _patch_location(deepcopy(source), _LOCATIONS[0], *pools)
     assert len(names) > 1
     assert (
         repeated.StationName
-        == _patch_location(deepcopy(source), _DEFAULT_LOCATIONS[0], *pools).StationName
+        == _patch_location(deepcopy(source), _LOCATIONS[0], *pools).StationName
     )
 
 
@@ -60,10 +62,6 @@ def test_seed_with_honeytoken_tags_exactly_one_instance(repo):
 
 
 def test_seed_run_reset_replants_honeytoken_on_reseed(repo):
-    """Without resetting the per-run flag, reseeding the same fixed fallback files
-    would silently overwrite the tagged file with an untagged copy (same
-    SOPInstanceUIDs -> same on-disk filenames) -- seed() resets the flag every
-    run specifically to prevent the bait from disappearing on reseed."""
     injector = new_honeytoken_injector("https://honey.example.com", None)
     seeder = new_seeder(repo, honeytoken=injector)
     loc = seeder._locations[0]
@@ -71,8 +69,7 @@ def test_seed_run_reset_replants_honeytoken_on_reseed(repo):
     seeder._seed_fallback(loc, "CT", "epoch-1")
     assert len([u for u in _stored_retrieve_urls(repo) if u]) == 1
 
-    # Reseed without resetting the flag: the previously-tagged file is overwritten
-    # by an untagged copy, and nothing new gets tagged -- the bait is gone.
+    # Reusing the per-run flag overwrites the bait without planting another.
     seeder._seed_fallback(loc, "CT", "epoch-2")
     assert len([u for u in _stored_retrieve_urls(repo) if u]) == 0
 

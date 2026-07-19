@@ -1,6 +1,7 @@
 import base64
 import gzip
 import io
+import json
 import logging
 import shutil
 from pathlib import Path
@@ -113,7 +114,6 @@ def test_random_guess_still_denied_when_grant_access_false(repo, bus):
 
 
 def test_generic_pacs_routes_and_cookies_are_not_synapse_shaped(repo, bus):
-    """The direct ask: nothing in generic-pacs's address bar, forms, or cookies says 'Synapse'."""
     client = new_web(load_profile("generic-pacs"), repo, bus).test_client()
 
     resp = client.get("/portal")
@@ -140,10 +140,6 @@ def test_generic_pacs_routes_and_cookies_are_not_synapse_shaped(repo, bus):
 
 
 def test_error_and_forgot_password_pages_use_overridden_routes(tmp_path, repo, bus):
-    """Regression: error.html/forgot_password.html used to hardcode Fujifilm's real
-    paths instead of reading profile.web.routes, so overriding routes.login/
-    .forgot_password silently left the rendered link/form pointing at a route
-    that no longer existed."""
     custom = tmp_path / "custom.yaml"
     custom.write_text(
         "meta:\n  name: custom\n  kind: pacs\n"
@@ -262,12 +258,6 @@ def test_winauth_honey_credential_grants_and_logs_distinctly(repo, bus, caplog):
 
 
 def test_translated_items_uses_pascal_case_keys_the_client_js_expects(client):
-    """Regression: translation.js (real Synapse asset) reads data['Text1']/['Text2']/
-    ['Text3'] — PascalCase, ASP.NET's wire convention. The route used to return the
-    config's own lowercase text1/text2/text3 keys verbatim, so every key lookup in the
-    browser came back undefined and the WinAuth-cancelled page showed literal
-    "undefined" for both the title and the button — only visible in a real browser
-    (curl never runs the JS), which is how it slipped past testing."""
     resp = client.post("/synapse/error/TranslatedItems/1")
     assert resp.status_code == 200
     data = resp.get_json()
@@ -315,8 +305,6 @@ def test_workflow_engine_probe_returns_stock_style_json(client, caplog):
 
 
 def test_profile_without_honeytraps_gets_none(tmp_path, repo, bus):
-    """The core ask: a new profile that declares no honeytraps must not inherit another
-    vendor's bait routes just because it reuses the same engine."""
     sparse = tmp_path / "sparse.yaml"
     sparse.write_text(
         "meta:\n  name: sparse\n  kind: pacs\n"
@@ -336,7 +324,6 @@ def test_profile_without_honeytraps_gets_none(tmp_path, repo, bus):
 
 
 def test_new_profile_can_declare_its_own_honeytrap(tmp_path, repo, bus):
-    """The other half of the ask: any profile can plug into the same generic responses."""
     custom = tmp_path / "custom.yaml"
     custom.write_text(
         "meta:\n  name: custom\n  kind: pacs\n"
@@ -359,8 +346,7 @@ def test_new_profile_can_declare_its_own_honeytrap(tmp_path, repo, bus):
 
 
 def test_unmapped_path_gets_spoofed_headers_not_werkzeug_default(client, caplog):
-    # This is the actual regression: blueprint-scoped hooks never fire for a path that
-    # matches no route at all, so headers/404 body must be registered at the app level.
+    # Unmatched routes bypass blueprint-scoped hooks.
     with caplog.at_level(logging.INFO, logger="bus"):
         resp = client.get("/totally/made/up/path")
     assert resp.status_code == 404
@@ -377,7 +363,6 @@ def test_favicon_served(client):
 
 
 def test_sparse_profile_serves_without_crashing(tmp_path, repo, bus):
-    """A profile that only sets web.enabled + templates_dir must not crash on real requests."""
     sparse = tmp_path / "sparse.yaml"
     sparse.write_text(
         "meta:\n  name: sparse\n  kind: pacs\n"
@@ -436,8 +421,6 @@ def test_worklist_reads_seeded_studies(repo, bus, caplog):
 
 
 def test_generic_pacs_profile_serves_all_pages(repo, bus):
-    """161-11: a second profile, built from almost no YAML, must render every page
-    the shared engine drives it through — the actual proof the architecture works."""
     profile = load_profile("generic-pacs")
     client = new_web(profile, repo, bus).test_client()
 
@@ -456,7 +439,6 @@ def test_generic_pacs_profile_serves_all_pages(repo, bus):
 
 
 def test_generic_pacs_unauthorized_honeytrap(repo, bus, caplog):
-    """generic-pacs demonstrates the unauthorized_page response kind (v2.0 design ref)."""
     profile = load_profile("generic-pacs")
     client = new_web(profile, repo, bus).test_client()
 
@@ -685,6 +667,17 @@ def test_web_upload_view_and_rejection_are_logged(repo, bus, caplog):
         )
     assert "WEB_UPLOAD_VIEW" in caplog.text
     assert "Rejected:" in caplog.text and "SHA256:" in caplog.text
+    events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == "bus"
+    ]
+    upload = next(
+        event for event in events if event.get("request_type") == "WEB_UPLOAD"
+    )
+    assert upload["artifact"]["disposition"] == "rejected"
+    assert upload["artifact"]["captured"] is True
+    assert upload["artifact"]["bytes"] == 3
 
 
 def test_browse_pages_are_bounded_and_keep_search_parameters(repo, bus):

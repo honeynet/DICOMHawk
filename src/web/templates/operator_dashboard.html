@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DICOMHawk Operator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='operator.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">DH</span>
+      <div>
+        <span class="wordmark">DICOMHawk</span>
+        <h1>Operator console</h1>
+        <p class="subtitle">{{ profile.name }} · {{ profile.ae_title }}</p>
+      </div>
+    </div>
+    <div class="controls">
+      <label>Time range
+        <select id="range">
+          <option value="1">Last hour</option>
+          <option value="24" selected>Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+          <option value="all">All retained</option>
+        </select>
+      </label>
+      <label>Channel
+        <select id="channel">
+          <option value="">All channels</option>
+          <option value="DIMSE">DIMSE</option>
+          <option value="WEB">Web</option>
+          <option value="DICOMWEB">DICOMweb</option>
+        </select>
+      </label>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="notice" class="notice" role="status" aria-live="polite">Loading retained activity…</div>
+
+    <section class="cards" aria-label="Activity summary">
+      <article><span>Total events</span><strong id="total-events">—</strong></article>
+      <article><span>Unique sources</span><strong id="unique-sources">—</strong></article>
+      <article><span>Credential attempts</span><strong id="credential-attempts">—</strong></article>
+      <article><span>Captured payloads</span><strong id="captured-payloads">—</strong></article>
+      <article><span>Rejected payloads</span><strong id="rejected-payloads">—</strong></article>
+    </section>
+
+    <div class="grid two">
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Distribution</p><h2>Activity by channel</h2></div>
+        </div>
+        <div id="channel-chart" class="bar-chart"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Prioritization</p><h2>Top sources</h2></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Source</th><th>Events</th><th>Tactics</th><th>Last seen</th></tr></thead>
+          <tbody id="attackers"></tbody>
+        </table></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div><p class="eyebrow">Live trail</p><h2>Recent events</h2></div>
+        <a href="/api/events">JSON view</a>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Source</th><th>Channel</th><th>Request</th><th>Details</th></tr></thead>
+        <tbody id="events"></tbody>
+      </table></div>
+    </section>
+
+    <div class="grid two">
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Artifacts</p><h2>Payloads</h2></div>
+          <a href="/api/uploads">JSON view</a>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Source</th><th>Protocol</th><th>Size</th><th>Disposition</th><th>SHA-256</th></tr></thead>
+          <tbody id="uploads"></tbody>
+        </table></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Authentication</p><h2>Credential attempts</h2></div>
+          <a href="/api/credentials">JSON view</a>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Username</th><th>Password</th><th>Hits</th><th>Sources</th><th>Bait</th></tr></thead>
+          <tbody id="credentials"></tbody>
+        </table></div>
+      </section>
+    </div>
+  </main>
+
+  <footer>Operator-only surface · values are derived from retained interaction logs</footer>
+  <script src="{{ url_for('static', filename='operator.js') }}" defer></script>
+</body>
+</html>

@@ -94,7 +94,6 @@ class Server:
     def init(self) -> AE:
         logger.debug("Initializing AE")
 
-        # Titles
         ae = AE(ae_title=self.config.AE_TITLE)
 
         if self.config.IMPLEMENTATION_UID:
@@ -102,7 +101,6 @@ class Server:
         if self.config.IMPLEMENTATION_NAME:
             ae.implementation_version_name = self.config.IMPLEMENTATION_NAME
 
-        # Other config
         ae.maximum_associations = self.config.MAX_ASSOC
         if self.config.MAX_PDU_SIZE is not None:
             ae.maximum_pdu_size = self.config.MAX_PDU_SIZE
@@ -141,7 +139,6 @@ class Server:
         return ae
 
     def run(self):
-        # Start server on each port
         app = self.init()
 
         try:
@@ -161,8 +158,7 @@ class Server:
             self.stop()
             raise
 
-        # start_server(block=False) already runs each listener in its own daemon
-        # thread; just keep the process alive until stop() is called.
+        # start_server(block=False) owns the listener threads.
         self._stopped.wait()
 
     def stop(self):

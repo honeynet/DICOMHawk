@@ -18,8 +18,10 @@ Start the DICOM honeypot server.
 | `--log-backups` | | `5` | Number of rotated event logs to keep |
 | `--dev-log` | | | Path for Python-level warnings, errors, and pynetdicom protocol events |
 | `--web-port` | | `8080` | Port for the attacker-facing web UI (`pacs`-kind profiles with `web.enabled` only) |
-| `--operator-port` | | `8081` | Port for the read-only operator API (`/api/sessions`, `/api/events`, `/api/profiles`) |
-| `--operator-host` | | `127.0.0.1` | Bind address for the operator API. Keep the default for a bare-metal deployment — it's what makes the API loopback-only. In Docker, override to `0.0.0.0` and enforce loopback-only via the host-side port mapping instead (a container's own `127.0.0.1` is a separate network namespace host port publishing can't reach) — see `docker-compose.yml`. |
+| `--operator-port` | | `8081` | Port for the read-only operator dashboard (`/`) and API (`/api/overview`, `/api/stats`, `/api/attackers`, `/api/credentials`, `/api/uploads`, `/api/events`, `/api/sessions`, `/api/profiles`) |
+| `--operator-host` | | `127.0.0.1` | Bind address for the operator surface. A non-loopback value also requires `--allow-remote-operator`. In Docker, use `0.0.0.0`; the supplied host mapping still publishes it only on `127.0.0.1`. |
+| `--operator-token` | | *(unset)* | Optional operator password/Bearer token; also read from `DICOMHAWK_OPERATOR_TOKEN`. Browsers use Basic auth (any username), while API clients may use Basic or `Authorization: Bearer …`. |
+| `--allow-remote-operator` | | off | Explicitly permit a non-loopback operator bind. The supplied Docker configuration sets this because container loopback cannot be published; it retains a host-side loopback-only port mapping. |
 | `--backend-server` | | *(profile value)* | Per-deployment `X-Backendserver` value; also read from `DICOMHAWK_BACKEND_SERVER` |
 | `--public-base-url` | | *(request origin)* | External HTTP(S) origin for generated OIDC redirect URIs; also read from `DICOMHAWK_PUBLIC_BASE_URL` |
 | `--verbose` | `-v` | | Print a compact colored event summary to stdout; auto-enabled when stdout is a TTY |

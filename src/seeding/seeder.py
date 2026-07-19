@@ -11,7 +11,7 @@ from dicomhawk.repository import Repository
 from honeytoken.injector import Middleware
 
 from .fallback import load_fallback_datasets
-from .locations import Location, _DEFAULT_LOCATIONS
+from .locations import Location, load_locations
 from .names import NamePools, _patch_location, faker_pools
 from .tcia import TciaClient
 
@@ -24,8 +24,7 @@ def resolve_rotation(
     rotate: bool,
     epoch: str | None = None,
 ) -> tuple[str, str, str]:
-    # Rotate off: deterministic (first entries, no epoch). Rotate on: source + identity
-    # salt both change by ISO week, so a stateless weekly cron stays fresh but idempotent in-week.
+    # Weekly salts keep rotation fresh and idempotent within a week.
     if not rotate:
         return collections[0], modalities[0], ""
     year, week, _ = date.today().isocalendar()
@@ -53,9 +52,7 @@ class SeedScheduler(threading.Thread):
         super().__init__(daemon=True, name="dicomhawk-seeder")
         self._seeder = seeder
         self._collections = collections
-        self._modalities = modalities or [
-            "CT"
-        ]  # only cli.py's caller-validated lists reach here
+        self._modalities = modalities or ["CT"]
         self._interval = interval_minutes * 60
         self._max_series = max_series
         self._max_images = max_images
@@ -92,7 +89,7 @@ class Seeder:
     ):
         self._repo = repo
         self._client = TciaClient()
-        self._locations = locations if locations else _DEFAULT_LOCATIONS
+        self._locations = locations or load_locations(None)
         self._male_pool, self._female_pool, self._physician_pool = (
             name_pools or faker_pools(locale)
         )
@@ -100,8 +97,7 @@ class Seeder:
         self._honeytoken_planted = False
 
     def _tag_honeytoken(self, ds: Dataset) -> tuple[Dataset, bool]:
-        # Plants the bait (RetrieveURL/canary PDF) into exactly one instance per seed() run,
-        # baked into the stored file — not a per-retrieval overlay, so most instances stay real.
+        # Bake bait into one stored instance per seed run.
         if self._honeytoken and not self._honeytoken_planted:
             return self._honeytoken(ds), True
         return ds, False
@@ -114,25 +110,22 @@ class Seeder:
         modality: str = "CT",
         epoch: str = "",
     ) -> int:
-        # getSeries has no usable instance count, so we sample instead of sorting; a
-        # per-epoch seeded RNG keeps selection idempotent within a week but varying across weeks.
+        # Seeded sampling compensates for getSeries lacking instance counts.
         rng = random.Random(epoch or collection)
         loc = rng.choice(self._locations)
         series_list = self._client.get_series(collection, modality)
 
-        requested = (
-            max_series > 0 and max_images > 0
-        )  # 0 means "fetch nothing", not "TCIA is down"
+        download_requested = max_series > 0 and max_images > 0
 
         self._honeytoken_planted = False
         stored = 0
-        if series_list and requested:
+        if series_list and download_requested:
             uids = [uid for s in series_list if (uid := s.get("SeriesInstanceUID"))]
             rng.shuffle(uids)
             for uid in uids[:max_series]:
                 stored += self._ingest_series(uid, loc, max_images, epoch)
 
-        if stored == 0 and requested:
+        if stored == 0 and download_requested:
             # TCIA unreachable, empty, or every download failed → bundled offline dataset.
             stored = self._seed_fallback(loc, modality, epoch)
             if stored:

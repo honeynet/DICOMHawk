@@ -42,8 +42,7 @@ def _stable_date(start: date, day_range: int, key: str, salt: str) -> str:
 
 def faker_pools(locale: str = "en_US") -> NamePools:
     faker = Faker(locale)
-    # "^" = DICOM PN separator (Family^Given). first_name_male/female is absent for
-    # some locales, so fall back to name().
+    # Some locales lack sex-specific first-name providers.
     try:
         male = tuple(
             f"{faker.last_name()}^{faker.first_name_male()}" for _ in range(100)
@@ -59,9 +58,7 @@ def faker_pools(locale: str = "en_US") -> NamePools:
 
 
 def load_name_pools(path: str | None) -> NamePools | None:
-    """Load {"male": [...], "female": [...], "physician": [...]} PN pools from JSON (physician
-    optional, defaults to male+female); None or any error falls back to faker_pools().
-    """
+    """Load optional male, female, and physician PN pools from JSON."""
     if path is None:
         return None
     try:
@@ -86,8 +83,7 @@ def _patch_location(
     physician_pool: tuple[str, ...],
     epoch: str = "",
 ) -> Dataset:
-    # NOTE: epoch salts every derived key, so the same image becomes a fresh but
-    # internally-consistent identity each rotation.
+    # Epoch salts rotate identities while keeping each dataset consistent.
     patient_key = str(
         getattr(ds, "PatientID", "") or getattr(ds, "PatientName", "") or ""
     )

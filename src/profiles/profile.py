@@ -49,8 +49,7 @@ class DicomConfig:
     max_associations: int
     max_pdu_size: int | None  # None -> pynetdicom's own default; no real value to mimic
     ae_auth: AEAuthConfig
-    # Tighter than pynetdicom's 30s/60s defaults — a raw connection with no valid PDU
-    # still holds a max_associations slot until these expire (DoS window).
+    # Limit how long a silent peer occupies an association slot.
     acse_timeout: float | None
     network_timeout: float | None
     max_store_bytes: int | None
@@ -93,8 +92,7 @@ class WebConfig:
     upload_max_files: int = 10
     browse_page_size: int = 100
     assets_dir: str | None = None
-    # Deployment topology, not device identity — set per-deployment via serve.py's
-    # --public-base-url/$DICOMHAWK_PUBLIC_BASE_URL, never from profile YAML.
+    # Deployment topology comes from CLI/env, never profile YAML.
     public_base_url: str | None = None
 
 
@@ -180,8 +178,7 @@ def default_profile() -> ProfileConfig:
             max_store_bytes=512 * 1024 * 1024,
         ),
         web=WebConfig(
-            # Generic fallback content — real values for any pacs profile that omits
-            # its own web.* keys, so a sparse custom profile can't crash the engine.
+            # Working vendor-neutral defaults for sparse PACS profiles.
             headers={
                 "Server": "Apache",
                 "X-Frame-Options": "SAMEORIGIN",
@@ -200,8 +197,7 @@ def default_profile() -> ProfileConfig:
                 "redirect_path": "/",
                 "scopes": "",
             },
-            # Generic, non-vendor-specific route/cookie names — never "Synapse"-shaped,
-            # so a profile that doesn't override these can't leak Fujifilm's identity.
+            # Vendor-neutral paths prevent identity leaking into sparse profiles.
             routes={
                 "entry": "/portal",
                 "worklist": "/portal/worklist",

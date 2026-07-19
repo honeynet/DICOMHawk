@@ -9,8 +9,7 @@ def test_default_profile_is_generic():
     assert prof.ae_title == "ORTHANC"
     assert prof.web.enabled is False
     assert "echo" in prof.dicom.operations
-    # Tighter than pynetdicom's own 30s/60s defaults — shrinks how long a raw garbage
-    # connection can occupy a max_associations slot without ever sending a valid PDU.
+    # Silent peers should release association slots before pynetdicom's defaults.
     assert prof.dicom.acse_timeout == 10
     assert prof.dicom.network_timeout == 15
     assert prof.dicom.max_store_bytes == 512 * 1024 * 1024
@@ -22,8 +21,6 @@ def test_load_profile_none_matches_default():
 
 
 def test_load_profile_generic_pacs_reuses_default_fallbacks():
-    """The extensibility proof: generic-pacs declares almost nothing and gets a
-    working, vendor-neutral identity purely from default_profile()'s fallbacks."""
     prof = load_profile("generic-pacs")
     assert prof.kind == "pacs"
     assert prof.web.enabled is True
@@ -117,7 +114,6 @@ def test_malformed_profile_raises():
 
 
 def test_sparse_web_profile_falls_back_not_crashes(tmp_path):
-    """web.enabled=true with no other web.* keys must get real, working defaults, not empty dicts."""
     sparse = tmp_path / "sparse.yaml"
     sparse.write_text(
         "meta:\n  name: sparse\n  kind: pacs\n"

@@ -10,11 +10,8 @@ services:
     ports:
       - "104:104"               # standard unencrypted DICOM port; use host privileges/capabilities as required
       - "8080:8080"             # attacker-facing web (pacs profiles with web.enabled only)
-      - "127.0.0.1:8081:8081"   # operator API — this host-side binding is the real loopback-only
-                                 # restriction; the process binds 0.0.0.0 inside the container (see --operator-host)
-      # DICOMweb ports are profile fingerprint identity. These are the real Synapse ports (fujifilm
-      # profile); generic-pacs serves /dicom-web on 8042. Publishing all five lets a profile switch
-      # work without a second compose edit; only the active profile's listeners accept connections.
+      - "127.0.0.1:8081:8081"   # container binds 0.0.0.0; host stays loopback-only
+      # Publish every profile port; only the active profile listens.
       - "8042:8042"             # DICOMweb generic / Orthanc-shaped profile
       - "9080:9080"             # DICOMweb WADO-URI  (fujifilm)
       - "10080:10080"           # DICOMweb QIDO-RS   (fujifilm)
@@ -41,6 +38,7 @@ services:
       - "${DICOMHAWK_OPERATOR_PORT:-8081}"
       - --operator-host
       - "${DICOMHAWK_OPERATOR_HOST:-0.0.0.0}"
+      - --allow-remote-operator
       - -v
     volumes:
       - dicom_storage:${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}

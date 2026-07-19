@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import signal
 import sys
@@ -94,6 +95,17 @@ def serve(
         "--operator-host",
         help="Bind address for the operator API (loopback-only by default; Docker needs 0.0.0.0 here, see docs/commands.md)",
     ),
+    operator_token: str | None = typer.Option(
+        None,
+        "--operator-token",
+        envvar="DICOMHAWK_OPERATOR_TOKEN",
+        help="Optional password/Bearer token protecting the operator API and dashboard",
+    ),
+    allow_remote_operator: bool = typer.Option(
+        False,
+        "--allow-remote-operator",
+        help="Explicitly permit a non-loopback operator bind (needed inside Docker)",
+    ),
     backend_server: str | None = typer.Option(
         None,
         "--backend-server",
@@ -132,6 +144,17 @@ def serve(
         raise typer.BadParameter("log-max-bytes and log-backups cannot be negative")
     if log_max_bytes and log_backups < 1:
         raise typer.BadParameter("rotating logs require at least one backup")
+    try:
+        operator_is_loopback = (
+            operator_host == "localhost"
+            or ipaddress.ip_address(operator_host).is_loopback
+        )
+    except ValueError:
+        operator_is_loopback = False
+    if not operator_is_loopback and not allow_remote_operator:
+        raise typer.BadParameter(
+            "a non-loopback operator-host requires --allow-remote-operator"
+        )
     if backend_server:
         prof.web.headers["X-Backendserver"] = backend_server
     if public_base_url:
@@ -217,7 +240,14 @@ def serve(
     if prof.kind == "pacs" and prof.web.enabled:
         components.append(
             new_web_component(
-                prof, repo, bus, host, web_port, operator_port, operator_host
+                prof,
+                repo,
+                bus,
+                host,
+                web_port,
+                operator_port,
+                operator_host,
+                operator_token,
             )
         )
     # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.

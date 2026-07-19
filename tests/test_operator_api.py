@@ -1,20 +1,22 @@
 import logging
+import base64
+from logging import FileHandler
+from logging.handlers import RotatingFileHandler
 
 import pytest
+import ujson
 
 from dicomhawk.bus import RecentEventsHandler
 from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
 from web.app import new_web
-from web.operator_api import new_operator_api
+from web.operator_api import extract_credentials, new_operator_api
 
 
 @pytest.fixture
 def bus():
-    # A plain Logger() instance, not getLogger("bus") — the latter is a process-wide
-    # singleton that new_bus() would mutate (propagate=False, accumulating handlers),
-    # leaking state across test files. A fresh, uncached Logger avoids that entirely.
+    # Avoid leaking handlers through the process-wide bus logger.
     logger = logging.Logger("test-operator-bus")
     logger.addHandler(RecentEventsHandler())
     return logger
@@ -31,8 +33,8 @@ def profile():
 
 
 @pytest.fixture
-def operator_client(profile, repo, bus):
-    return new_operator_api(profile, repo, bus).test_client()
+def operator_client(profile, bus):
+    return new_operator_api(profile, bus).test_client()
 
 
 def test_profiles_endpoint_reflects_active_profile(operator_client):
@@ -67,10 +69,283 @@ def test_events_and_sessions_empty_without_activity(operator_client):
     assert operator_client.get("/api/sessions").get_json() == []
 
 
-def test_operator_api_never_crashes_without_recent_events_handler(profile, repo):
+def test_operator_api_never_crashes_without_recent_events_handler(profile):
     import logging
 
     bare_logger = logging.getLogger("bare-bus-for-test")
-    client = new_operator_api(profile, repo, bare_logger).test_client()
+    client = new_operator_api(profile, bare_logger).test_client()
     assert client.get("/api/events").get_json() == []
     assert client.get("/api/sessions").get_json() == []
+    assert client.get("/api/stats").get_json()["total_events"] == 0
+    assert client.get("/api/attackers").get_json() == []
+    assert client.get("/api/credentials").get_json() == []
+    assert client.get("/api/uploads").get_json() == []
+
+
+def _durable_client(profile, tmp_path, lines):
+    logfile = tmp_path / "dicomhawk.log"
+    logfile.write_text("\n".join(ujson.dumps(line) for line in lines) + "\n")
+    logger = logging.Logger("test-durable-bus")
+    logger.addHandler(RotatingFileHandler(str(logfile)))
+    return new_operator_api(profile, logger).test_client()
+
+
+def test_derived_views_read_the_durable_log_file(profile, tmp_path):
+    lines = [
+        {
+            "request_type": "WEB_LOGIN_ATTEMPT",
+            "channel": "WEB",
+            "ip": "10.0.0.1",
+            "session_parameters": ["Username: admin", "Password: p@ss"],
+            "timestamp": "2026-07-19T10:00:00",
+        },
+        {
+            "request_type": "WEB_LOGIN_ATTEMPT",
+            "channel": "WEB",
+            "ip": "10.0.0.1",
+            "session_parameters": ["Username: admin", "Password: p@ss"],
+            "timestamp": "2026-07-19T10:01:00",
+        },
+        {
+            "request_type": "WEB_UPLOAD",
+            "channel": "WEB",
+            "ip": "10.0.0.2",
+            "session_parameters": [
+                "File: x.dcm",
+                "Bytes: 1024",
+                "SHA256: abc",
+                "SOPInstanceUID: 1.2.3",
+            ],
+            "timestamp": "2026-07-19T10:02:00",
+        },
+        {
+            "request_type": "C-ECHO",
+            "channel": "DIMSE",
+            "ip": "10.0.0.3",
+            "session_parameters": None,
+            "timestamp": "2026-07-19T10:03:00",
+        },
+    ]
+    client = _durable_client(profile, tmp_path, lines)
+
+    stats = client.get("/api/stats").get_json()
+    assert stats["total_events"] == 4
+    assert stats["by_channel"]["WEB"] == 3
+    assert stats["credentials_captured"] == 2
+    assert stats["uploads_captured"] == 1
+    assert stats["unique_source_ips"] == 3
+
+    creds = client.get("/api/credentials").get_json()
+    assert creds[0]["username"] == "admin" and creds[0]["password"] == "p@ss"
+    assert creds[0]["count"] == 2
+    assert creds[0]["source_ips"] == ["10.0.0.1"]
+
+    by_ip = {a["ip"]: a for a in client.get("/api/attackers").get_json()}
+    assert by_ip["10.0.0.1"]["classification"] == "credential-access"
+    assert by_ip["10.0.0.2"]["classification"] == "storage-abuse"
+    assert by_ip["10.0.0.3"]["classification"] == "reconnaissance"
+
+    uploads = client.get("/api/uploads").get_json()
+    assert uploads[0]["sha256"] == "abc" and uploads[0]["bytes"] == 1024
+
+    assert [
+        e["request_type"] for e in client.get("/api/events?channel=DIMSE").get_json()
+    ] == ["C-ECHO"]
+    assert len(client.get("/api/events?since=2026-07-19T10:02:00").get_json()) == 2
+
+
+def test_credentials_flag_honey_hits():
+    events = [
+        {
+            "request_type": "WEB_HONEY_CREDENTIAL_USED",
+            "channel": "WEB",
+            "ip": "10.0.0.9",
+            "session_parameters": ["Username: test", "Password: test"],
+            "timestamp": "2026-07-19T11:00:00",
+        },
+        {
+            "request_type": "WEB_LOGIN_ATTEMPT",
+            "channel": "WEB",
+            "ip": "10.0.0.9",
+            "session_parameters": ["Username: root", "Password: toor"],
+            "timestamp": "2026-07-19T11:01:00",
+        },
+    ]
+    creds = {(c["username"], c["password"]): c for c in extract_credentials(events)}
+    assert creds[("test", "test")]["honey_hit"] is True
+    assert creds[("root", "toor")]["honey_hit"] is False
+
+
+def test_honey_pair_matches_across_channels():
+    events = [
+        {
+            "request_type": "DICOMWEB_AUTH_ATTEMPT",
+            "channel": "DICOMWEB",
+            "ip": "10.0.0.4",
+            "session_parameters": ["Username: test", "Password: test"],
+        }
+    ]
+    assert extract_credentials(events, [("test", "test")])[0]["honey_hit"] is True
+
+
+def test_upload_views_use_terminal_payload_events_only(profile, tmp_path):
+    lines = [
+        {
+            "request_type": "WEB_UPLOAD_LIMIT",
+            "channel": "WEB",
+            "ip": "10.0.0.8",
+            "session_parameters": ["Submitted: 11", "Rejected: 1"],
+        },
+        {
+            "request_type": "DICOMWEB_STOW_STORE",
+            "channel": "DICOMWEB",
+            "ip": "10.0.0.8",
+            "session_parameters": ["Stored: 1", "Failed: 0"],
+        },
+        {
+            "request_type": "DICOMWEB_STOW_PAYLOAD",
+            "channel": "DICOMWEB",
+            "ip": "10.0.0.8",
+            "artifact": {
+                "bytes": 321,
+                "sha256": "deadbeef",
+                "sop_instance_uid": "1.2.3",
+                "sop_class_uid": "1.2.4",
+                "captured": True,
+                "disposition": "stored",
+                "reject_reason": None,
+                "filename": None,
+            },
+        },
+    ]
+    client = _durable_client(profile, tmp_path, lines)
+    uploads = client.get("/api/uploads").get_json()
+    assert len(uploads) == 1
+    assert uploads[0]["bytes"] == 321
+    assert uploads[0]["sop_class_uid"] == "1.2.4"
+    assert client.get("/api/stats").get_json()["upload_attempts"] == 1
+    attacker = client.get("/api/attackers").get_json()[0]
+    assert attacker["uploads"] == 1
+
+
+def test_non_rotating_file_handler_is_durable(profile, tmp_path):
+    logfile = tmp_path / "plain.log"
+    logfile.write_text(
+        ujson.dumps({"request_type": "C-ECHO", "channel": "DIMSE", "ip": "1.2.3.4"})
+        + "\n"
+    )
+    logger = logging.Logger("plain-file-bus")
+    logger.addHandler(FileHandler(logfile))
+    client = new_operator_api(profile, logger).test_client()
+    assert client.get("/api/stats").get_json()["total_events"] == 1
+
+
+def test_rotated_logs_are_read_oldest_to_newest(profile, tmp_path):
+    logfile = tmp_path / "rotating.log"
+    logfile.write_text(
+        ujson.dumps(
+            {"request_type": "NEW", "channel": "WEB", "timestamp": "2026-02-02"}
+        )
+        + "\n"
+    )
+    (tmp_path / "rotating.log.1").write_text(
+        ujson.dumps(
+            {"request_type": "OLD", "channel": "DIMSE", "timestamp": "2026-01-01"}
+        )
+        + "\n"
+    )
+    logger = logging.Logger("rotated-file-bus")
+    logger.addHandler(RotatingFileHandler(logfile, maxBytes=10, backupCount=2))
+    client = new_operator_api(profile, logger).test_client()
+    stats = client.get("/api/stats").get_json()
+    assert stats["total_events"] == 2
+    assert stats["first_event"] == "2026-01-01"
+
+
+def test_malformed_records_are_skipped_without_crashing(profile, tmp_path):
+    logfile = tmp_path / "malformed.log"
+    logfile.write_text(
+        '"valid JSON scalar"\n{"channel":"WEB"}\nnot-json\n'
+        + ujson.dumps({"request_type": "OK", "channel": "WEB"})
+        + "\n"
+    )
+    logger = logging.Logger("malformed-file-bus")
+    logger.addHandler(FileHandler(logfile))
+    client = new_operator_api(profile, logger).test_client()
+    stats = client.get("/api/stats").get_json()
+    assert stats["total_events"] == 2
+    assert stats["skipped_records"] == 2
+    assert client.get("/api/attackers").status_code == 200
+
+
+def test_durable_snapshot_is_cached_until_file_changes(profile, tmp_path, monkeypatch):
+    logfile = tmp_path / "cached.log"
+    logfile.write_text(ujson.dumps({"request_type": "ONE", "channel": "WEB"}) + "\n")
+    logger = logging.Logger("cached-file-bus")
+    logger.addHandler(FileHandler(logfile))
+    client = new_operator_api(profile, logger).test_client()
+
+    from web import operator_api
+
+    original = operator_api._read_paths
+    calls = 0
+
+    def counted(paths):
+        nonlocal calls
+        calls += 1
+        return original(paths)
+
+    monkeypatch.setattr(operator_api, "_read_paths", counted)
+    assert client.get("/api/stats").status_code == 200
+    assert client.get("/api/attackers").status_code == 200
+    assert calls == 1
+
+    with logfile.open("a") as stream:
+        stream.write(ujson.dumps({"request_type": "TWO", "channel": "DIMSE"}) + "\n")
+    assert client.get("/api/stats").get_json()["total_events"] == 2
+    assert calls == 2
+
+
+def test_filter_validation_paging_and_headers(profile, tmp_path):
+    lines = [
+        {
+            "request_type": f"TYPE-{index}",
+            "channel": "WEB",
+            "timestamp": f"2026-07-19T10:0{index}:00",
+        }
+        for index in range(3)
+    ]
+    client = _durable_client(profile, tmp_path, lines)
+    response = client.get("/api/events?limit=1&offset=1")
+    assert response.status_code == 200
+    assert response.headers["X-Total-Count"] == "3"
+    assert response.get_json()[0]["request_type"] == "TYPE-1"
+    assert client.get("/api/events?limit=0").status_code == 400
+    assert client.get("/api/events?since=not-a-time").status_code == 400
+
+
+def test_operator_security_headers_auth_and_redaction(bus):
+    client = new_operator_api(
+        load_profile("generic-pacs"), bus, "secret-token"
+    ).test_client()
+    assert client.get("/api/stats").status_code == 401
+    basic = base64.b64encode(b"operator:secret-token").decode()
+    assert (
+        client.get("/", headers={"Authorization": f"Basic {basic}"}).status_code == 200
+    )
+    response = client.get(
+        "/api/profiles", headers={"Authorization": "Bearer secret-token"}
+    )
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"].startswith("no-store")
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    assert response.get_json()["web"]["honey_credentials"] == [["test", "********"]]
+
+
+def test_dashboard_and_overview_are_available(operator_client):
+    dashboard = operator_client.get("/")
+    assert dashboard.status_code == 200
+    assert b"Operator console" in dashboard.data
+    assert operator_client.get("/static/operator.css").status_code == 200
+    overview = operator_client.get("/api/overview").get_json()
+    assert set(overview) == {"stats", "attackers", "credentials", "uploads", "events"}

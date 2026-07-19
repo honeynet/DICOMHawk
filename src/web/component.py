@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 def _build_servers(specs):
-    """specs: (name, app, host, port, max_body) -> parallel lists of waitress servers + daemon threads."""
     servers, threads = [], []
     try:
         for name, app, host, port, max_body in specs:
@@ -55,7 +54,7 @@ def _stop_servers(servers, threads):
 
 
 class WebComponent(Component):
-    """Attacker-facing and loopback operator apps with explicit server lifecycles."""
+    """Run the attacker and operator HTTP servers."""
 
     def __init__(
         self,
@@ -66,6 +65,7 @@ class WebComponent(Component):
         web_port: int,
         operator_port: int,
         operator_host: str = "127.0.0.1",
+        operator_token: str | None = None,
     ):
         self.profile = profile
         self.repo = repo
@@ -74,6 +74,7 @@ class WebComponent(Component):
         self.web_port = web_port
         self.operator_port = operator_port
         self.operator_host = operator_host
+        self.operator_token = operator_token
         self._servers = []
         self._threads: list[threading.Thread] = []
 
@@ -81,7 +82,7 @@ class WebComponent(Component):
         if self._servers:
             return
         web_app = new_web(self.profile, self.repo, self.bus)
-        operator_app = new_operator_api(self.profile, self.repo, self.bus)
+        operator_app = new_operator_api(self.profile, self.bus, self.operator_token)
         specs = (
             (
                 "web",
@@ -108,7 +109,7 @@ class WebComponent(Component):
 
 
 class DicomWebComponent(Component):
-    """One waitress server per profile-declared DICOMweb port (per-port isolation)."""
+    """Run one server per profile DICOMweb port."""
 
     def __init__(
         self,
@@ -155,9 +156,17 @@ def new_web_component(
     web_port: int,
     operator_port: int,
     operator_host: str = "127.0.0.1",
+    operator_token: str | None = None,
 ) -> WebComponent:
     return WebComponent(
-        profile, repo, bus, host, web_port, operator_port, operator_host
+        profile,
+        repo,
+        bus,
+        host,
+        web_port,
+        operator_port,
+        operator_host,
+        operator_token,
     )
 
 
