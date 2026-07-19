@@ -34,6 +34,7 @@ def sessions():
             "channel": e.channel,
             "ip": e.ip,
             "port": e.port,
+            "local_port": e.local_port,
             "last_seen": e.timestamp,
         }
     return jsonify(list(seen.values()))

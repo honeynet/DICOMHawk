@@ -33,6 +33,9 @@ def test_load_profile_generic_pacs_reuses_default_fallbacks():
     assert prof.web.headers == default_profile().web.headers
     assert prof.web.honeytraps == [("/admin/", "unauthorized_page")]
     assert prof.web.honey_credentials == [("test", "test")]
+    assert prof.web.browse is True
+    assert prof.web.max_request_bytes == 1024 * 1024
+    assert prof.web.upload_max_request_bytes == 50 * 1024 * 1024
     assert (
         prof.web.routes == default_profile().web.routes
     )  # /portal/*, not /Synapse — the actual isolation fix
@@ -66,6 +69,10 @@ def test_load_profile_fujifilm():
     assert "user_domain" in prof.web.oidc["scopes"]
     assert prof.web.legacy_csp_header is True
     assert len(prof.dicom.storage_classes) == 77
+    assert prof.dicomweb.enabled is True
+    assert prof.dicomweb.qido_default_media_type == "application/json"
+    assert prof.dicomweb.default_transfer_syntax == "1.2.840.10008.1.2.1"
+    assert prof.dicomweb.auth_schemes == ["Negotiate", "NTLM", "Basic"]
 
 
 def test_profile_can_override_timeouts(tmp_path):
@@ -147,9 +154,28 @@ def test_web_enabled_without_templates_dir_raises():
         ("dicom:\n  max_associations: {}\n", "must be numeric"),
         ("dicom:\n  max_store_bytes: 0\n", "must be positive"),
         ("web:\n  enabled: 'yes'\n", "web.enabled"),
+        ("web:\n  upload_max_files: 0\n", "upload_max_files"),
+        ("web:\n  browse_page_size: 501\n", "browse_page_size"),
         ("web:\n  honeytraps: [broken]\n", "must be a mapping"),
         ("web:\n  headers:\n    Server: 10\n", "single-line strings"),
         ("identity:\n  implementation_version_name: this-is-far-too-long\n", "1-16"),
+        (
+            "dicomweb:\n  enabled: true\n  services:\n"
+            "    - {service: qido, base_path: //bad, port: 8042}\n",
+            "absolute URL path",
+        ),
+        (
+            "dicomweb:\n  auth_schemes: [Basic, Digest]\n",
+            "unsupported scheme",
+        ),
+        (
+            "dicomweb:\n  default_transfer_syntax: 1.2.3\n",
+            "transfer syntax UID",
+        ),
+        (
+            "dicomweb:\n  max_stow_parts: 0\n",
+            "limits must be positive",
+        ),
     ],
 )
 def test_profile_rejects_malformed_or_dangerous_values(text, match):

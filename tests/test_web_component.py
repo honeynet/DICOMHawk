@@ -75,3 +75,30 @@ def test_web_component_stop_closes_both_servers(monkeypatch, tmp_path):
     assert all(server.closed for server in active)
     assert all(server.task_dispatcher.shutdown_called for server in active)
     component.stop()  # idempotent
+
+
+def test_web_component_cleans_up_if_thread_start_fails(monkeypatch, tmp_path):
+    servers = [_FakeServer(), _FakeServer()]
+    monkeypatch.setattr(
+        "web.component.waitress.create_server", lambda *_args, **_kwargs: servers.pop(0)
+    )
+
+    class FakeThread:
+        starts = 0
+
+        def __init__(self, target, **_kwargs):
+            self.target = target
+
+        def start(self):
+            FakeThread.starts += 1
+            if FakeThread.starts == 2:
+                raise RuntimeError("thread resources exhausted")
+
+        def is_alive(self):
+            return False
+
+    monkeypatch.setattr("web.component.threading.Thread", FakeThread)
+    component = _component(tmp_path)
+    with pytest.raises(RuntimeError, match="resources exhausted"):
+        component.start()
+    assert component._servers == []

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACS Console</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 1100px; margin: 40px auto; padding: 20px; background-color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1f4e79; }
+        nav { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 20px 0; }
+        nav a { padding: 8px 16px; background: #1f4e79; color: white; text-decoration: none; border-radius: 3px; font-size: 14px; }
+        nav a:hover { background: #163a5a; }
+        .search { display: flex; gap: 8px; justify-content: center; margin-top: 20px; }
+        .search select, .search input { padding: 8px; border: 1px solid #d3d3d3; border-radius: 3px; }
+        .search button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        .search button:hover { background: #0056b3; }
+        .logout { text-align: right; }
+        .logout button { border: 0; background: none; color: #555; cursor: pointer; text-decoration: underline; }
+    </style>
+    {{ fingerprint_seam|safe }}
+</head>
+<body>
+    <div class="container">
+        <h1>PACS Console</h1>
+        <nav>
+            <a href="{{ routes.patients }}">Patients</a>
+            <a href="{{ routes.studies }}">Studies</a>
+            <a href="{{ routes.series }}">Series</a>
+            <a href="{{ routes.instances }}">Instances</a>
+            <a href="{{ routes.upload }}">Upload</a>
+        </nav>
+        <form class="search" action="{{ routes.search }}" method="get">
+            <select name="searchType">
+                <option value="name">Patient Name</option>
+                <option value="id">Patient ID</option>
+            </select>
+            <input type="text" name="q" placeholder="Search…">
+            <button type="submit">Search</button>
+        </form>
+        <form class="logout" action="{{ routes.logout }}" method="post">
+            <button type="submit">Log out</button>
+        </form>
+    </div>
+</body>
+</html>

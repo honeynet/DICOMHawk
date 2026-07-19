@@ -331,3 +331,26 @@ web:
     text1: Synapse Log On
     text2: Unable to log in using Windows Authentication.
     text3: Log in directly
+
+# Real Synapse DICOMweb, sourced from the public conformance statement — each service on its
+# own port. Windows Auth on WADO-URI + STOW; QIDO/WADO-RS anonymous.
+dicomweb:
+  enabled: true
+  services:
+    - service: wado_uri
+      base_path: /services/wado
+      port: 9080
+    - service: qido
+      base_path: /qido-rs
+      port: 10080
+    - service: wado_rs
+      base_path: /wado-rs
+      port: 12080
+    - service: stow
+      base_path: /stow-rs
+      port: 13080
+  require_auth: [wado_uri, stow]
+  qido_default_media_type: application/json
+  default_transfer_syntax: 1.2.840.10008.1.2.1
+  auth_schemes: [Negotiate, NTLM, Basic]
+  qido_warning_agent: Synapse

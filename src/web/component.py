@@ -8,9 +8,50 @@ from dicomhawk.repository import Repository
 from profiles.profile import ProfileConfig
 
 from .app import new_web
+from .dicomweb import new_dicomweb
 from .operator_api import new_operator_api
 
 logger = logging.getLogger(__name__)
+
+
+def _build_servers(specs):
+    """specs: (name, app, host, port, max_body) -> parallel lists of waitress servers + daemon threads."""
+    servers, threads = [], []
+    try:
+        for name, app, host, port, max_body in specs:
+            server = waitress.create_server(
+                app, host=host, port=port, max_request_body_size=max_body
+            )
+            servers.append(server)
+            threads.append(
+                threading.Thread(
+                    target=server.run, daemon=True, name=f"dicomhawk-{name}"
+                )
+            )
+    except Exception:
+        _stop_servers(servers, threads)
+        raise
+    try:
+        for thread in threads:
+            thread.start()
+    except Exception:
+        _stop_servers(servers, threads)
+        raise
+    return servers, threads
+
+
+def _stop_servers(servers, threads):
+    for server in servers:
+        try:
+            server.close()
+            server.task_dispatcher.shutdown(cancel_pending=True, timeout=5)
+        except Exception:
+            logger.exception("Failed stopping a web listener")
+    for thread in threads:
+        if thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=5)
+    servers.clear()
+    threads.clear()
 
 
 class WebComponent(Component):
@@ -57,40 +98,53 @@ class WebComponent(Component):
                 1_048_576,
             ),
         )
-        try:
-            for name, app, host, port, max_body in specs:
-                server = waitress.create_server(
-                    app,
-                    host=host,
-                    port=port,
-                    max_request_body_size=max_body,
-                )
-                self._servers.append(server)
-                self._threads.append(
-                    threading.Thread(
-                        target=server.run,
-                        daemon=True,
-                        name=f"dicomhawk-{name}",
-                    )
-                )
-        except Exception:
-            self.stop()
-            raise
-        for thread in self._threads:
-            thread.start()
+        self._servers, self._threads = _build_servers(specs)
         logger.info(
             f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}"
         )
 
     def stop(self) -> None:
-        for server in self._servers:
-            server.close()
-            server.task_dispatcher.shutdown(cancel_pending=True, timeout=5)
-        for thread in self._threads:
-            if thread.is_alive() and thread is not threading.current_thread():
-                thread.join(timeout=5)
-        self._servers.clear()
-        self._threads.clear()
+        _stop_servers(self._servers, self._threads)
+
+
+class DicomWebComponent(Component):
+    """One waitress server per profile-declared DICOMweb port (per-port isolation)."""
+
+    def __init__(
+        self,
+        profile: ProfileConfig,
+        repo: Repository,
+        bus: logging.Logger,
+        host: str,
+    ):
+        self.profile = profile
+        self.repo = repo
+        self.bus = bus
+        self.host = host
+        self._servers = []
+        self._threads: list[threading.Thread] = []
+
+    def start(self) -> None:
+        if self._servers:
+            return
+        apps = new_dicomweb(self.profile, self.repo, self.bus)
+        specs = [
+            (
+                f"dicomweb-{port}",
+                app,
+                self.host,
+                port,
+                app.config["MAX_CONTENT_LENGTH"],
+            )
+            for port, app in apps.items()
+        ]
+        self._servers, self._threads = _build_servers(specs)
+        logger.info(
+            "DICOMweb: " + ", ".join(f"{self.host}:{port}" for port in sorted(apps))
+        )
+
+    def stop(self) -> None:
+        _stop_servers(self._servers, self._threads)
 
 
 def new_web_component(
@@ -105,3 +159,12 @@ def new_web_component(
     return WebComponent(
         profile, repo, bus, host, web_port, operator_port, operator_host
     )
+
+
+def new_dicomweb_component(
+    profile: ProfileConfig,
+    repo: Repository,
+    bus: logging.Logger,
+    host: str,
+) -> DicomWebComponent:
+    return DicomWebComponent(profile, repo, bus, host)

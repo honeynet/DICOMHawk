@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _DATA_PKG = "profiles"
 _OPERATIONS = frozenset({"echo", "find", "get", "move", "store"})
 _HONEYTRAP_RESPONSES = frozenset({"login_redirect", "api_404", "unauthorized_page"})
+_DICOMWEB_SERVICES = frozenset({"qido", "wado_rs", "stow", "wado_uri"})
 _REQUIRED_TEMPLATES = frozenset(
     {
         "login.html",
@@ -23,6 +24,7 @@ _REQUIRED_TEMPLATES = frozenset(
         "worklist.html",
     }
 )
+_BROWSE_TEMPLATES = frozenset({"console.html", "browse.html", "upload.html"})
 
 # (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
@@ -59,6 +61,8 @@ class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
     grant_access: bool = False
+    # Post-login DICOM browse console (patients/studies/series/instances/upload).
+    browse: bool = False
     headers: dict[str, str] = field(default_factory=dict)
     html_cache_headers: dict[str, str] = field(default_factory=dict)
     content_security_policy: str | None = None
@@ -85,10 +89,41 @@ class WebConfig:
         default_factory=dict
     )  # text1/text2/text3 for the WinAuth translation fetch
     max_request_bytes: int = 1_048_576
+    upload_max_request_bytes: int = 50 * 1024 * 1024
+    upload_max_files: int = 10
+    browse_page_size: int = 100
     assets_dir: str | None = None
     # Deployment topology, not device identity — set per-deployment via serve.py's
     # --public-base-url/$DICOMHAWK_PUBLIC_BASE_URL, never from profile YAML.
     public_base_url: str | None = None
+
+
+@dataclass
+class DicomWebService:
+    # One DICOMweb service bound to a port; several may share a port+base_path (generic /dicom-web/).
+    kind: str  # qido | wado_rs | stow | wado_uri
+    base_path: str
+    port: int
+
+
+@dataclass
+class DicomWebConfig:
+    enabled: bool = False
+    # Per-service port/base-path is profile data, so one profile's paths never leak into another's.
+    services: list[DicomWebService] = field(default_factory=list)
+    require_auth: list[str] = field(
+        default_factory=list
+    )  # service kinds that issue a WinAuth 401 challenge before serving
+    qido_max_results: int = 20000  # cap on QIDO result items
+    max_request_bytes: int = 512 * 1024 * 1024  # STOW upload body cap
+    max_non_stow_request_bytes: int = 1024 * 1024
+    max_stow_parts: int = 128
+    qido_default_media_type: str = "application/dicom+json"
+    default_transfer_syntax: str = "1.2.840.10008.1.2.1"
+    auth_schemes: list[str] = field(default_factory=lambda: ["Basic"])
+    qido_warning_agent: str = (
+        "-"  # agent token in the fuzzymatching Warning header; keep it product-neutral
+    )
 
 
 @dataclass
@@ -102,6 +137,7 @@ class ProfileConfig:
     model_name: str | None
     dicom: DicomConfig
     web: WebConfig
+    dicomweb: DicomWebConfig
 
 
 def default_profile() -> ProfileConfig:
@@ -176,6 +212,15 @@ def default_profile() -> ProfileConfig:
                 "sts_authorize": "/portal/authorize",
                 "csp_report": "/portal/csp-report",
                 "translated_items": "/portal/translations",
+                # Browse console (only registered when web.browse is on); generic /portal/* paths.
+                "console": "/portal/console",
+                "patients": "/portal/patients",
+                "studies": "/portal/studies",
+                "series": "/portal/series",
+                "instances": "/portal/instances",
+                "search": "/portal/search",
+                "upload": "/portal/upload",
+                "logout": "/portal/logout",
             },
             cookies={
                 "antiforgery": "portal.xsrf",
@@ -191,6 +236,15 @@ def default_profile() -> ProfileConfig:
                 "text2": "Unable to log in using Windows Authentication.",
                 "text3": "Log in directly",
             },
+        ),
+        # Generic single-port /dicom-web/ fallback; a profile opts in and inherits it.
+        dicomweb=DicomWebConfig(
+            enabled=False,
+            services=[
+                DicomWebService("qido", "/dicom-web", 8042),
+                DicomWebService("wado_rs", "/dicom-web", 8042),
+                DicomWebService("stow", "/dicom-web", 8042),
+            ],
         ),
     )
 
@@ -238,7 +292,9 @@ def _parse_sop_class(entry: dict, where: str) -> SopClass:
     return (uid_text, transfer_syntaxes)
 
 
-def _resolve_web_assets(templates_dir: str, source_dir: Path | None, honeytraps) -> str:
+def _resolve_web_assets(
+    templates_dir: str, source_dir: Path | None, honeytraps, browse: bool
+) -> str:
     requested = Path(templates_dir)
     candidates: list[Path] = []
     if requested.is_absolute():
@@ -253,6 +309,8 @@ def _resolve_web_assets(templates_dir: str, source_dir: Path | None, honeytraps)
     required = set(_REQUIRED_TEMPLATES)
     if any(kind == "unauthorized_page" for _, kind in honeytraps):
         required.add("unauthorized.html")
+    if browse:
+        required.update(_BROWSE_TEMPLATES)
     for candidate in candidates:
         template_dir = candidate / "templates"
         if candidate.is_dir() and all(
@@ -444,6 +502,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         raise ValueError("Profile 'web.enabled' must be boolean")
     if "grant_access" in web_raw and not isinstance(web_raw["grant_access"], bool):
         raise ValueError("Profile 'web.grant_access' must be boolean")
+    if "browse" in web_raw and not isinstance(web_raw["browse"], bool):
+        raise ValueError("Profile 'web.browse' must be boolean")
     if "legacy_csp_header" in web_raw and not isinstance(
         web_raw["legacy_csp_header"], bool
     ):
@@ -471,6 +531,133 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         ):
             if key not in web_raw:
                 fell_back.append(f"web.{key}")
+
+    dicomweb_raw = _mapping(data.get("dicomweb"), "dicomweb")
+    if "enabled" in dicomweb_raw and not isinstance(dicomweb_raw["enabled"], bool):
+        raise ValueError("Profile 'dicomweb.enabled' must be boolean")
+    dicomweb_enabled = bool(dicomweb_raw.get("enabled", False))
+    if "services" in dicomweb_raw:
+        if not isinstance(dicomweb_raw["services"], list):
+            raise ValueError("Profile 'dicomweb.services' must be a list")
+        dicomweb_services = []
+        for s in dicomweb_raw["services"]:
+            item = _mapping(s, "dicomweb.services")
+            port = _number(
+                _require(item, "port", "dicomweb.services"),
+                "dicomweb.services.port",
+                int,
+            )
+            if not 1 <= port <= 65535:
+                raise ValueError("Profile 'dicomweb.services.port' must be 1-65535")
+            dicomweb_services.append(
+                DicomWebService(
+                    kind=str(_require(item, "service", "dicomweb.services")),
+                    base_path=str(_require(item, "base_path", "dicomweb.services")),
+                    port=port,
+                )
+            )
+    else:
+        dicomweb_services = d.dicomweb.services
+        if dicomweb_enabled:
+            fell_back.append("dicomweb.services")
+    for svc in dicomweb_services:
+        if svc.kind not in _DICOMWEB_SERVICES:
+            raise ValueError(f"Profile has unknown dicomweb service: {svc.kind}")
+        if (
+            not svc.base_path.startswith("/")
+            or svc.base_path.startswith("//")
+            or "?" in svc.base_path
+            or "#" in svc.base_path
+            or "\\" in svc.base_path
+            or any(part in {".", ".."} for part in svc.base_path.split("/"))
+            or any(ch.isspace() for ch in svc.base_path)
+            or any(ord(ch) < 32 for ch in svc.base_path)
+        ):
+            raise ValueError(
+                f"Profile 'dicomweb.services' base_path must be an absolute URL path: {svc.base_path}"
+            )
+    kinds = [svc.kind for svc in dicomweb_services]
+    if len(set(kinds)) != len(kinds):
+        raise ValueError("Profile 'dicomweb.services' must not repeat a service kind")
+    if dicomweb_enabled and not dicomweb_services:
+        raise ValueError("Profile has dicomweb.enabled=true but no dicomweb.services")
+    if "require_auth" in dicomweb_raw:
+        if not isinstance(dicomweb_raw["require_auth"], list):
+            raise ValueError("Profile 'dicomweb.require_auth' must be a list")
+        dicomweb_require_auth = [str(x) for x in dicomweb_raw["require_auth"]]
+    else:
+        dicomweb_require_auth = d.dicomweb.require_auth
+    if unknown_auth := set(dicomweb_require_auth) - set(kinds):
+        raise ValueError(
+            f"Profile 'dicomweb.require_auth' names services not enabled: {', '.join(sorted(unknown_auth))}"
+        )
+    qido_max_results = _number(
+        dicomweb_raw.get("qido_max_results", d.dicomweb.qido_max_results),
+        "dicomweb.qido_max_results",
+        int,
+    )
+    dicomweb_max_request_bytes = _number(
+        dicomweb_raw.get("max_request_bytes", d.dicomweb.max_request_bytes),
+        "dicomweb.max_request_bytes",
+        int,
+    )
+    dicomweb_max_non_stow_request_bytes = _number(
+        dicomweb_raw.get(
+            "max_non_stow_request_bytes", d.dicomweb.max_non_stow_request_bytes
+        ),
+        "dicomweb.max_non_stow_request_bytes",
+        int,
+    )
+    dicomweb_max_stow_parts = _number(
+        dicomweb_raw.get("max_stow_parts", d.dicomweb.max_stow_parts),
+        "dicomweb.max_stow_parts",
+        int,
+    )
+    if (
+        min(
+            qido_max_results,
+            dicomweb_max_request_bytes,
+            dicomweb_max_non_stow_request_bytes,
+            dicomweb_max_stow_parts,
+        )
+        < 1
+    ):
+        raise ValueError(
+            "Profile DICOMweb size, item, and part limits must be positive"
+        )
+    qido_default_media_type = str(
+        dicomweb_raw.get("qido_default_media_type", d.dicomweb.qido_default_media_type)
+    ).lower()
+    if qido_default_media_type not in {"application/json", "application/dicom+json"}:
+        raise ValueError(
+            "Profile 'dicomweb.qido_default_media_type' must be application/json "
+            "or application/dicom+json"
+        )
+    default_transfer_syntax = str(
+        dicomweb_raw.get("default_transfer_syntax", d.dicomweb.default_transfer_syntax)
+    )
+    transfer_syntax_uid = UID(default_transfer_syntax)
+    if not transfer_syntax_uid.is_valid or not transfer_syntax_uid.is_transfer_syntax:
+        raise ValueError(
+            "Profile 'dicomweb.default_transfer_syntax' must be a transfer syntax UID"
+        )
+    auth_schemes_raw = dicomweb_raw.get("auth_schemes", d.dicomweb.auth_schemes)
+    if not isinstance(auth_schemes_raw, list) or not auth_schemes_raw:
+        raise ValueError("Profile 'dicomweb.auth_schemes' must be a non-empty list")
+    auth_schemes = [str(x) for x in auth_schemes_raw]
+    if any(x not in {"Basic", "Negotiate", "NTLM"} for x in auth_schemes):
+        raise ValueError(
+            "Profile 'dicomweb.auth_schemes' contains an unsupported scheme"
+        )
+    if len(set(auth_schemes)) != len(auth_schemes):
+        raise ValueError("Profile 'dicomweb.auth_schemes' must not contain duplicates")
+    qido_warning_agent = str(
+        dicomweb_raw.get("qido_warning_agent", d.dicomweb.qido_warning_agent)
+    )
+    if not qido_warning_agent or any(
+        c.isspace() or c == '"' for c in qido_warning_agent
+    ):
+        raise ValueError("Profile 'dicomweb.qido_warning_agent' must be a single token")
 
     if fell_back:
         logger.warning(
@@ -576,8 +763,32 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     )
     if max_request_bytes < 1:
         raise ValueError("Profile 'web.max_request_bytes' must be positive")
+    upload_max_request_bytes = _number(
+        web_raw.get("upload_max_request_bytes", d.web.upload_max_request_bytes),
+        "web.upload_max_request_bytes",
+        int,
+    )
+    browse_page_size = _number(
+        web_raw.get("browse_page_size", d.web.browse_page_size),
+        "web.browse_page_size",
+        int,
+    )
+    upload_max_files = _number(
+        web_raw.get("upload_max_files", d.web.upload_max_files),
+        "web.upload_max_files",
+        int,
+    )
+    if upload_max_request_bytes < 1:
+        raise ValueError("Profile 'web.upload_max_request_bytes' must be positive")
+    if not 1 <= upload_max_files <= 100:
+        raise ValueError("Profile 'web.upload_max_files' must be 1-100")
+    if not 1 <= browse_page_size <= 500:
+        raise ValueError("Profile 'web.browse_page_size' must be 1-500")
+    browse = bool(web_raw.get("browse", False))
     assets_dir = (
-        _resolve_web_assets(str(web_raw["templates_dir"]), source_dir, honeytraps)
+        _resolve_web_assets(
+            str(web_raw["templates_dir"]), source_dir, honeytraps, browse
+        )
         if web_enabled
         else None
     )
@@ -622,6 +833,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             enabled=web_enabled,
             templates_dir=web_raw.get("templates_dir"),
             grant_access=bool(web_raw.get("grant_access", False)),
+            browse=browse,
             # Per-key overlay (a profile can override just one header/oidc key), like overlay_config().
             headers=headers,
             html_cache_headers=html_cache_headers,
@@ -641,7 +853,23 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             cookies=cookies,
             winauth_messages=winauth_messages,
             max_request_bytes=max_request_bytes,
+            upload_max_request_bytes=upload_max_request_bytes,
+            upload_max_files=upload_max_files,
+            browse_page_size=browse_page_size,
             assets_dir=assets_dir,
+        ),
+        dicomweb=DicomWebConfig(
+            enabled=dicomweb_enabled,
+            services=dicomweb_services,
+            require_auth=dicomweb_require_auth,
+            qido_max_results=qido_max_results,
+            max_request_bytes=dicomweb_max_request_bytes,
+            max_non_stow_request_bytes=dicomweb_max_non_stow_request_bytes,
+            max_stow_parts=dicomweb_max_stow_parts,
+            qido_default_media_type=qido_default_media_type,
+            default_transfer_syntax=default_transfer_syntax,
+            auth_schemes=auth_schemes,
+            qido_warning_agent=qido_warning_agent,
         ),
     )
 

@@ -11,7 +11,7 @@ from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
 
 from profiles.profile import load_profile
-from web.component import new_web_component
+from web.component import new_dicomweb_component, new_web_component
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +220,9 @@ def serve(
                 prof, repo, bus, host, web_port, operator_port, operator_host
             )
         )
+    # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.
+    if prof.kind == "pacs" and prof.dicomweb.enabled:
+        components.append(new_dicomweb_component(prof, repo, bus, host))
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, components)

@@ -42,9 +42,12 @@ def test_profiles_endpoint_reflects_active_profile(operator_client):
     assert body["name"] == "fujifilm"
     assert body["ae_title"] == "SYNAPSEDICOMSCP"
     assert body["web"]["templates_dir"] == "fujifilm"
+    assert body["dicomweb"]["qido_default_media_type"] == "application/json"
 
 
-def test_events_and_sessions_reflect_real_web_activity(profile, repo, bus, operator_client):
+def test_events_and_sessions_reflect_real_web_activity(
+    profile, repo, bus, operator_client
+):
     web_client = new_web(profile, repo, bus).test_client()
     web_client.post(
         "/SynapseSignOn/sts/login?signin=x",
@@ -66,6 +69,7 @@ def test_events_and_sessions_empty_without_activity(operator_client):
 
 def test_operator_api_never_crashes_without_recent_events_handler(profile, repo):
     import logging
+
     bare_logger = logging.getLogger("bare-bus-for-test")
     client = new_operator_api(profile, repo, bare_logger).test_client()
     assert client.get("/api/events").get_json() == []

@@ -152,16 +152,84 @@ class Repository:
 
         return QRResult(matches=matches)
 
-    def store(self, ds: Dataset, safe: bool = False) -> QRError | None:
+    def find_page(
+        self,
+        ds: Dataset,
+        model,
+        *,
+        dedup_col: str,
+        offset: int,
+        limit: int,
+    ) -> QRResult:
+        """Return one bounded page of unique Q/R entities without materializing all rows."""
+        for elem in ds:
+            if (
+                elem.keyword != "QueryRetrieveLevel"
+                and elem.value is not None
+                and str(elem.value) == ""
+            ):
+                elem.value = None
+
+        conn = self.conn
+        try:
+            db._check_identifier(ds, model)
+            attr = db._STUDY_ROOT[model]
+            query = None
+            for level, keywords in attr.items():
+                level_ds = Dataset()
+                for keyword in (kw for kw in keywords if kw in ds):
+                    setattr(level_ds, keyword, getattr(ds, keyword))
+                query = db.build_query(level_ds, conn, query)
+                if level == ds.QueryRetrieveLevel:
+                    break
+
+            column = getattr(db.Instance, dedup_col)
+            matches = (
+                query.group_by(column)
+                .order_by(column)
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+        except db.InvalidIdentifier as exc:
+            conn.rollback()
+            return QRResult(
+                error=QRError(
+                    f"Invalid C-FIND Identifier received: {exc}",
+                    QRStatus.SOP_CLASS_INVALID,
+                )
+            )
+        except Exception as exc:
+            conn.rollback()
+            return QRResult(
+                error=QRError(f"Exception occurred while querying database: {exc}")
+            )
+
+        return QRResult(matches=matches)
+
+    def store(
+        self,
+        ds: Dataset,
+        safe: bool = False,
+        *,
+        raw_bytes: bytes | None = None,
+    ) -> QRError | None:
         # NOTE: anything not safe is zipped and quarantined — capture the raw
         # attacker payload for forensics even if the rest of the store fails.
         if not safe:
             try:
-                with self.storage.temp() as tf:
-                    ds.save_as(tf, enforce_file_format=False)
-                    self.storage.compress(tf)
+                if raw_bytes is not None:
+                    self.storage.capture(raw_bytes)
+                else:
+                    with self.storage.temp() as tf:
+                        ds.save_as(tf, enforce_file_format=False)
+                        self.storage.compress(tf)
             except Exception as exc:
                 logger.warning(f"Failed to quarantine C-STORE payload: {exc}")
+                return QRError(
+                    f"Failed to quarantine incoming payload: {exc}",
+                    QRStatus.STORE_ERROR,
+                )
 
         try:
             fname = str(ds.SOPInstanceUID)

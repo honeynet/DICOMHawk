@@ -26,6 +26,14 @@ Start the DICOM honeypot server.
 
 **Profiles** decide which device the honeypot impersonates. With no `--profile`, it runs a generic default (AE title `ORTHANC`, all storage classes, no web surface). `--profile fujifilm` makes it present as a Fujifilm Synapse PACS — that device's identity, supported SOP classes, status codes, and a matching web login/worklist. `--profile generic-pacs` is a vendor-neutral second profile with the same web surface but plain, unbranded pages and generic headers — useful as a starting point for a custom profile. To impersonate a different device, write a profile YAML in the same format and pass its path — see [Adding a profile](./profiles.md) for the full schema and how to build the optional web surface.
 
+**DICOMweb** (QIDO-RS / WADO-RS / STOW-RS / WADO-URI) is enabled per profile via a `dicomweb:`
+block, not a flag — its ports and base paths are part of the impersonated product's fingerprint,
+so they live in the profile YAML rather than on the command line (see [Adding a profile](./profiles.md#dicomweb)).
+The `fujifilm` profile serves the real Synapse DICOMweb ports (9080/10080/12080/13080); publish
+whichever ports your profile binds in `docker-compose.yml`. STOW uploads are quarantined exactly
+like C-STORE, their exact incoming bytes are retained for analysis, and they are never served back
+by WADO. QIDO/WADO content negotiation and default transfer syntax also come from the profile.
+
 **Note:** with the default in-memory database, seeded data does not persist between restarts. Pass `--database` for any deployment intended to survive a restart.
 
 The built-in web listener is HTTP/1.1. A public high-fidelity deployment should terminate

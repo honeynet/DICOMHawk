@@ -15,9 +15,11 @@ requires-python = ">=3.12"
 dependencies = [
     "pydicom>=3.0,<4",
     "pynetdicom>=3.0,<4",
+    "numpy>=1.26,<3",
     "pylibjpeg>=2.0,<3",
     "pylibjpeg-libjpeg>=2.0,<3",
     "pylibjpeg-openjpeg>=2.0,<3",
+    "pillow>=11,<13",
     "requests>=2.32,<3",
     "sqlalchemy>=2.0,<3",
     "typer>=0.15,<1",

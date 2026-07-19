@@ -106,10 +106,9 @@ your profile automatically — you write templates and config, not routes:
 - **Operator API** (`--operator-port`, default 8081, loopback-only) — `/api/sessions`,
   `/api/events`, `/api/profiles`, read-only, for whoever operates the honeypot.
 
-Both are built by the shared engine (`src/web/app.py`/`operator_api.py`/`component.py`)
-— you don't touch that code. It reuses the same DICOM database your profile's DIMSE
-side sees, so a study seeded via `dicomhawk seed` shows up in both the worklist and a
-C-FIND response.
+Both are built by the shared engine — you don't touch that code, only supply your
+profile's assets. It reuses the same DICOM database your profile's DIMSE side sees, so a
+study seeded via `dicomhawk seed` shows up in both the worklist and a C-FIND response.
 
 ### Required templates
 
@@ -126,6 +125,14 @@ All five must exist under `web/templates/`; the profile fails at startup if one 
 If you use the `unauthorized_page` honeytrap response (below), also add
 `web/templates/unauthorized.html`; it receives `entry_url` — use it for any
 "redirecting you back to login" link/script, never a hardcoded path.
+
+If `web.browse: true`, three more templates are required and validated at startup:
+
+| Template | Rendered for | Key context variables |
+|---|---|---|
+| `console.html` | Browse landing | `routes` |
+| `browse.html` | Patient/study/series/instance pages | `columns`, `rows`, `page`, `prev_url`, `next_url` |
+| `upload.html` | GET/POST upload | `routes`, `message`, `max_files` |
 
 Every template also receives `csp_nonce` (put it on any inline `<script>` tag — the CSP
 is nonce-based) and `fingerprint_seam` (put `{{ fingerprint_seam|safe }}` before
@@ -146,7 +153,10 @@ web:
   content_security_policy: "default-src 'self'; script-src 'nonce-{nonce}' 'self'"
   legacy_csp_header: false  # emit X-Content-Security-Policy only when the target does
   secure_cookies: true      # for targets deployed behind HTTPS
-  max_request_bytes: 1048576
+  max_request_bytes: 1048576         # non-upload web request cap
+  upload_max_request_bytes: 52428800 # browse upload route only
+  upload_max_files: 10
+  browse_page_size: 100              # 1-500; bounded in the database
   identity: {version: "1.0", copyright: "..."}
   license: {issued: "...", lines: [...]}
   oidc: {client_id: "...", client_name: "...", redirect_path: "...", scopes: "..."}
@@ -253,6 +263,91 @@ If it is, an invented hint comment is itself a diff-able tell against the real p
 it on a profile where there's no real page to stay faithful to, or find a different
 disclosure channel (a decoy config file, a leaked note) instead of the login page.
 
+### Browse console
+
+Setting `web.browse: true` adds a post-login DICOM browse console: a dashboard with a
+patient/study/series/instance browser, a search-by-patient box, and an upload page. Every
+page is session-gated (reachable only after a successful login — e.g. via a honey
+credential), reads the same seeded studies the DICOM side serves, and logs each view.
+
+```yaml
+web:
+  browse: true
+  upload_max_request_bytes: 52428800
+  upload_max_files: 10
+  browse_page_size: 100
+```
+
+The upload page validates Part-10 identity, profile-supported SOP Class and Transfer
+Syntax, then routes accepted files to the **quarantine**. Exact incoming bytes are kept
+for valid and rejected/malformed files, logged with size and SHA-256 (`WEB_UPLOAD`), and
+never served back out. Files above the count limit are explicitly rejected and captured.
+The larger upload body cap is request-specific; login and other forms retain the smaller
+`max_request_bytes` limit.
+
+Browse and search use server-side database pagination rather than loading the whole index;
+deep offsets are capped at 20,000 rows to prevent deliberately expensive scans.
+Session cookies are opaque, server-issued values: inventing a nonempty cookie does not
+grant access. The console's paths come from `web.routes`
+(`console`/`patients`/`studies`/`series`/`instances`/`search`/`upload`/`logout`), so like
+every other route they stay generic unless you override them, and a profile that leaves
+`web.browse` off never exposes them at all. Enable it on a vendor-neutral profile; a
+high-fidelity capture profile that mimics a specific product's sign-on page should leave
+it off unless that product really has a matching browser.
+
+## DICOMweb
+
+Modern PACS often expose HTTP DICOMweb services (QIDO-RS query, WADO-RS/WADO-URI
+retrieve, STOW-RS store) alongside DICOM. Add them **only if the product you're mimicking
+actually does** — serving DICOMweb on a device that wouldn't is itself a tell. Check the
+target's conformance statement for the real service ports and base paths.
+
+The `dicomweb:` block is a top-level key (a sibling of `dicom:` and `web:`), off unless you
+enable it:
+
+```yaml
+dicomweb:
+  enabled: true
+  services:
+    - service: qido        # qido | wado_rs | stow | wado_uri
+      base_path: /qido-rs
+      port: 10080
+    - service: wado_rs
+      base_path: /wado-rs
+      port: 12080
+    - service: stow
+      base_path: /stow-rs
+      port: 13080
+  require_auth: [stow]      # service kinds that issue the configured challenges
+  auth_schemes: [Negotiate, NTLM, Basic]
+  qido_default_media_type: application/json
+  qido_max_results: 20000   # multi-patient cap; a single patient is not truncated
+  default_transfer_syntax: 1.2.840.10008.1.2.1
+  max_request_bytes: 536870912       # complete STOW request cap
+  max_non_stow_request_bytes: 1048576
+  max_stow_parts: 128
+```
+
+**Port and path are profile data, the same isolation rule as `web.routes`.** Each service
+runs on its own port with its own base path, exactly as the real product does — some
+vendors dedicate a port per service, others put everything under one base like
+`/dicom-web`. If you omit `services`, an enabled profile inherits a generic single-port
+`/dicom-web` layout, never another profile's ports or paths.
+
+DICOMweb shares the same store and query as DICOM, so:
+
+- **STOW uploads are quarantined** exactly like a C-STORE. The exact multipart request and each
+  exact Part-10 item are retained as uniquely named gzip traces, including malformed/rejected
+  items. Uploaded objects are **never served back** by WADO.
+- **QIDO** returns metadata built from the same repository as DIMSE. Its default media type is
+  profile-specific (`application/json` for Fujifilm; `application/dicom+json` for generic PACS),
+  and clients may request DICOM JSON or multipart DICOM XML.
+- **WADO** defaults DICOM retrieval to the configured transfer syntax and negotiates raw
+  single-instance, multipart, JSON metadata, and XML metadata representations.
+- Every request is logged to the same interaction log with `channel: DICOMWEB`.
+- Responses reuse your `web.headers` identity (the `Server` banner, etc.) so the DICOMweb
+  ports present the same product as the web tier.
+
 ## Running and testing your profile
 
 ```bash
@@ -260,6 +355,7 @@ dicomhawk serve --profile my-vendor
 curl -I http://localhost:8080/portal        # or your web.routes.entry — check headers/redirect
 curl http://localhost:8080/robots.txt       # check honeytrap Disallow entries
 curl http://localhost:8081/api/profiles     # confirm the loaded config, loopback-only
+curl http://localhost:10080/qido-rs/studies # Fujifilm QIDO-RS default -> application/json
 ```
 
 See [`tests/test_profile.py`](../tests/test_profile.py) and
