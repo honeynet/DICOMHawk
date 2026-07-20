@@ -8,6 +8,7 @@
 
 [Quick Start](docs/quick_start.md) |
 [Installation](docs/installation.md) |
+[Deployment](docs/deployment.md) |
 [Configuration](docs/configuration.md) |
 [Commands](docs/commands.md) |
 [Features](docs/features.md) |

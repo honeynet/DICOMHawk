@@ -14,12 +14,29 @@ from .operator_api import new_operator_api
 logger = logging.getLogger(__name__)
 
 
-def _build_servers(specs):
+def _build_servers(specs, trusted_proxy=None):
     servers, threads = [], []
     try:
-        for name, app, host, port, max_body in specs:
+        for name, app, host, port, max_body, proxied in specs:
+            proxy_options = {}
+            if proxied and trusted_proxy:
+                proxy_options = {
+                    "trusted_proxy": trusted_proxy,
+                    "trusted_proxy_count": 1,
+                    "trusted_proxy_headers": {
+                        "x-forwarded-for",
+                        "x-forwarded-host",
+                        "x-forwarded-port",
+                        "x-forwarded-proto",
+                    },
+                    "clear_untrusted_proxy_headers": True,
+                }
             server = waitress.create_server(
-                app, host=host, port=port, max_request_body_size=max_body
+                app,
+                host=host,
+                port=port,
+                max_request_body_size=max_body,
+                **proxy_options,
             )
             servers.append(server)
             threads.append(
@@ -66,6 +83,7 @@ class WebComponent(Component):
         operator_port: int,
         operator_host: str = "127.0.0.1",
         operator_token: str | None = None,
+        trusted_proxy: str | None = None,
     ):
         self.profile = profile
         self.repo = repo
@@ -75,6 +93,7 @@ class WebComponent(Component):
         self.operator_port = operator_port
         self.operator_host = operator_host
         self.operator_token = operator_token
+        self.trusted_proxy = trusted_proxy
         self._servers = []
         self._threads: list[threading.Thread] = []
 
@@ -90,6 +109,7 @@ class WebComponent(Component):
                 self.host,
                 self.web_port,
                 self.profile.web.max_request_bytes,
+                True,
             ),
             (
                 "operator",
@@ -97,9 +117,10 @@ class WebComponent(Component):
                 self.operator_host,
                 self.operator_port,
                 1_048_576,
+                False,
             ),
         )
-        self._servers, self._threads = _build_servers(specs)
+        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
         logger.info(
             f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}"
         )
@@ -117,11 +138,13 @@ class DicomWebComponent(Component):
         repo: Repository,
         bus: logging.Logger,
         host: str,
+        trusted_proxy: str | None = None,
     ):
         self.profile = profile
         self.repo = repo
         self.bus = bus
         self.host = host
+        self.trusted_proxy = trusted_proxy
         self._servers = []
         self._threads: list[threading.Thread] = []
 
@@ -136,10 +159,11 @@ class DicomWebComponent(Component):
                 self.host,
                 port,
                 app.config["MAX_CONTENT_LENGTH"],
+                True,
             )
             for port, app in apps.items()
         ]
-        self._servers, self._threads = _build_servers(specs)
+        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
         logger.info(
             "DICOMweb: " + ", ".join(f"{self.host}:{port}" for port in sorted(apps))
         )
@@ -157,6 +181,7 @@ def new_web_component(
     operator_port: int,
     operator_host: str = "127.0.0.1",
     operator_token: str | None = None,
+    trusted_proxy: str | None = None,
 ) -> WebComponent:
     return WebComponent(
         profile,
@@ -167,6 +192,7 @@ def new_web_component(
         operator_port,
         operator_host,
         operator_token,
+        trusted_proxy,
     )
 
 
@@ -175,5 +201,6 @@ def new_dicomweb_component(
     repo: Repository,
     bus: logging.Logger,
     host: str,
+    trusted_proxy: str | None = None,
 ) -> DicomWebComponent:
-    return DicomWebComponent(profile, repo, bus, host)
+    return DicomWebComponent(profile, repo, bus, host, trusted_proxy)

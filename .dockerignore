@@ -4,6 +4,16 @@ tests
 .github
 .vscode
 .gitignore
+.git
+.env
+.env.*
+!.env.example
+.pytest_cache
+__pycache__
+*.egg-info
+build
+data
+traces
 
 docs/
 Makefile

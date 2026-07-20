@@ -12,7 +12,10 @@ def test_default_profile_is_generic():
     # Silent peers should release association slots before pynetdicom's defaults.
     assert prof.dicom.acse_timeout == 10
     assert prof.dicom.network_timeout == 15
-    assert prof.dicom.max_store_bytes == 512 * 1024 * 1024
+    assert prof.dicom.dimse_timeout == 20
+    assert prof.dicom.max_associations == 16
+    assert prof.dicom.max_store_bytes == 64 * 1024 * 1024
+    assert prof.dicomweb.max_request_bytes == 64 * 1024 * 1024
 
 
 def test_load_profile_none_matches_default():
@@ -76,13 +79,32 @@ def test_profile_can_override_timeouts(tmp_path):
     custom = tmp_path / "custom.yaml"
     custom.write_text(
         "meta:\n  name: custom\n  kind: dicom\n"
-        "dicom:\n  acse_timeout: 5\n  network_timeout: null\n"
+        "dicom:\n  acse_timeout: 5\n  network_timeout: null\n  dimse_timeout: 8\n"
     )
     prof = load_profile(str(custom))
     assert prof.dicom.acse_timeout == 5
     assert (
         prof.dicom.network_timeout is None
     )  # explicit null -> pynetdicom's own default, not the fallback
+    assert prof.dicom.dimse_timeout == 8
+
+
+@pytest.mark.parametrize("value", [".inf", ".nan", "0", "-1"])
+def test_profile_rejects_non_finite_or_non_positive_timeouts(tmp_path, value):
+    custom = tmp_path / "custom.yaml"
+    custom.write_text(
+        "meta:\n  name: custom\n  kind: dicom\n" f"dicom:\n  dimse_timeout: {value}\n"
+    )
+    with pytest.raises(ValueError, match="dimse_timeout.*positive"):
+        load_profile(str(custom))
+
+
+def test_profile_allows_null_dimse_timeout(tmp_path):
+    custom = tmp_path / "custom.yaml"
+    custom.write_text(
+        "meta:\n  name: custom\n  kind: dicom\ndicom:\n  dimse_timeout: null\n"
+    )
+    assert load_profile(str(custom)).dicom.dimse_timeout is None
 
 
 def test_load_profile_unknown_name_raises():

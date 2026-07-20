@@ -102,3 +102,26 @@ def test_web_component_cleans_up_if_thread_start_fails(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="resources exhausted"):
         component.start()
     assert component._servers == []
+
+
+def test_trusted_proxy_applies_only_to_attacker_facing_server(monkeypatch, tmp_path):
+    calls = []
+
+    def create_server(*_args, **kwargs):
+        calls.append(kwargs)
+        return _FakeServer()
+
+    monkeypatch.setattr("web.component.waitress.create_server", create_server)
+    component = _component(tmp_path)
+    component.trusted_proxy = "192.0.2.10"
+    component.start()
+    component.stop()
+
+    assert calls[0]["trusted_proxy"] == "192.0.2.10"
+    assert calls[0]["trusted_proxy_headers"] == {
+        "x-forwarded-for",
+        "x-forwarded-host",
+        "x-forwarded-port",
+        "x-forwarded-proto",
+    }
+    assert "trusted_proxy" not in calls[1]

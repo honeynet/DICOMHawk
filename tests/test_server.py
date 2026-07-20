@@ -79,16 +79,19 @@ def test_init_applies_configured_timeouts():
         None,
         acse_timeout=10,
         network_timeout=15,
+        dimse_timeout=20,
     )
     ae = Server(logging.getLogger("test"), config, []).init()
     assert ae.acse_timeout == 10
     assert ae.network_timeout == 15
+    assert ae.dimse_timeout == 20
 
 
 def test_init_leaves_pynetdicom_defaults_when_timeouts_unset():
     ae = Server(logging.getLogger("test"), _config([11112]), []).init()
     assert ae.acse_timeout == 30  # pynetdicom's own default, untouched
     assert ae.network_timeout == 60  # pynetdicom's own default, untouched
+    assert ae.dimse_timeout == 30  # pynetdicom's own default, untouched
 
 
 def test_get_only_profile_advertises_storage_as_scu():

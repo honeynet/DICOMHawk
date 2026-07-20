@@ -68,7 +68,8 @@ dicom:
   max_pdu_size: 16384
   acse_timeout: 10     # seconds; null -> pynetdicom's own default (30)
   network_timeout: 15  # seconds; null -> pynetdicom's own default (60)
-  max_store_bytes: 536870912  # per-instance C-STORE cap; null disables it
+  dimse_timeout: 20    # seconds; null -> pynetdicom's own default (30)
+  max_store_bytes: 67108864   # per-instance C-STORE cap; null disables it
   storage_classes:
     - uid: 1.2.840.10008.5.1.4.1.1.2   # CT Image Storage
       transfer_syntaxes: [1.2.840.10008.1.2, 1.2.840.10008.1.2.1]
@@ -84,8 +85,9 @@ Any key you omit falls back to a generic, working default (from `default_profile
 plain `ORTHANC` AE title, a broad storage/QR class set, generic Apache-style web
 headers, empty license/identity/oidc, **generic `/portal/*` routes with
 `portal.xsrf`-style cookie names** — never another profile's identity — and
-`acse_timeout: 10` / `network_timeout: 15`, tighter than pynetdicom's own 30s/60s
-defaults (a raw TCP connection that never sends a valid PDU still occupies one of
+`acse_timeout: 10` / `network_timeout: 15` / `dimse_timeout: 20`, tighter than
+pynetdicom's own 30s/60s/30s defaults (a raw TCP connection that never sends a valid
+PDU — or a peer that stalls mid-operation — still occupies one of
 `max_associations` slots until these expire, so the fallback is deliberately tight
 rather than just carried over from the library). A `WARNING` at
 startup lists exactly which keys fell back, so nothing is silently wrong. **The only
@@ -339,7 +341,7 @@ dicomweb:
   qido_default_media_type: application/json
   qido_max_results: 20000   # multi-patient cap; a single patient is not truncated
   default_transfer_syntax: 1.2.840.10008.1.2.1
-  max_request_bytes: 536870912       # complete STOW request cap
+  max_request_bytes: 67108864        # complete STOW request cap
   max_non_stow_request_bytes: 1048576
   max_stow_parts: 128
 ```

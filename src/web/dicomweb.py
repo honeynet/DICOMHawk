@@ -1094,6 +1094,24 @@ def stow_studies(study=None):
         parts, request_bytes, request_sha256, parse_error = _multipart_parts(
             content_type, repo
         )
+    except OSError as exc:
+        _log(
+            "DICOMWEB_STOW_STORAGE_FAILURE",
+            level="ERROR",
+            matches=0,
+            params=[f"Capture failed: {_bounded(exc)}"],
+            artifact={
+                "filename": None,
+                "bytes": None,
+                "sha256": None,
+                "sop_instance_uid": None,
+                "sop_class_uid": None,
+                "captured": False,
+                "disposition": "rejected",
+                "reject_reason": _bounded(exc),
+            },
+        )
+        return _problem(507, "Insufficient storage for STOW request")
     except Exception as exc:
         _log(
             "DICOMWEB_STOW_REQUEST",

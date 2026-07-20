@@ -353,6 +353,22 @@ def test_stow_rejects_non_multipart(apps):
     assert resp.status_code == 415
 
 
+def test_stow_reports_storage_exhaustion_separately(repo, apps, monkeypatch, caplog):
+    def fail_capture(*_args, **_kwargs):
+        raise OSError("quota exceeded")
+
+    monkeypatch.setattr(repo.storage, "capture_stream", fail_capture)
+    with caplog.at_level(logging.ERROR, logger="bus"):
+        resp = _client(apps, STOW).post(
+            "/stow-rs/studies",
+            data=_stow_body(_ct_dataset()),
+            content_type=_STOW_CT,
+            headers=_CREDS,
+        )
+    assert resp.status_code == 507
+    assert "DICOMWEB_STOW_STORAGE_FAILURE" in caplog.text
+
+
 def test_stow_rejects_wrong_multipart_type_and_empty_body(apps):
     client = _client(apps, STOW)
     wrong = client.post(

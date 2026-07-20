@@ -106,6 +106,12 @@ def serve(
         "--allow-remote-operator",
         help="Explicitly permit a non-loopback operator bind (needed inside Docker)",
     ),
+    trusted_proxy: str | None = typer.Option(
+        None,
+        "--trusted-proxy",
+        envvar="DICOMHAWK_TRUSTED_PROXY",
+        help="Exact reverse-proxy IP trusted to supply forwarded client identity for attacker-facing HTTP",
+    ),
     backend_server: str | None = typer.Option(
         None,
         "--backend-server",
@@ -155,6 +161,13 @@ def serve(
         raise typer.BadParameter(
             "a non-loopback operator-host requires --allow-remote-operator"
         )
+    if trusted_proxy:
+        try:
+            ipaddress.ip_address(trusted_proxy)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                "trusted-proxy must be one exact IP address"
+            ) from exc
     if backend_server:
         prof.web.headers["X-Backendserver"] = backend_server
     if public_base_url:
@@ -195,6 +208,7 @@ def serve(
         require_calling_aet=prof.dicom.ae_auth.require_calling_aet,
         acse_timeout=prof.dicom.acse_timeout,
         network_timeout=prof.dicom.network_timeout,
+        dimse_timeout=prof.dicom.dimse_timeout,
     )
 
     store = new_store(traces)
@@ -225,6 +239,16 @@ def serve(
     logger.info(
         f"Profile: {prof.name} ({prof.manufacturer or 'generic'} {prof.model_name or ''})".strip()
     )
+    logger.info(
+        "DIMSE limits: associations=%s acse=%s network=%s dimse=%s store_bytes=%s",
+        config.MAX_ASSOC,
+        config.ACSE_TIMEOUT,
+        config.NETWORK_TIMEOUT,
+        config.DIMSE_TIMEOUT,
+        prof.dicom.max_store_bytes,
+    )
+    if trusted_proxy:
+        logger.info("Trusted HTTP proxy: %s", trusted_proxy)
 
     dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes)
 
@@ -248,11 +272,12 @@ def serve(
                 operator_port,
                 operator_host,
                 operator_token,
+                trusted_proxy,
             )
         )
     # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.
     if prof.kind == "pacs" and prof.dicomweb.enabled:
-        components.append(new_dicomweb_component(prof, repo, bus, host))
+        components.append(new_dicomweb_component(prof, repo, bus, host, trusted_proxy))
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, components)

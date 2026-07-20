@@ -94,6 +94,8 @@ def handle_associate(
     # EVT_ACSE_RECV also fires for release and abort PDUs.
     if not isinstance(event.primitive, A_ASSOCIATE):
         return
+    if _mark_healthcheck(event, event.primitive):
+        return
     # Negotiation overwrites this primitive before DIMSE handlers run.
     for item in event.primitive.user_information:
         if isinstance(item, ImplementationVersionNameNotification):
@@ -116,6 +118,9 @@ def handle_associate(
 def handle_release(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
+    if _is_healthcheck(event):
+        cache.clear(event.assoc)
+        return
     bus.info(InteractionEvent(event, cache, "Association Released"))
     cache.clear(event.assoc)
 
@@ -123,6 +128,9 @@ def handle_release(
 def handle_abort(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
+    if _is_healthcheck(event):
+        cache.clear(event.assoc)
+        return
     bus.warning(
         InteractionEvent(event, cache, "Association Aborted", log_level="WARNING")
     )
@@ -135,6 +143,9 @@ def handle_reject(
     # EVT_ACSE_SENT covers all ACSE PDUs; only 0x01/0x02 are rejections.
     prim = event.primitive
     if not isinstance(prim, A_ASSOCIATE) or prim.result not in (0x01, 0x02):
+        return
+    if _is_healthcheck(event):
+        cache.clear(event.assoc)
         return
     params = [
         f"Result: {prim.result_str}",
@@ -154,6 +165,28 @@ def handle_reject(
 
 
 _LOOPBACK: frozenset[str] = frozenset({"127.0.0.1", "::1"})
+_HEALTHCHECK_VERSION = "DICOMHAWK_HC"
+_HEALTHCHECK_ATTR = "_dicomhawk_healthcheck"
+
+
+def _mark_healthcheck(event: Event, primitive: A_ASSOCIATE) -> bool:
+    """Mark the loopback probe without depending on profile AE-title policy."""
+    requestor = getattr(getattr(event, "assoc", None), "requestor", None)
+    if getattr(requestor, "address", None) not in _LOOPBACK:
+        return False
+    for item in primitive.user_information:
+        if (
+            isinstance(item, ImplementationVersionNameNotification)
+            and str(item.implementation_version_name or "").strip()
+            == _HEALTHCHECK_VERSION
+        ):
+            setattr(event.assoc, _HEALTHCHECK_ATTR, True)
+            return True
+    return False
+
+
+def _is_healthcheck(event: Event) -> bool:
+    return bool(getattr(getattr(event, "assoc", None), _HEALTHCHECK_ATTR, False))
 
 
 def handle_connect(
@@ -172,7 +205,9 @@ def handle_connect(
 def handle_echo(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> QRResult:
-    bus.info(InteractionEvent(event, cache, "C-ECHO", status=QRStatus.SUCCESS))
+    # Always respond; only the healthcheck's own loopback C-ECHO is kept out of the intel log.
+    if not _is_healthcheck(event):
+        bus.info(InteractionEvent(event, cache, "C-ECHO", status=QRStatus.SUCCESS))
     yield (QRStatus.SUCCESS, None)
 
 

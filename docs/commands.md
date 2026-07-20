@@ -22,6 +22,7 @@ Start the DICOM honeypot server.
 | `--operator-host` | | `127.0.0.1` | Bind address for the operator surface. A non-loopback value also requires `--allow-remote-operator`. In Docker, use `0.0.0.0`; the supplied host mapping still publishes it only on `127.0.0.1`. |
 | `--operator-token` | | *(unset)* | Optional operator password/Bearer token; also read from `DICOMHAWK_OPERATOR_TOKEN`. Browsers use Basic auth (any username), while API clients may use Basic or `Authorization: Bearer …`. |
 | `--allow-remote-operator` | | off | Explicitly permit a non-loopback operator bind. The supplied Docker configuration sets this because container loopback cannot be published; it retains a host-side loopback-only port mapping. |
+| `--trusted-proxy` | | *(unset)* | Exact reverse-proxy IP trusted to supply forwarded client IP, host, port, and scheme; also read from `DICOMHAWK_TRUSTED_PROXY`. Block direct access to the backend port. |
 | `--backend-server` | | *(profile value)* | Per-deployment `X-Backendserver` value; also read from `DICOMHAWK_BACKEND_SERVER` |
 | `--public-base-url` | | *(request origin)* | External HTTP(S) origin for generated OIDC redirect URIs; also read from `DICOMHAWK_PUBLIC_BASE_URL` |
 | `--verbose` | `-v` | | Print a compact colored event summary to stdout; auto-enabled when stdout is a TTY |
@@ -40,15 +41,18 @@ by WADO. QIDO/WADO content negotiation and default transfer syntax also come fro
 
 The built-in web listener is HTTP/1.1. A public high-fidelity deployment should terminate
 TLS at a reverse proxy on the target product's observed port (normally 443, and DICOM TLS
-on 2762 where configured), set `--public-base-url` to that external origin, preserve the original `Host`, and keep the operator
+on 2762 where configured), set `--public-base-url` to that external origin, configure
+`--trusted-proxy` for source attribution, preserve the original `Host`, and keep the operator
 API unpublished. Do not expose plaintext port 8080 as the only web surface for a profile
-that is normally seen over HTTPS; protocol and port mismatches are easy fingerprints.
+that is normally seen over HTTPS; protocol and port mismatches are easy fingerprints. For the
+full internet-facing checklist — TLS, egress lockdown, storage quotas, resource limits, and the
+container hardening the shipped Compose file applies — see [Deployment](./deployment.md).
 
 Incoming, untrusted C-STORE objects are deliberately quarantined. Their metadata may be
 indexed for C-FIND realism, but C-GET will not send the quarantined bytes back. This is a
 safety boundary and therefore a known round-trip difference from a production PACS—not a
 claim of perfect emulation. Seeded objects (`safe=True`) remain retrievable. Profiles also
-cap each incoming instance with `dicom.max_store_bytes` (512 MiB by default); use a finite
+cap each incoming instance with `dicom.max_store_bytes` (64 MiB by default); use a finite
 filesystem/volume quota as the aggregate bound against many smaller stores.
 
 ---

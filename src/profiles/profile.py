@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -52,6 +53,7 @@ class DicomConfig:
     # Limit how long a silent peer occupies an association slot.
     acse_timeout: float | None
     network_timeout: float | None
+    dimse_timeout: float | None
     max_store_bytes: int | None
 
 
@@ -113,7 +115,7 @@ class DicomWebConfig:
         default_factory=list
     )  # service kinds that issue a WinAuth 401 challenge before serving
     qido_max_results: int = 20000  # cap on QIDO result items
-    max_request_bytes: int = 512 * 1024 * 1024  # STOW upload body cap
+    max_request_bytes: int = 64 * 1024 * 1024  # complete STOW request cap
     max_non_stow_request_bytes: int = 1024 * 1024
     max_stow_parts: int = 128
     qido_default_media_type: str = "application/dicom+json"
@@ -170,12 +172,13 @@ def default_profile() -> ProfileConfig:
             ),
             storage_classes=storage_classes,
             qr_classes=qr_classes,
-            max_associations=100,
+            max_associations=16,
             max_pdu_size=65536,  # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
             ae_auth=AEAuthConfig(),
             acse_timeout=10,  # tighter than pynetdicom's 30s default — shrinks a garbage connection's DoS window
             network_timeout=15,  # tighter than pynetdicom's 60s default, same reason
-            max_store_bytes=512 * 1024 * 1024,
+            dimse_timeout=20,  # tighter than pynetdicom's 30s default — bounds a peer stalling mid-operation
+            max_store_bytes=64 * 1024 * 1024,
         ),
         web=WebConfig(
             # Working vendor-neutral defaults for sparse PACS profiles.
@@ -407,7 +410,9 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         acse_timeout = _number(v, "dicom.acse_timeout", float, nullable=True)
     else:
         acse_timeout = d.dicom.acse_timeout
-    if acse_timeout is not None and acse_timeout <= 0:
+    if acse_timeout is not None and (
+        not math.isfinite(acse_timeout) or acse_timeout <= 0
+    ):
         raise ValueError("Profile 'dicom.acse_timeout' must be positive or null")
 
     if "network_timeout" in dicom_raw:
@@ -415,8 +420,20 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         network_timeout = _number(v, "dicom.network_timeout", float, nullable=True)
     else:
         network_timeout = d.dicom.network_timeout
-    if network_timeout is not None and network_timeout <= 0:
+    if network_timeout is not None and (
+        not math.isfinite(network_timeout) or network_timeout <= 0
+    ):
         raise ValueError("Profile 'dicom.network_timeout' must be positive or null")
+
+    if "dimse_timeout" in dicom_raw:
+        v = dicom_raw["dimse_timeout"]
+        dimse_timeout = _number(v, "dicom.dimse_timeout", float, nullable=True)
+    else:
+        dimse_timeout = d.dicom.dimse_timeout
+    if dimse_timeout is not None and (
+        not math.isfinite(dimse_timeout) or dimse_timeout <= 0
+    ):
+        raise ValueError("Profile 'dicom.dimse_timeout' must be positive or null")
 
     max_store_bytes = _number(
         dicom_raw.get("max_store_bytes", d.dicom.max_store_bytes),
@@ -823,6 +840,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             ae_auth=ae_auth,
             acse_timeout=acse_timeout,
             network_timeout=network_timeout,
+            dimse_timeout=dimse_timeout,
             max_store_bytes=max_store_bytes,
         ),
         web=WebConfig(

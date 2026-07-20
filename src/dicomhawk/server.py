@@ -34,9 +34,10 @@ class ServerConfig:
     MAX_PDU_SIZE: int | None  # None -> pynetdicom's own default
     REQUIRE_CALLED_AET: bool = False
     REQUIRE_CALLING_AET: list[str] | None = None
-    # None -> pynetdicom's own defaults (30s/60s); tighter values shrink a garbage-connection's DoS window.
+    # None -> pynetdicom's own defaults (30s/60s/30s); tighter values shrink a garbage-connection's DoS window.
     ACSE_TIMEOUT: float | None = None
     NETWORK_TIMEOUT: float | None = None
+    DIMSE_TIMEOUT: float | None = None
 
 
 def new_config(
@@ -56,6 +57,7 @@ def new_config(
     require_calling_aet: list[str] | None = None,
     acse_timeout: float | None = None,
     network_timeout: float | None = None,
+    dimse_timeout: float | None = None,
 ) -> ServerConfig:
     return ServerConfig(
         host,
@@ -73,6 +75,7 @@ def new_config(
         REQUIRE_CALLING_AET=require_calling_aet,
         ACSE_TIMEOUT=acse_timeout,
         NETWORK_TIMEOUT=network_timeout,
+        DIMSE_TIMEOUT=dimse_timeout,
     )
 
 
@@ -135,6 +138,8 @@ class Server:
             ae.acse_timeout = self.config.ACSE_TIMEOUT
         if self.config.NETWORK_TIMEOUT is not None:
             ae.network_timeout = self.config.NETWORK_TIMEOUT
+        if self.config.DIMSE_TIMEOUT is not None:
+            ae.dimse_timeout = self.config.DIMSE_TIMEOUT
 
         return ae
 

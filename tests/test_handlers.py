@@ -206,8 +206,16 @@ class _Loopback:
         self.bus = bus
         self.port = port
 
-    def associate(self, calling_ae_title="SCUTEST", store_handler=None, **kwargs):
+    def associate(
+        self,
+        calling_ae_title="SCUTEST",
+        store_handler=None,
+        implementation_version_name=None,
+        **kwargs,
+    ):
         scu = AE(ae_title=calling_ae_title)
+        if implementation_version_name:
+            scu.implementation_version_name = implementation_version_name
         scu.add_requested_context(Verification)
         scu.add_requested_context(CTImageStorage)
         scu.add_requested_context(StudyRootQueryRetrieveInformationModelFind)
@@ -262,6 +270,62 @@ def test_c_echo_returns_success(loopback):
     status = assoc.send_c_echo()
     assert status.Status == 0x0000
     assoc.release()
+
+
+def test_healthcheck_echo_succeeds_but_is_not_logged(loopback, caplog):
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        assoc = loopback.associate(
+            calling_ae_title="HEALTHCHK",
+            implementation_version_name="DICOMHAWK_HC",
+        )
+        status = assoc.send_c_echo()
+        assoc.release()
+    assert status.Status == 0x0000
+    assert not any(
+        '"request_type":"C-ECHO"' in r.getMessage()
+        or '"request_type":"Association Requested"' in r.getMessage()
+        or '"request_type":"Association Released"' in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_ordinary_loopback_echo_is_still_logged(loopback, caplog):
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        assoc = loopback.associate(calling_ae_title="SCUTEST")
+        assoc.send_c_echo()
+        assoc.release()
+    assert any('"request_type":"C-ECHO"' in r.getMessage() for r in caplog.records)
+
+
+def test_healthcheck_honors_called_and_calling_aet_policy(tmp_path, caplog):
+    bus = logging.getLogger(f"test-health-auth-{tmp_path.name}")
+    bus.setLevel(logging.INFO)
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+    scp = AE(ae_title="LOCKEDPACS")
+    scp.require_called_aet = True
+    scp.require_calling_aet = ["MONITOR"]
+    scp.add_supported_context(Verification)
+    handlers = list(new_dimse_factory(repo, bus).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    try:
+        scu = AE(ae_title="MONITOR")
+        scu.implementation_version_name = "DICOMHAWK_HC"
+        scu.add_requested_context(Verification)
+        with caplog.at_level(logging.INFO, logger=bus.name):
+            assoc = scu.associate(
+                "127.0.0.1", server.socket.getsockname()[1], ae_title="LOCKEDPACS"
+            )
+            assert assoc.is_established
+            assert assoc.send_c_echo().Status == 0x0000
+            assoc.release()
+        assert not any("HEALTHCHK" in record.getMessage() for record in caplog.records)
+        assert not any(
+            '"request_type":"C-ECHO"' in record.getMessage()
+            for record in caplog.records
+        )
+    finally:
+        server.shutdown()
+        repo.stop()
 
 
 def test_c_store_quarantines_visible_in_find_but_blocked_on_get(loopback, caplog):
