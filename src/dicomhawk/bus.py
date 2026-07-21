@@ -37,9 +37,7 @@ _DEFAULT_LOG_BACKUPS = 5
 
 
 class SessionCache:
-    """Tracks session IDs/versions per live association; weakref.finalize purges entries on
-    GC since attackers often drop the TCP connection without EVT_RELEASED/EVT_ABORTED.
-    """
+    """Track associations and purge peers that disconnect without ACSE cleanup."""
 
     def __init__(self) -> None:
         self._sessions: dict[int, str] = {}
@@ -148,6 +146,7 @@ class InteractionEvent:
         matches: int | None = None,
         status: "QRStatus | None" = None,
         log_level: str = "INFO",
+        artifact: dict | None = None,
     ) -> None:
         assoc = evt.assoc
         # Connection events carry the peer in event.address; DIMSE/ACSE use the requestor.
@@ -170,6 +169,7 @@ class InteractionEvent:
             ip=ip,
             port=port,
             local_port=getattr(assoc.acceptor, "port", None),
+            artifact=artifact,
         )
 
     @classmethod
@@ -188,6 +188,7 @@ class InteractionEvent:
         method: str | None = None,
         path: str | None = None,
         user_agent: str | None = None,
+        artifact: dict | None = None,
     ) -> "InteractionEvent":
         """Build the same log line from an HTTP request (web / DICOMweb), no pynetdicom Event."""
         self = cls.__new__(cls)
@@ -207,6 +208,7 @@ class InteractionEvent:
             method=method,
             path=path,
             user_agent=user_agent,
+            artifact=artifact,
         )
         return self
 
@@ -228,6 +230,7 @@ class InteractionEvent:
         method=None,
         path=None,
         user_agent=None,
+        artifact=None,
     ) -> None:
         self.channel = channel
         self.session_id = session_id
@@ -248,6 +251,8 @@ class InteractionEvent:
         self.method = method
         self.path = path
         self.user_agent = user_agent
+        # Structured payload metadata avoids parsing display strings in the operator API.
+        self.artifact = artifact
         self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     def __str__(self) -> str:
@@ -268,6 +273,7 @@ class InteractionEvent:
                 "method": self.method,
                 "path": self.path,
                 "user_agent": self.user_agent,
+                "artifact": self.artifact,
                 "timestamp": self.timestamp,
             },
             escape_forward_slashes=False,
@@ -423,8 +429,7 @@ def new_dev_log(
     h.setFormatter(fmt)
     root.addHandler(h)
 
-    # Attach pynetdicom's own logger at INFO to the same file so association
-    # negotiation detail is available without the full DEBUG PDU dump.
+    # Keep negotiation detail without enabling full PDU debug logs.
     pn = logging.getLogger("pynetdicom")
     pn.setLevel(logging.INFO)
     pn.propagate = False  # keep pynetdicom INFO out of the root WARNING stream

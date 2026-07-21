@@ -18,27 +18,41 @@ Start the DICOM honeypot server.
 | `--log-backups` | | `5` | Number of rotated event logs to keep |
 | `--dev-log` | | | Path for Python-level warnings, errors, and pynetdicom protocol events |
 | `--web-port` | | `8080` | Port for the attacker-facing web UI (`pacs`-kind profiles with `web.enabled` only) |
-| `--operator-port` | | `8081` | Port for the read-only operator API (`/api/sessions`, `/api/events`, `/api/profiles`) |
-| `--operator-host` | | `127.0.0.1` | Bind address for the operator API. Keep the default for a bare-metal deployment — it's what makes the API loopback-only. In Docker, override to `0.0.0.0` and enforce loopback-only via the host-side port mapping instead (a container's own `127.0.0.1` is a separate network namespace host port publishing can't reach) — see `docker-compose.yml`. |
+| `--operator-port` | | `8081` | Port for the read-only operator dashboard (`/`) and API (`/api/overview`, `/api/stats`, `/api/attackers`, `/api/credentials`, `/api/uploads`, `/api/events`, `/api/sessions`, `/api/profiles`) |
+| `--operator-host` | | `127.0.0.1` | Bind address for the operator surface. A non-loopback value also requires `--allow-remote-operator`. In Docker, use `0.0.0.0`; the supplied host mapping still publishes it only on `127.0.0.1`. |
+| `--operator-token` | | *(unset)* | Optional operator password/Bearer token; also read from `DICOMHAWK_OPERATOR_TOKEN`. Browsers use Basic auth (any username), while API clients may use Basic or `Authorization: Bearer …`. |
+| `--allow-remote-operator` | | off | Explicitly permit a non-loopback operator bind. The supplied Docker configuration sets this because container loopback cannot be published; it retains a host-side loopback-only port mapping. |
+| `--trusted-proxy` | | *(unset)* | Exact reverse-proxy IP trusted to supply forwarded client IP, host, port, and scheme; also read from `DICOMHAWK_TRUSTED_PROXY`. Block direct access to the backend port. |
 | `--backend-server` | | *(profile value)* | Per-deployment `X-Backendserver` value; also read from `DICOMHAWK_BACKEND_SERVER` |
 | `--public-base-url` | | *(request origin)* | External HTTP(S) origin for generated OIDC redirect URIs; also read from `DICOMHAWK_PUBLIC_BASE_URL` |
 | `--verbose` | `-v` | | Print a compact colored event summary to stdout; auto-enabled when stdout is a TTY |
 
 **Profiles** decide which device the honeypot impersonates. With no `--profile`, it runs a generic default (AE title `ORTHANC`, all storage classes, no web surface). `--profile fujifilm` makes it present as a Fujifilm Synapse PACS — that device's identity, supported SOP classes, status codes, and a matching web login/worklist. `--profile generic-pacs` is a vendor-neutral second profile with the same web surface but plain, unbranded pages and generic headers — useful as a starting point for a custom profile. To impersonate a different device, write a profile YAML in the same format and pass its path — see [Adding a profile](./profiles.md) for the full schema and how to build the optional web surface.
 
+**DICOMweb** (QIDO-RS / WADO-RS / STOW-RS / WADO-URI) is enabled per profile via a `dicomweb:`
+block, not a flag — its ports and base paths are part of the impersonated product's fingerprint,
+so they live in the profile YAML rather than on the command line (see [Adding a profile](./profiles.md#dicomweb)).
+The `fujifilm` profile serves the real Synapse DICOMweb ports (9080/10080/12080/13080); publish
+whichever ports your profile binds in `docker-compose.yml`. STOW uploads are quarantined exactly
+like C-STORE, their exact incoming bytes are retained for analysis, and they are never served back
+by WADO. QIDO/WADO content negotiation and default transfer syntax also come from the profile.
+
 **Note:** with the default in-memory database, seeded data does not persist between restarts. Pass `--database` for any deployment intended to survive a restart.
 
 The built-in web listener is HTTP/1.1. A public high-fidelity deployment should terminate
 TLS at a reverse proxy on the target product's observed port (normally 443, and DICOM TLS
-on 2762 where configured), set `--public-base-url` to that external origin, preserve the original `Host`, and keep the operator
+on 2762 where configured), set `--public-base-url` to that external origin, configure
+`--trusted-proxy` for source attribution, preserve the original `Host`, and keep the operator
 API unpublished. Do not expose plaintext port 8080 as the only web surface for a profile
-that is normally seen over HTTPS; protocol and port mismatches are easy fingerprints.
+that is normally seen over HTTPS; protocol and port mismatches are easy fingerprints. For the
+full internet-facing checklist — TLS, egress lockdown, storage quotas, resource limits, and the
+container hardening the shipped Compose file applies — see [Deployment](./deployment.md).
 
 Incoming, untrusted C-STORE objects are deliberately quarantined. Their metadata may be
 indexed for C-FIND realism, but C-GET will not send the quarantined bytes back. This is a
 safety boundary and therefore a known round-trip difference from a production PACS—not a
 claim of perfect emulation. Seeded objects (`safe=True`) remain retrievable. Profiles also
-cap each incoming instance with `dicom.max_store_bytes` (512 MiB by default); use a finite
+cap each incoming instance with `dicom.max_store_bytes` (64 MiB by default); use a finite
 filesystem/volume quota as the aggregate bound against many smaller stores.
 
 ---

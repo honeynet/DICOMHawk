@@ -1,11 +1,7 @@
-"""Tests for dicomhawk/handlers.py: the ACSE lifecycle handlers (connect/associate/
-reject/release/abort) and the DIMSE handlers (echo/find/get/move/store). ACSE and
-protocol-shaped behaviors are exercised over a real loopback pynetdicom association —
-faking pynetdicom's Event/Association objects for these risks testing a guess about
-the API instead of the real thing. Small pure-logic pieces (the loopback skip,
-sublevel-tag stripping) use lightweight fakes since they don't need real sockets."""
+"""Handler unit tests and real loopback DIMSE integration tests."""
 
 import io
+import json
 import logging
 import tempfile
 
@@ -185,10 +181,7 @@ def test_strip_sublevel_tags_no_op_at_deepest_level():
 
 
 def _ct_dataset(patient_id="TESTPAT", study_uid=None, series_uid=None):
-    """A CT instance that behaves like a real file-backed dataset (has a preamble),
-    matching how real C-STORE/seeded data is actually written and re-read — a
-    Dataset() built from scratch has no preamble and can't be read back with a
-    plain dcmread(), which a hand-rolled fake would silently paper over."""
+    """Build a file-backed CT dataset readable by dcmread()."""
     ds = Dataset()
     ds.file_meta = FileMetaDataset()
     ds.file_meta.MediaStorageSOPClassUID = CTImageStorage
@@ -213,8 +206,16 @@ class _Loopback:
         self.bus = bus
         self.port = port
 
-    def associate(self, calling_ae_title="SCUTEST", store_handler=None, **kwargs):
+    def associate(
+        self,
+        calling_ae_title="SCUTEST",
+        store_handler=None,
+        implementation_version_name=None,
+        **kwargs,
+    ):
         scu = AE(ae_title=calling_ae_title)
+        if implementation_version_name:
+            scu.implementation_version_name = implementation_version_name
         scu.add_requested_context(Verification)
         scu.add_requested_context(CTImageStorage)
         scu.add_requested_context(StudyRootQueryRetrieveInformationModelFind)
@@ -271,14 +272,77 @@ def test_c_echo_returns_success(loopback):
     assoc.release()
 
 
-def test_c_store_quarantines_visible_in_find_but_blocked_on_get(loopback):
-    """Storage-jail contract (#159): an unsolicited C-STORE is captured, shows up
-    in C-FIND's metadata index, but C-GET refuses to serve the actual bytes."""
+def test_healthcheck_echo_succeeds_but_is_not_logged(loopback, caplog):
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        assoc = loopback.associate(
+            calling_ae_title="HEALTHCHK",
+            implementation_version_name="DICOMHAWK_HC",
+        )
+        status = assoc.send_c_echo()
+        assoc.release()
+    assert status.Status == 0x0000
+    assert not any(
+        '"request_type":"C-ECHO"' in r.getMessage()
+        or '"request_type":"Association Requested"' in r.getMessage()
+        or '"request_type":"Association Released"' in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_ordinary_loopback_echo_is_still_logged(loopback, caplog):
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        assoc = loopback.associate(calling_ae_title="SCUTEST")
+        assoc.send_c_echo()
+        assoc.release()
+    assert any('"request_type":"C-ECHO"' in r.getMessage() for r in caplog.records)
+
+
+def test_healthcheck_honors_called_and_calling_aet_policy(tmp_path, caplog):
+    bus = logging.getLogger(f"test-health-auth-{tmp_path.name}")
+    bus.setLevel(logging.INFO)
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+    scp = AE(ae_title="LOCKEDPACS")
+    scp.require_called_aet = True
+    scp.require_calling_aet = ["MONITOR"]
+    scp.add_supported_context(Verification)
+    handlers = list(new_dimse_factory(repo, bus).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    try:
+        scu = AE(ae_title="MONITOR")
+        scu.implementation_version_name = "DICOMHAWK_HC"
+        scu.add_requested_context(Verification)
+        with caplog.at_level(logging.INFO, logger=bus.name):
+            assoc = scu.associate(
+                "127.0.0.1", server.socket.getsockname()[1], ae_title="LOCKEDPACS"
+            )
+            assert assoc.is_established
+            assert assoc.send_c_echo().Status == 0x0000
+            assoc.release()
+        assert not any("HEALTHCHK" in record.getMessage() for record in caplog.records)
+        assert not any(
+            '"request_type":"C-ECHO"' in record.getMessage()
+            for record in caplog.records
+        )
+    finally:
+        server.shutdown()
+        repo.stop()
+
+
+def test_c_store_quarantines_visible_in_find_but_blocked_on_get(loopback, caplog):
     assoc = loopback.associate()
     ds = _ct_dataset()
 
-    store_status = assoc.send_c_store(ds)
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        store_status = assoc.send_c_store(ds)
     assert store_status.Status == 0x0000
+    event = next(
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if '"request_type":"C-STORE"' in record.getMessage()
+    )
+    assert event["artifact"]["sop_instance_uid"] == ds.SOPInstanceUID
+    assert event["artifact"]["sop_class_uid"] == ds.SOPClassUID
+    assert event["artifact"]["captured"] is True
 
     find_results = list(
         assoc.send_c_find(
@@ -319,8 +383,6 @@ def test_c_store_rejects_instance_over_configured_size(loopback):
 
 
 def test_c_get_retrieves_a_safely_seeded_instance(loopback):
-    """The other half of the jail contract: pre-seeded (safe=True) data is real
-    and retrievable — the jail only blocks attacker-submitted uploads."""
     ds = _ct_dataset(patient_id="SAFEPAT")
     assert loopback.repo.store(ds, safe=True) is None
 
@@ -342,8 +404,6 @@ def test_c_get_retrieves_a_safely_seeded_instance(loopback):
 
 
 def test_c_find_dedups_to_one_row_per_study(loopback):
-    """handle_find's _FIND_LEVEL_UID dedup: two series under one study collapse
-    to a single STUDY-level match."""
     study_uid = generate_uid()
     loopback.repo.store(_ct_dataset(study_uid=study_uid), safe=True)
     loopback.repo.store(_ct_dataset(study_uid=study_uid), safe=True)
@@ -360,7 +420,6 @@ def test_c_find_dedups_to_one_row_per_study(loopback):
 
 
 def test_c_move_always_captures_and_rejects(loopback):
-    """#158-3: capture & reject — the honeypot never actually forwards data."""
     ds = _ct_dataset()
     loopback.repo.store(ds, safe=True)
 
@@ -388,8 +447,6 @@ def test_interaction_log_captures_association_lifecycle(loopback, caplog):
 
 
 def test_association_rejected_for_disallowed_calling_aet(tmp_path, caplog):
-    """Real protocol round-trip for AE-title auth (#160): a disallowed calling AE
-    gets a genuine A-ASSOCIATE-RJ, and handle_reject logs it."""
     bus = logging.getLogger(f"test-reject-{tmp_path.name}")
     bus.setLevel(logging.WARNING)
     repo = new_repo(None, new_store(str(tmp_path / "traces")))

@@ -1,5 +1,4 @@
-# Honeytoken / bait config, kept separate from the device profile. Edit and restart.
-# Baked into one seeded instance per `seed` run (see seeding/seeder.py); not a per-retrieval overlay.
+# Bait config baked into one instance per seed run.
 
 honeytoken:
   honey_url: null      # base URL baked in as RetrieveURL (e.g. https://host)

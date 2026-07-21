@@ -1,11 +1,12 @@
-# Vendor-neutral "basic" profile: everything but meta/web.enabled/web.templates_dir is
-# omitted on purpose, so it falls back to default_profile()'s generic values (see profile.py).
+# Sparse vendor-neutral profile; omitted fields use generic defaults.
 meta:
   name: generic-pacs
   kind: pacs
 web:
   enabled: true
   templates_dir: generic-pacs
+  browse: true                 # post-login DICOM browse console + attacker upload capture
+  upload_max_request_bytes: 52428800  # 50 MiB, applied only to the upload route
   # No real vendor to stay coherent with, so a fabricated admin-bait path is fine here (design ref: v2.0's admin.routes.js).
   honeytraps:
     - path: /admin/
@@ -14,3 +15,6 @@ web:
   honey_credentials:
     - username: test
       password: test
+# Opt in to DICOMweb; inherits the generic single-port /dicom-web/ fallback, not a vendor-shaped one.
+dicomweb:
+  enabled: true

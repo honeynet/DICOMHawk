@@ -41,11 +41,6 @@ def _config(ports):
 def test_run_populates_listeners_and_stop_shuts_down_without_double_serving(
     monkeypatch,
 ):
-    """Regression: self.listeners used to be a bare type annotation, never assigned,
-    so stop() raised AttributeError; run() also called serve_forever() a second time
-    on top of start_server(block=False)'s own daemon thread, meaning it never even
-    reached registering the second port. Neither self.listeners nor a second
-    serve_forever() call happens here anymore."""
     fake_ae = _FakeAE()
     server = new_server(logging.getLogger("test"), _config([104, 11112]), [])
     monkeypatch.setattr(server, "init", lambda: fake_ae)
@@ -70,9 +65,6 @@ def test_stop_is_safe_with_no_listeners():
 
 
 def test_init_applies_configured_timeouts():
-    """Regression: a raw TCP connection that never sends a valid PDU still occupies a
-    max_associations slot until acse_timeout/network_timeout expire — this proves the
-    tighter, profile-configurable values actually reach the real pynetdicom AE."""
     config = new_config(
         "127.0.0.1",
         [11112],
@@ -87,16 +79,19 @@ def test_init_applies_configured_timeouts():
         None,
         acse_timeout=10,
         network_timeout=15,
+        dimse_timeout=20,
     )
     ae = Server(logging.getLogger("test"), config, []).init()
     assert ae.acse_timeout == 10
     assert ae.network_timeout == 15
+    assert ae.dimse_timeout == 20
 
 
 def test_init_leaves_pynetdicom_defaults_when_timeouts_unset():
     ae = Server(logging.getLogger("test"), _config([11112]), []).init()
     assert ae.acse_timeout == 30  # pynetdicom's own default, untouched
     assert ae.network_timeout == 60  # pynetdicom's own default, untouched
+    assert ae.dimse_timeout == 30  # pynetdicom's own default, untouched
 
 
 def test_get_only_profile_advertises_storage_as_scu():

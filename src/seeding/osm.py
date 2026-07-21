@@ -15,18 +15,32 @@ _OVERPASS_MIRRORS = (
     "https://overpass.kumi.systems/api/interpreter",
 )
 _OSM_CACHE_TTL_HOURS = 24
-_OSM_SKIP_TERMS = frozenset({
-    # English
-    "pharmacy", "dentist", "veterinary", "optician", "dispensary",
-    # Danish/Nordic
-    "apotek", "tandlæge", "dyrlæge",
-    # German
-    "apotheke", "zahnarzt", "tierarzt",
-    # French
-    "pharmacie", "dentiste", "vétérinaire",
-    # Spanish
-    "farmacia", "dentista", "veterinario",
-})
+_OSM_SKIP_TERMS = frozenset(
+    {
+        # English
+        "pharmacy",
+        "dentist",
+        "veterinary",
+        "optician",
+        "dispensary",
+        # Danish/Nordic
+        "apotek",
+        "tandlæge",
+        "dyrlæge",
+        # German
+        "apotheke",
+        "zahnarzt",
+        "tierarzt",
+        # French
+        "pharmacie",
+        "dentiste",
+        "vétérinaire",
+        # Spanish
+        "farmacia",
+        "dentista",
+        "veterinario",
+    }
+)
 _OSM_DEFAULT_MAX = 50
 
 
@@ -64,7 +78,9 @@ class OsmClient:
             self._save_cache(locs)
             logger.info(f"OSM: fetched {len(locs)} medical institutions")
         else:
-            logger.warning("OSM: no institutions found; falling back to built-in defaults")
+            logger.warning(
+                "OSM: no institutions found; falling back to built-in defaults"
+            )
         return locs
 
     def _fetch(self) -> list[Location]:
@@ -77,7 +93,9 @@ class OsmClient:
 
         for url in _OVERPASS_MIRRORS:
             try:
-                r = requests.post(url, data={"data": query}, timeout=self._timeout, headers=headers)
+                r = requests.post(
+                    url, data={"data": query}, timeout=self._timeout, headers=headers
+                )
                 r.raise_for_status()
                 body = r.json()
                 elements = body.get("elements", [])
@@ -111,13 +129,13 @@ class OsmClient:
                 f'area["ISO3166-1:alpha2"="{self._country}"]["admin_level"="2"]->.country;\n'
                 f'rel(area.country)["name"="{self._city}"]["boundary"="administrative"]'
                 f'["admin_level"~"^[4-8]$"]->.c;\n'
-                f'.c map_to_area->.a;'
+                f".c map_to_area->.a;"
             )
         elif self._city:
             area = (
                 f'rel["name"="{self._city}"]["boundary"="administrative"]'
                 f'["admin_level"~"^[4-8]$"]->.c;\n'
-                f'.c map_to_area->.a;'
+                f".c map_to_area->.a;"
             )
         elif self._country:
             area = f'area["ISO3166-1:alpha2"="{self._country}"]["admin_level"="2"]->.a;'
@@ -126,15 +144,15 @@ class OsmClient:
         scope = "(area.a)" if area else ""
 
         return (
-            f'[out:json][timeout:{self._timeout}];\n'
-            f'{area}\n'
-            f'(\n'
+            f"[out:json][timeout:{self._timeout}];\n"
+            f"{area}\n"
+            f"(\n"
             f'  node["amenity"="hospital"]{scope};\n'
             f'  way["amenity"="hospital"]{scope};\n'
             f'  node["healthcare"="hospital"]{scope};\n'
             f'  way["healthcare"="hospital"]{scope};\n'
-            f');\n'
-            f'out tags;'
+            f");\n"
+            f"out tags;"
         )
 
     def _extract_name(self, tags: dict) -> str | None:
@@ -180,13 +198,18 @@ class OsmClient:
     def _save_cache(self, locs: list[Location]) -> None:
         try:
             self._cache.parent.mkdir(parents=True, exist_ok=True)
-            self._cache.write_text(json.dumps({
-                "timestamp": datetime.now().isoformat(),
-                "city": self._city,
-                "country": self._country,
-                "locations": [
-                    {"institution": l.institution, "address": l.address} for l in locs
-                ],
-            }))
+            self._cache.write_text(
+                json.dumps(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "city": self._city,
+                        "country": self._country,
+                        "locations": [
+                            {"institution": l.institution, "address": l.address}
+                            for l in locs
+                        ],
+                    }
+                )
+            )
         except Exception as exc:
             logger.warning(f"OSM: failed to save cache: {exc}")

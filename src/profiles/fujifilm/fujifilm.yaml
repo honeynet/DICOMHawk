@@ -1,5 +1,4 @@
-# Source: Synapse PACS DICOM Conformance Statement DOC-0062366-A, SW 7.4.2+, 2024-09-06.
-# Transfer syntax sets below are the Table 1-3 UNIONS each Table 1-1 row actually accepts
+# Source: Synapse DICOM Conformance Statement DOC-0062366-A, SW 7.4.2+, 2024-09-06; syntax sets are Table 1-3 unions.
 _ts_verification: &ts_verification         # Table 1-5: Implicit + Explicit VR LE only
   - 1.2.840.10008.1.2           # Implicit VR Little Endian
   - 1.2.840.10008.1.2.1         # Explicit VR Little Endian
@@ -259,8 +258,7 @@ web:
     - path: /api/WorkflowEngine/
       response: api_404
 
-  # Static response headers, emitted on every response. X-Backendserver is
-  # site-specific — set per deploy, never reuse a real one.
+  # X-Backendserver is site-specific; set it per deployment.
   headers:
     Server: Microsoft-IIS/10.0
     X-Powered-By: ASP.NET
@@ -304,11 +302,9 @@ web:
       ThinkLogService ViewerService WorkflowEngine SubscriptionService
       ExtApiService XDSConsumerApi FHIRCastHub
 
-  # honey_credentials left unset: login.html is a verbatim Synapse capture, a hint here would be a tell.
-  # Syntax: see generic-pacs.yaml's web.honey_credentials.
+  # No honey hint: it would fingerprint the Synapse login capture.
 
-  # Real Synapse paths/cookie names, sourced from public passive recon — the whole reason
-  # routes/cookies are profile data: this is what makes fujifilm's address bar/cookies genuinely Synapse's.
+  # Synapse paths and cookie names sourced from public passive recon.
   routes:
     entry: /Synapse
     worklist: /WorkflowUI/
@@ -331,3 +327,25 @@ web:
     text1: Synapse Log On
     text2: Unable to log in using Windows Authentication.
     text3: Log in directly
+
+# Synapse DICOMweb ports/auth from the public conformance statement.
+dicomweb:
+  enabled: true
+  services:
+    - service: wado_uri
+      base_path: /services/wado
+      port: 9080
+    - service: qido
+      base_path: /qido-rs
+      port: 10080
+    - service: wado_rs
+      base_path: /wado-rs
+      port: 12080
+    - service: stow
+      base_path: /stow-rs
+      port: 13080
+  require_auth: [wado_uri, stow]
+  qido_default_media_type: application/json
+  default_transfer_syntax: 1.2.840.10008.1.2.1
+  auth_schemes: [Negotiate, NTLM, Basic]
+  qido_warning_agent: Synapse

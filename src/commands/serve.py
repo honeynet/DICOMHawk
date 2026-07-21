@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import signal
 import sys
@@ -11,7 +12,7 @@ from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
 
 from profiles.profile import load_profile
-from web.component import new_web_component
+from web.component import new_dicomweb_component, new_web_component
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,23 @@ def serve(
         "--operator-host",
         help="Bind address for the operator API (loopback-only by default; Docker needs 0.0.0.0 here, see docs/commands.md)",
     ),
+    operator_token: str | None = typer.Option(
+        None,
+        "--operator-token",
+        envvar="DICOMHAWK_OPERATOR_TOKEN",
+        help="Optional password/Bearer token protecting the operator API and dashboard",
+    ),
+    allow_remote_operator: bool = typer.Option(
+        False,
+        "--allow-remote-operator",
+        help="Explicitly permit a non-loopback operator bind (needed inside Docker)",
+    ),
+    trusted_proxy: str | None = typer.Option(
+        None,
+        "--trusted-proxy",
+        envvar="DICOMHAWK_TRUSTED_PROXY",
+        help="Exact reverse-proxy IP trusted to supply forwarded client identity for attacker-facing HTTP",
+    ),
     backend_server: str | None = typer.Option(
         None,
         "--backend-server",
@@ -132,6 +150,24 @@ def serve(
         raise typer.BadParameter("log-max-bytes and log-backups cannot be negative")
     if log_max_bytes and log_backups < 1:
         raise typer.BadParameter("rotating logs require at least one backup")
+    try:
+        operator_is_loopback = (
+            operator_host == "localhost"
+            or ipaddress.ip_address(operator_host).is_loopback
+        )
+    except ValueError:
+        operator_is_loopback = False
+    if not operator_is_loopback and not allow_remote_operator:
+        raise typer.BadParameter(
+            "a non-loopback operator-host requires --allow-remote-operator"
+        )
+    if trusted_proxy:
+        try:
+            ipaddress.ip_address(trusted_proxy)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                "trusted-proxy must be one exact IP address"
+            ) from exc
     if backend_server:
         prof.web.headers["X-Backendserver"] = backend_server
     if public_base_url:
@@ -172,6 +208,7 @@ def serve(
         require_calling_aet=prof.dicom.ae_auth.require_calling_aet,
         acse_timeout=prof.dicom.acse_timeout,
         network_timeout=prof.dicom.network_timeout,
+        dimse_timeout=prof.dicom.dimse_timeout,
     )
 
     store = new_store(traces)
@@ -202,6 +239,16 @@ def serve(
     logger.info(
         f"Profile: {prof.name} ({prof.manufacturer or 'generic'} {prof.model_name or ''})".strip()
     )
+    logger.info(
+        "DIMSE limits: associations=%s acse=%s network=%s dimse=%s store_bytes=%s",
+        config.MAX_ASSOC,
+        config.ACSE_TIMEOUT,
+        config.NETWORK_TIMEOUT,
+        config.DIMSE_TIMEOUT,
+        prof.dicom.max_store_bytes,
+    )
+    if trusted_proxy:
+        logger.info("Trusted HTTP proxy: %s", trusted_proxy)
 
     dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes)
 
@@ -217,9 +264,20 @@ def serve(
     if prof.kind == "pacs" and prof.web.enabled:
         components.append(
             new_web_component(
-                prof, repo, bus, host, web_port, operator_port, operator_host
+                prof,
+                repo,
+                bus,
+                host,
+                web_port,
+                operator_port,
+                operator_host,
+                operator_token,
+                trusted_proxy,
             )
         )
+    # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.
+    if prof.kind == "pacs" and prof.dicomweb.enabled:
+        components.append(new_dicomweb_component(prof, repo, bus, host, trusted_proxy))
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, components)

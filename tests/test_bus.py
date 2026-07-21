@@ -44,8 +44,7 @@ def test_session_cache_clear_removes_version_and_session():
 
 
 def test_session_cache_purges_on_gc_without_explicit_clear():
-    """weakref.finalize must clean up even when an attacker drops the connection
-    without EVT_RELEASED/EVT_ABORTED ever firing clear()."""
+    """Dropped peers must not depend on ACSE cleanup."""
     cache = SessionCache()
     assoc = _FakeAssoc()
     key = id(assoc)
@@ -125,6 +124,7 @@ def test_interaction_event_from_http_round_trips_through_json():
         method="POST",
         path="/login",
         user_agent="curl/8.0",
+        artifact={"sha256": "abc", "captured": True},
     )
 
     data = json.loads(str(ie))
@@ -136,6 +136,7 @@ def test_interaction_event_from_http_round_trips_through_json():
     assert data["method"] == "POST"
     assert data["path"] == "/login"
     assert data["status"] is None  # DIMSE-only field, None for HTTP
+    assert data["artifact"] == {"sha256": "abc", "captured": True}
 
 
 class _FakeRequestorAddr:

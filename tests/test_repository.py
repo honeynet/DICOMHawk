@@ -13,8 +13,7 @@ from dicomhawk.storage import new_store
 
 
 def _ct_dataset(patient_id="TESTPAT", study_uid=None, series_uid=None):
-    """Real file-backed dataset (has a preamble) -- matches how seeded/stored data
-    actually round-trips; a bare Dataset() can't be read back with plain dcmread()."""
+    """Build a file-backed CT dataset readable by dcmread()."""
     ds = Dataset()
     ds.file_meta = FileMetaDataset()
     ds.file_meta.MediaStorageSOPClassUID = CTImageStorage
@@ -65,6 +64,17 @@ def test_store_unsafe_quarantines_and_keeps_a_raw_capture(repo):
     assert repo.store(ds, safe=False) is None
     assert (repo.storage.quarantine_dir / str(ds.SOPInstanceUID)).exists()
     assert any(repo.storage.traces_dir.glob("*.dcm.gz"))  # raw pre-parse forensic copy
+
+
+def test_store_does_not_report_success_when_forensic_capture_fails(repo, monkeypatch):
+    def fail_capture(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(repo.storage, "capture", fail_capture)
+    err = repo.store(_ct_dataset(), raw_bytes=b"exact incoming bytes")
+    assert err is not None
+    assert err.status == QRStatus.STORE_ERROR
+    assert "quarantine" in err.error
 
 
 def test_store_rejects_missing_sop_instance_uid(repo):
@@ -142,6 +152,29 @@ def test_find_filters_by_a_specific_key(repo):
 
     assert result.error is None
     assert {m.study_instance_uid for m in result.matches} == {str(a.StudyInstanceUID)}
+
+
+def test_find_page_limits_at_the_database_and_deduplicates(repo):
+    study_uid = generate_uid()
+    first = _ct_dataset(study_uid=study_uid)
+    second = _ct_dataset(study_uid=study_uid)
+    repo.store(first, safe=True)
+    repo.store(second, safe=True)
+
+    ds = Dataset()
+    ds.QueryRetrieveLevel = "SERIES"
+    ds.StudyInstanceUID = ""
+    ds.SeriesInstanceUID = ""
+    result = repo.find_page(
+        ds,
+        StudyRootQueryRetrieveInformationModelFind,
+        dedup_col="series_instance_uid",
+        offset=0,
+        limit=1,
+    )
+
+    assert result.error is None
+    assert len(result.matches) == 1
 
 
 # --- eval_qr() ---

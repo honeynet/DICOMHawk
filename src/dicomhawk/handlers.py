@@ -56,8 +56,7 @@ _ACSE_EVENTS: frozenset[EventType] = frozenset(
     }
 )
 
-# Level -> Instance column for collapsing C-FIND to one match per entity.
-# IMAGE absent: one response per instance is correct there.
+# C-FIND deduplication column; IMAGE remains one response per instance.
 _FIND_LEVEL_UID: dict[str, str] = {
     "PATIENT": "patient_id",
     "STUDY": "study_instance_uid",
@@ -92,12 +91,12 @@ def _strip_sublevel_tags(ds: Dataset, model) -> tuple[Dataset, list[str]]:
 def handle_associate(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
-    # EVT_ACSE_RECV fires for every received ACSE PDU (A-RELEASE-RQ, A-ABORT, etc.).
-    # Only log "Association Requested" for the initial A-ASSOCIATE-RQ.
+    # EVT_ACSE_RECV also fires for release and abort PDUs.
     if not isinstance(event.primitive, A_ASSOCIATE):
         return
-    # Cache now: negotiate_association() overwrites assoc.requestor.primitive later,
-    # losing the peer's version before any DIMSE handler runs.
+    if _mark_healthcheck(event, event.primitive):
+        return
+    # Negotiation overwrites this primitive before DIMSE handlers run.
     for item in event.primitive.user_information:
         if isinstance(item, ImplementationVersionNameNotification):
             v = item.implementation_version_name
@@ -119,6 +118,9 @@ def handle_associate(
 def handle_release(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
+    if _is_healthcheck(event):
+        cache.clear(event.assoc)
+        return
     bus.info(InteractionEvent(event, cache, "Association Released"))
     cache.clear(event.assoc)
 
@@ -126,6 +128,9 @@ def handle_release(
 def handle_abort(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
+    if _is_healthcheck(event):
+        cache.clear(event.assoc)
+        return
     bus.warning(
         InteractionEvent(event, cache, "Association Aborted", log_level="WARNING")
     )
@@ -135,10 +140,12 @@ def handle_abort(
 def handle_reject(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
-    # EVT_ACSE_SENT fires for every ACSE PDU we send (accept, release-RP, abort too);
-    # only log the A-ASSOCIATE-RJ. result 0x01/0x02 = rejected (0x00 = accepted).
+    # EVT_ACSE_SENT covers all ACSE PDUs; only 0x01/0x02 are rejections.
     prim = event.primitive
     if not isinstance(prim, A_ASSOCIATE) or prim.result not in (0x01, 0x02):
+        return
+    if _is_healthcheck(event):
+        cache.clear(event.assoc)
         return
     params = [
         f"Result: {prim.result_str}",
@@ -158,6 +165,28 @@ def handle_reject(
 
 
 _LOOPBACK: frozenset[str] = frozenset({"127.0.0.1", "::1"})
+_HEALTHCHECK_VERSION = "DICOMHAWK_HC"
+_HEALTHCHECK_ATTR = "_dicomhawk_healthcheck"
+
+
+def _mark_healthcheck(event: Event, primitive: A_ASSOCIATE) -> bool:
+    """Mark the loopback probe without depending on profile AE-title policy."""
+    requestor = getattr(getattr(event, "assoc", None), "requestor", None)
+    if getattr(requestor, "address", None) not in _LOOPBACK:
+        return False
+    for item in primitive.user_information:
+        if (
+            isinstance(item, ImplementationVersionNameNotification)
+            and str(item.implementation_version_name or "").strip()
+            == _HEALTHCHECK_VERSION
+        ):
+            setattr(event.assoc, _HEALTHCHECK_ATTR, True)
+            return True
+    return False
+
+
+def _is_healthcheck(event: Event) -> bool:
+    return bool(getattr(getattr(event, "assoc", None), _HEALTHCHECK_ATTR, False))
 
 
 def handle_connect(
@@ -176,7 +205,9 @@ def handle_connect(
 def handle_echo(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> QRResult:
-    bus.info(InteractionEvent(event, cache, "C-ECHO", status=QRStatus.SUCCESS))
+    # Always respond; only the healthcheck's own loopback C-ECHO is kept out of the intel log.
+    if not _is_healthcheck(event):
+        bus.info(InteractionEvent(event, cache, "C-ECHO", status=QRStatus.SUCCESS))
     yield (QRStatus.SUCCESS, None)
 
 
@@ -319,8 +350,7 @@ def handle_get(
             yield (err.status, None)
             continue
         yield (QRStatus.PENDING, res.dataset)
-        # No trailing (SUCCESS, None): C-GET is count-based — it completes when the yielded
-        # sub-operations match the count, and an extra yield only logs a warning.
+        # C-GET completes when yielded sub-operations reach the declared count.
 
 
 def handle_move(
@@ -384,6 +414,16 @@ def handle_store(
                 session_parameters=[f"Size check error: {exc}"],
                 status=QRStatus.FAILURE,
                 log_level="ERROR",
+                artifact={
+                    "filename": None,
+                    "bytes": None,
+                    "sha256": None,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": None,
+                    "captured": False,
+                    "disposition": "rejected",
+                    "reject_reason": f"Size check error: {exc}",
+                },
             )
         )
         yield (QRStatus.FAILURE, None)
@@ -397,6 +437,16 @@ def handle_store(
                 session_parameters=[f"Rejected size: {request_bytes} bytes"],
                 status=QRStatus.STORE_ERROR,
                 log_level="ERROR",
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": None,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": str(event.request.AffectedSOPClassUID),
+                    "captured": False,
+                    "disposition": "rejected",
+                    "reject_reason": "Configured size limit exceeded",
+                },
             )
         )
         yield (QRStatus.STORE_ERROR, None)
@@ -412,6 +462,16 @@ def handle_store(
                 session_parameters=[f"Hash error: {exc}"],
                 status=QRStatus.FAILURE,
                 log_level="ERROR",
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": None,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": str(event.request.AffectedSOPClassUID),
+                    "captured": False,
+                    "disposition": "rejected",
+                    "reject_reason": f"Hash error: {exc}",
+                },
             )
         )
         yield (QRStatus.FAILURE, None)
@@ -428,6 +488,16 @@ def handle_store(
                 session_parameters=[f"Dataset error: {exc}"],
                 status=QRStatus.FAILURE,
                 log_level="ERROR",
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": file_hash,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": str(event.request.AffectedSOPClassUID),
+                    "captured": False,
+                    "disposition": "rejected",
+                    "reject_reason": f"Dataset error: {exc}",
+                },
             )
         )
         yield (QRStatus.FAILURE, None)
@@ -445,6 +515,19 @@ def handle_store(
                 ],
                 status=err.status,
                 log_level="ERROR",
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": file_hash,
+                    "sop_instance_uid": str(getattr(ds, "SOPInstanceUID", "")) or None,
+                    "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
+                    or str(event.request.AffectedSOPClassUID),
+                    "captured": not err.error.startswith(
+                        "Failed to quarantine incoming payload"
+                    ),
+                    "disposition": "rejected",
+                    "reject_reason": err.error,
+                },
             )
         )
         yield (err.status, None)
@@ -466,6 +549,17 @@ def handle_store(
                 session_parameters=params,
                 status=QRStatus.SUCCESS,
                 log_level="WARNING",
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": file_hash,
+                    "sop_instance_uid": str(ds.SOPInstanceUID),
+                    "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
+                    or str(event.request.AffectedSOPClassUID),
+                    "captured": True,
+                    "disposition": "stored-unindexed",
+                    "reject_reason": None,
+                },
             )
         )
     else:
@@ -476,13 +570,23 @@ def handle_store(
                 "C-STORE",
                 session_parameters=params,
                 status=QRStatus.SUCCESS,
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": file_hash,
+                    "sop_instance_uid": str(ds.SOPInstanceUID),
+                    "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
+                    or str(event.request.AffectedSOPClassUID),
+                    "captured": True,
+                    "disposition": "stored",
+                    "reject_reason": None,
+                },
             )
         )
     yield (QRStatus.SUCCESS, None)
 
 
-# Binders adapt our (repo, bus, cache, event) handlers to pynetdicom's (event, *args)
-# callback signature; they split on ACSE (no return) vs QR (generator) vs simple DIMSE (status int).
+# Adapt internal handlers to pynetdicom's callback signatures.
 
 
 def bind_acse(

@@ -75,3 +75,53 @@ def test_web_component_stop_closes_both_servers(monkeypatch, tmp_path):
     assert all(server.closed for server in active)
     assert all(server.task_dispatcher.shutdown_called for server in active)
     component.stop()  # idempotent
+
+
+def test_web_component_cleans_up_if_thread_start_fails(monkeypatch, tmp_path):
+    servers = [_FakeServer(), _FakeServer()]
+    monkeypatch.setattr(
+        "web.component.waitress.create_server", lambda *_args, **_kwargs: servers.pop(0)
+    )
+
+    class FakeThread:
+        starts = 0
+
+        def __init__(self, target, **_kwargs):
+            self.target = target
+
+        def start(self):
+            FakeThread.starts += 1
+            if FakeThread.starts == 2:
+                raise RuntimeError("thread resources exhausted")
+
+        def is_alive(self):
+            return False
+
+    monkeypatch.setattr("web.component.threading.Thread", FakeThread)
+    component = _component(tmp_path)
+    with pytest.raises(RuntimeError, match="resources exhausted"):
+        component.start()
+    assert component._servers == []
+
+
+def test_trusted_proxy_applies_only_to_attacker_facing_server(monkeypatch, tmp_path):
+    calls = []
+
+    def create_server(*_args, **kwargs):
+        calls.append(kwargs)
+        return _FakeServer()
+
+    monkeypatch.setattr("web.component.waitress.create_server", create_server)
+    component = _component(tmp_path)
+    component.trusted_proxy = "192.0.2.10"
+    component.start()
+    component.stop()
+
+    assert calls[0]["trusted_proxy"] == "192.0.2.10"
+    assert calls[0]["trusted_proxy_headers"] == {
+        "x-forwarded-for",
+        "x-forwarded-host",
+        "x-forwarded-port",
+        "x-forwarded-proto",
+    }
+    assert "trusted_proxy" not in calls[1]

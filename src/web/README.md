@@ -2,7 +2,7 @@
 
 `web.app` is the shared attacker-facing Flask engine. It does not contain a vendor
 identity: routes, cookies, response headers, templates, assets, OIDC values, honeytraps,
-and text all come from the active `ProfileConfig`. The read-only operator API is a
+and text all come from the active `ProfileConfig`. The read-only operator dashboard/API is a
 separate Flask app bound to loopback by default.
 
 Use the normal command rather than running this package directly:
@@ -49,7 +49,8 @@ from throwing a console-visible `ReferenceError` on the built-in HTTP listener.
 
 Waitress provides HTTP/1.1. For a public vendor-profile deployment, terminate TLS at a
 reverse proxy on the expected external port, set `DICOMHAWK_PUBLIC_BASE_URL` so OIDC
-redirect URIs retain the public HTTPS origin, and do not publish the operator API.
+redirect URIs retain the public HTTPS origin, and do not publish the operator surface. If it must
+be reachable beyond loopback, explicitly allow the remote bind and configure an operator token.
 Presenting `:8080` plaintext as the final endpoint is a protocol/port fingerprint.
 
 The component creates both listening sockets before starting their threads. A bind

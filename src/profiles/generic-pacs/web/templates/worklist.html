@@ -40,11 +40,13 @@
         tr:nth-child(even) {
             background-color: #f9fbfd;
         }
+        .back { color: #007bff; text-decoration: none; }
     </style>
     {{ fingerprint_seam|safe }}
 </head>
 <body>
     <div class="container">
+        {% if browse %}<a class="back" href="{{ routes.console }}">&larr; Console</a>{% endif %}
         <h1>Worklist</h1>
         <table>
             <thead>

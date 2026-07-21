@@ -1,13 +1,17 @@
-"""Generic, profile-driven Flask engine serving a profile's web assets from src/profiles/<name>/web/; captures credentials and always fails auth unless grant_access is set."""
+"""Profile-driven attacker-facing web application."""
 
 import base64
+import hashlib
 import json
 import logging
 import os
 import secrets
+import threading
+import time
 import uuid
+from io import BytesIO
 from logging import Logger
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from flask import (
     Flask,
@@ -20,7 +24,9 @@ from flask import (
     send_from_directory,
     url_for,
 )
+from pydicom import dcmread
 from pydicom.dataset import Dataset
+from pydicom.uid import UID
 from pynetdicom.sop_class import StudyRootQueryRetrieveInformationModelFind
 from werkzeug.serving import WSGIRequestHandler
 
@@ -31,6 +37,9 @@ from profiles.profile import ProfileConfig
 
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOG_FIELD_LIMIT = 4096
+_WEB_SESSION_TTL_SECONDS = 8 * 60 * 60
+_WEB_MAX_SESSIONS = 10_000
+_BROWSE_MAX_OFFSET = 20_000
 
 
 def _web():
@@ -100,8 +109,7 @@ def _login_context(signin, error_message=""):
         "login_url": login_url,
         "antiforgery_token": antiforgery,
         "antiforgery_name": web.cookies["antiforgery"],
-        # This JSON is embedded in a script element. Escaping HTML-significant
-        # characters prevents a hostile signin value from closing that element.
+        # Prevent a hostile signin value from closing the script element.
         "model_json": json.dumps(model)
         .replace("<", "\\u003c")
         .replace(">", "\\u003e")
@@ -112,8 +120,7 @@ def _login_context(signin, error_message=""):
         "license_issued": str(web.license["issued"]),
         "winlogin_url": _winlogin_url(),
         "forgot_url": web.routes["forgot_password"],
-        # Plain top-level value alongside model_json's copy — Fujifilm's AngularJS
-        # login.html parses model_json client-side; a plainer template can just use this.
+        # Plain templates use this instead of parsing Fujifilm's model_json.
         "error_message": error_message,
         # Discoverable hint for the first honey credential, if any (design ref: v2.0's login.html).
         "honey_hint": (
@@ -189,7 +196,12 @@ def _bounded(value):
 
 def _http_session_id():
     web = _web()
-    token = request.args.get("signin") or request.cookies.get(web.cookies["session"])
+    signin = request.args.get("signin")
+    session = request.cookies.get(web.cookies["session"])
+    # Correlate authenticated requests without writing the bearer token itself to logs.
+    token = signin or (
+        hashlib.sha256(session.encode()).hexdigest()[:24] if session else None
+    )
     return "web-" + _bounded(token or request.remote_addr or "unknown")
 
 
@@ -206,6 +218,7 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
             session_id=_http_session_id(),
             ip=request.remote_addr,
             port=request.environ.get("REMOTE_PORT"),
+            local_port=request.environ.get("SERVER_PORT"),
             session_parameters=params,
             log_level="WARNING",
             method=request.method,
@@ -215,31 +228,76 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
     )
 
 
-def _log_probe(request_type):
-    """Log a bare honeytrap/scan hit (no credentials involved), same channel=WEB path as _capture."""
-    current_app.config["BUS"].info(
+def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifact=None):
+    """Log a bare honeytrap/scan/browse hit (no credentials), same channel=WEB path as _capture."""
+    log = current_app.config["BUS"]
+    emit = log.warning if level == "WARNING" else log.info
+    emit(
         InteractionEvent.from_http(
             "WEB",
             request_type,
             session_id=_http_session_id(),
             ip=request.remote_addr,
             port=request.environ.get("REMOTE_PORT"),
-            log_level="INFO",
+            local_port=request.environ.get("SERVER_PORT"),
+            session_parameters=params,
+            matches=matches,
+            log_level=level,
             method=request.method,
             path=_bounded(request.full_path.rstrip("?")),
             user_agent=_bounded(request.headers.get("User-Agent", "")),
+            artifact=artifact,
         )
     )
 
 
+def _issue_session() -> str:
+    token = _protected_blob(32)
+    now = time.monotonic()
+    sessions: dict[str, float] = current_app.config["WEB_SESSIONS"]
+    lock: threading.Lock = current_app.config["WEB_SESSIONS_LOCK"]
+    with lock:
+        for expired in [key for key, deadline in sessions.items() if deadline <= now]:
+            sessions.pop(expired, None)
+        while len(sessions) >= _WEB_MAX_SESSIONS:
+            sessions.pop(next(iter(sessions)))
+        sessions[token] = now + _WEB_SESSION_TTL_SECONDS
+    return token
+
+
+def _session_ok() -> bool:
+    token = request.cookies.get(_web().cookies["session"])
+    if not token:
+        return False
+    sessions: dict[str, float] = current_app.config["WEB_SESSIONS"]
+    lock: threading.Lock = current_app.config["WEB_SESSIONS_LOCK"]
+    with lock:
+        deadline = sessions.get(token)
+        if deadline is None:
+            return False
+        if deadline <= time.monotonic():
+            sessions.pop(token, None)
+            return False
+    return True
+
+
+def _revoke_session() -> None:
+    token = request.cookies.get(_web().cookies["session"])
+    if not token:
+        return
+    with current_app.config["WEB_SESSIONS_LOCK"]:
+        current_app.config["WEB_SESSIONS"].pop(token, None)
+
+
 def _grant():
-    """Grant response: redirect into the decoy worklist with the session cookie set."""
+    """Grant response: redirect into the decoy landing (browse console if enabled) with the session cookie set."""
     web = _web()
-    resp = make_response(redirect(web.routes["worklist"], code=302))
+    landing = web.routes["console"] if web.browse else web.routes["worklist"]
+    resp = make_response(redirect(landing, code=302))
     secure = web.secure_cookies or request.is_secure
     resp.set_cookie(
         web.cookies["session"],
-        _protected_blob(32),
+        _issue_session(),
         secure=secure,
         httponly=True,
         samesite="None" if secure else "Lax",
@@ -293,6 +351,12 @@ def _worklist_studies():
 def _make_nonce():
     # Per-request CSP nonce, shared with the inline <script> tags.
     g.csp_nonce = secrets.token_urlsafe(16)
+
+
+def _apply_request_limit():
+    web = _web()
+    if web.browse and request.method == "POST" and request.path == web.routes["upload"]:
+        request.max_content_length = web.upload_max_request_bytes
 
 
 def _inject_context():
@@ -364,8 +428,7 @@ def _honeytrap_view(response_kind):
 
 
 def _iis_404(err):
-    # Any unmapped path is itself a signal (a scanner walking the tree); log it and
-    # don't leak a Werkzeug default error page under the spoofed IIS identity.
+    # Log scans and hide Werkzeug's default page behind the spoofed identity.
     _log_probe("WEB_404")
     return ("404 - Not Found", 404, {"Content-Type": "text/plain"})
 
@@ -384,21 +447,375 @@ def root():
 
 
 def entry():
-    # The application launch URL performs sign-on discovery; the authenticated
-    # shell itself lives under WorkflowUI on the Fujifilm profile.
+    # Fujifilm launches the authenticated shell under WorkflowUI.
     web = _web()
-    if request.cookies.get(web.cookies["session"]):
-        return redirect(web.routes["worklist"], code=302)
+    if _session_ok():
+        landing = web.routes["console"] if web.browse else web.routes["worklist"]
+        return redirect(landing, code=302)
     signin = secrets.token_hex(16)
     return redirect(f"{web.routes['login']}?signin={signin}", code=302)
 
 
 def worklist(subpath=None):
     web = _web()
-    if not request.cookies.get(web.cookies["session"]):
+    if not _session_ok():
         return redirect(web.routes["entry"], code=302)
     _log_probe("WEB_WORKLIST_VIEW")
-    return render_template("worklist.html", studies=_worklist_studies())
+    return render_template(
+        "worklist.html",
+        studies=_worklist_studies(),
+        routes=web.routes,
+        browse=web.browse,
+    )
+
+
+# --- Browse console (profiles with web.browse; every view is session-gated) ---
+
+# Study Root has no PATIENT level, so patients query STUDY and deduplicate by patient.
+_BROWSE_LEVELS = {
+    "patients": ("STUDY", ("PatientID", "PatientName"), "patient_id"),
+    "studies": (
+        "STUDY",
+        (
+            "PatientID",
+            "PatientName",
+            "StudyInstanceUID",
+            "StudyDate",
+            "StudyTime",
+            "AccessionNumber",
+            "StudyID",
+        ),
+        "study_instance_uid",
+    ),
+    "series": (
+        "SERIES",
+        (
+            "PatientName",
+            "StudyInstanceUID",
+            "SeriesInstanceUID",
+            "Modality",
+            "SeriesNumber",
+        ),
+        "series_instance_uid",
+    ),
+    "instances": (
+        "IMAGE",
+        (
+            "PatientID",
+            "PatientName",
+            "StudyInstanceUID",
+            "SeriesInstanceUID",
+            "SOPInstanceUID",
+            "SOPClassUID",
+            "Modality",
+            "InstanceNumber",
+        ),
+        "sop_instance_uid",
+    ),
+}
+
+
+def _page_number() -> int:
+    try:
+        max_page = (_BROWSE_MAX_OFFSET // _web().browse_page_size) + 1
+        return max(1, min(int(request.args.get("page", "1")), max_page))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _page_url(page: int) -> str:
+    args = request.args.to_dict(flat=True)
+    args["page"] = str(page)
+    return f"{request.path}?{urlencode(args)}"
+
+
+def _browse_rows(level, keys, dedup_col, page, match=None):
+    """Rows for a browse level via repo.find(), deduped by the level's UID (as handle_find does)."""
+    repo: Repository = current_app.config["REPO"]
+    model = StudyRootQueryRetrieveInformationModelFind
+    ds = Dataset()
+    ds.QueryRetrieveLevel = level
+    for kw in keys:
+        setattr(ds, kw, "")
+    for kw, val in (match or {}).items():
+        setattr(ds, kw, val)
+    page_size = _web().browse_page_size
+    result = repo.find_page(
+        ds,
+        model,
+        dedup_col=dedup_col,
+        offset=(page - 1) * page_size,
+        limit=page_size + 1,
+    )
+    if result.error is not None:
+        return [], False, result.error.error
+    seen, rows = set(), []
+    for m in result.matches[:page_size]:
+        uid = getattr(m, dedup_col, None)
+        if uid in seen:
+            continue
+        seen.add(uid)
+        idt = m.as_identifier(ds, model)
+        rows.append({kw: str(getattr(idt, kw, "") or "") for kw in keys})
+    return rows, len(result.matches) > page_size, None
+
+
+def _render_browse(title, keys, rows, page, has_next, *, query=None):
+    return render_template(
+        "browse.html",
+        title=title,
+        columns=keys,
+        rows=rows,
+        routes=_web().routes,
+        query=query,
+        page=page,
+        prev_url=_page_url(page - 1) if page > 1 else None,
+        next_url=_page_url(page + 1) if has_next else None,
+    )
+
+
+def console():
+    if not _session_ok():
+        return redirect(_web().routes["entry"], code=302)
+    _log_probe("WEB_CONSOLE_VIEW")
+    return render_template("console.html", routes=_web().routes)
+
+
+def browse_level(level):
+    if not _session_ok():
+        return redirect(_web().routes["entry"], code=302)
+    qr_level, keys, dedup = _BROWSE_LEVELS[level]
+    page = _page_number()
+    rows, has_next, error = _browse_rows(qr_level, keys, dedup, page)
+    params = [f"Page: {page}"]
+    if error:
+        params.append(f"Error: {_bounded(error)}")
+    _log_probe(
+        f"WEB_BROWSE_{level.upper()}",
+        params=params,
+        matches=len(rows),
+        level="WARNING" if error else "INFO",
+    )
+    return _render_browse(level.capitalize(), keys, rows, page, has_next)
+
+
+def patients():
+    return browse_level("patients")
+
+
+def studies():
+    return browse_level("studies")
+
+
+def series():
+    return browse_level("series")
+
+
+def instances():
+    return browse_level("instances")
+
+
+def search():
+    if not _session_ok():
+        return redirect(_web().routes["entry"], code=302)
+    field = "id" if request.args.get("searchType") == "id" else "name"
+    query = _bounded(request.args.get("q", "").strip())
+    qr_level, keys, dedup = _BROWSE_LEVELS["instances"]
+    match = {"PatientID" if field == "id" else "PatientName": query} if query else None
+    page = _page_number()
+    rows, has_next, error = (
+        _browse_rows(qr_level, keys, dedup, page, match=match)
+        if query
+        else ([], False, None)
+    )
+    params = [f"By: {field}", f"Query: {query}", f"Page: {page}"]
+    if error:
+        params.append(f"Error: {_bounded(error)}")
+    _log_probe(
+        "WEB_SEARCH",
+        params=params,
+        matches=len(rows),
+        level="WARNING" if error else "INFO",
+    )
+    return _render_browse("Search results", keys, rows, page, has_next, query=query)
+
+
+def upload_get():
+    if not _session_ok():
+        return redirect(_web().routes["entry"], code=302)
+    _log_probe("WEB_UPLOAD_VIEW")
+    return render_template(
+        "upload.html",
+        message=None,
+        routes=_web().routes,
+        max_files=_web().upload_max_files,
+    )
+
+
+def _capture_rejected_upload(repo: Repository, raw: bytes) -> str | None:
+    try:
+        repo.storage.capture(raw, suffix=".web-upload")
+    except Exception as exc:
+        return str(exc)
+    return None
+
+
+def _validate_upload_dataset(ds: Dataset) -> str:
+    try:
+        sop_class = str(ds.SOPClassUID)
+        sop_instance = str(ds.SOPInstanceUID)
+        file_class = str(ds.file_meta.MediaStorageSOPClassUID)
+        file_instance = str(ds.file_meta.MediaStorageSOPInstanceUID)
+        transfer_syntax = str(ds.file_meta.TransferSyntaxUID)
+    except (AttributeError, TypeError) as exc:
+        raise ValueError("Part-10 identity or transfer syntax is missing") from exc
+    if sop_class != file_class or sop_instance != file_instance:
+        raise ValueError("File-meta and dataset SOP identity do not match")
+    required = ("PatientID", "StudyInstanceUID", "SeriesInstanceUID")
+    if any(not str(getattr(ds, keyword, "")) for keyword in required):
+        raise ValueError("Required patient/study/series identity is missing")
+    uid_values = (
+        sop_class,
+        sop_instance,
+        str(ds.StudyInstanceUID),
+        str(ds.SeriesInstanceUID),
+        transfer_syntax,
+    )
+    if any(not UID(value).is_valid for value in uid_values):
+        raise ValueError("Object contains an invalid DICOM UID")
+    allowed = current_app.config["WEB_STORAGE_CLASSES"].get(sop_class)
+    if allowed is None:
+        raise LookupError("SOP Class is not supported")
+    if transfer_syntax not in allowed:
+        raise LookupError("Transfer Syntax is not supported for this SOP Class")
+    return sop_instance
+
+
+def upload_post():
+    if not _session_ok():
+        return redirect(_web().routes["entry"], code=302)
+    repo: Repository = current_app.config["REPO"]
+    files = request.files.getlist("dicomFiles")
+    max_files = _web().upload_max_files
+    omitted = max(0, len(files) - max_files)
+    stored, failed = 0, omitted
+    if omitted:
+        _log_probe(
+            "WEB_UPLOAD_LIMIT",
+            params=[f"Submitted: {len(files)}", f"Rejected: {omitted}"],
+            matches=0,
+            level="WARNING",
+        )
+        for f in files[max_files:]:
+            raw = f.stream.read()
+            digest = hashlib.sha256(raw).hexdigest()
+            capture_error = _capture_rejected_upload(repo, raw)
+            params = [
+                f"File: {_bounded(f.filename)}",
+                f"Bytes: {len(raw)}",
+                f"SHA256: {digest}",
+                "Rejected: file-count limit",
+            ]
+            if capture_error:
+                params.append(f"Capture failure: {_bounded(capture_error)}")
+            _log_probe(
+                "WEB_UPLOAD",
+                params=params,
+                matches=0,
+                level="WARNING",
+                artifact={
+                    "filename": _bounded(f.filename),
+                    "bytes": len(raw),
+                    "sha256": digest,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": None,
+                    "captured": capture_error is None,
+                    "disposition": "rejected",
+                    "reject_reason": "file-count limit",
+                },
+            )
+    seen_sops = set()
+    for f in files[:max_files]:
+        raw = f.stream.read()
+        digest = hashlib.sha256(raw).hexdigest()
+        base_params = [
+            f"File: {_bounded(f.filename)}",
+            f"Bytes: {len(raw)}",
+            f"SHA256: {digest}",
+        ]
+        try:
+            ds = dcmread(BytesIO(raw))
+            sop = _validate_upload_dataset(ds)
+            if sop in seen_sops:
+                raise ValueError("Duplicate SOP Instance in one request")
+            seen_sops.add(sop)
+        except Exception as exc:
+            failed += 1
+            capture_error = _capture_rejected_upload(repo, raw)
+            params = base_params + [f"Rejected: {_bounded(exc)}"]
+            if capture_error:
+                params.append(f"Capture failure: {_bounded(capture_error)}")
+            _log_probe(
+                "WEB_UPLOAD",
+                params=params,
+                matches=0,
+                level="WARNING",
+                artifact={
+                    "filename": _bounded(f.filename),
+                    "bytes": len(raw),
+                    "sha256": digest,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": None,
+                    "captured": capture_error is None,
+                    "disposition": "rejected",
+                    "reject_reason": _bounded(exc),
+                },
+            )
+            continue
+        # safe=False -> quarantined; raw_bytes preserves the exact attacker payload.
+        err = repo.store(ds, raw_bytes=raw)
+        if err is None:
+            stored += 1
+        else:
+            failed += 1
+        _log_probe(
+            "WEB_UPLOAD",
+            params=base_params
+            + [f"SOPInstanceUID: {_bounded(sop)}"]
+            + ([f"Rejected: {_bounded(err.error)}"] if err else []),
+            matches=1 if err is None else 0,
+            level="WARNING" if err else "INFO",
+            artifact={
+                "filename": _bounded(f.filename),
+                "bytes": len(raw),
+                "sha256": digest,
+                "sop_instance_uid": _bounded(sop),
+                "sop_class_uid": _bounded(ds.SOPClassUID),
+                "captured": err is None
+                or not err.error.startswith("Failed to quarantine incoming payload"),
+                "disposition": "rejected" if err else "stored",
+                "reject_reason": _bounded(err.error) if err else None,
+            },
+        )
+    message = (
+        f"{stored} file(s) received, {failed} rejected."
+        if (stored or failed)
+        else "No files received."
+    )
+    return render_template(
+        "upload.html",
+        message=message,
+        routes=_web().routes,
+        max_files=max_files,
+    )
+
+
+def logout():
+    _log_probe("WEB_LOGOUT")
+    _revoke_session()
+    resp = make_response(redirect(_web().routes["entry"], code=302))
+    resp.delete_cookie(_web().cookies["session"], path="/")
+    return resp
 
 
 def login_get():
@@ -558,7 +975,14 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
     app.config["WEB"] = profile.web
     app.config["BUS"] = bus
     app.config["REPO"] = repo
+    app.config["WEB_SESSIONS"] = {}
+    app.config["WEB_SESSIONS_LOCK"] = threading.Lock()
+    app.config["WEB_STORAGE_CLASSES"] = {
+        sop: set(syntaxes) for sop, syntaxes in profile.dicom.storage_classes
+    }
     app.config["MAX_CONTENT_LENGTH"] = profile.web.max_request_bytes
+    app.config["MAX_FORM_PARTS"] = profile.web.upload_max_files + 10
+    app.before_request(_apply_request_limit)
     app.before_request(_make_nonce)
     app.context_processor(_inject_context)
     app.after_request(_spoof)
@@ -567,8 +991,7 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
     app.register_error_handler(500, _synapse_500)
 
     routes = profile.web.routes
-    # Every route is registered per-profile from its own web.routes — nothing here is a
-    # fixed path, so one profile's identity can never leak into another's address bar.
+    # Profile-owned paths prevent vendor identities leaking between profiles.
     app.add_url_rule("/", "root", root)
     app.add_url_rule("/favicon.ico", "favicon", favicon)
     app.add_url_rule("/robots.txt", "robots_txt", robots_txt)
@@ -602,6 +1025,18 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
         forgot_password_post,
         methods=["POST"],
     )
+
+    # Capture-only profiles do not register browse routes.
+    if profile.web.browse:
+        app.add_url_rule(routes["console"], "console", console)
+        app.add_url_rule(routes["patients"], "patients", patients)
+        app.add_url_rule(routes["studies"], "studies", studies)
+        app.add_url_rule(routes["series"], "series", series)
+        app.add_url_rule(routes["instances"], "instances", instances)
+        app.add_url_rule(routes["search"], "search", search, methods=["GET"])
+        app.add_url_rule(routes["upload"], "upload_get", upload_get, methods=["GET"])
+        app.add_url_rule(routes["upload"], "upload_post", upload_post, methods=["POST"])
+        app.add_url_rule(routes["logout"], "logout", logout, methods=["POST"])
 
     # Per-profile data, not engine code — a profile with none stays a plain 404 via _iis_404 above.
     for i, (path, kind) in enumerate(profile.web.honeytraps):

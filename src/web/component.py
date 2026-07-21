@@ -8,13 +8,70 @@ from dicomhawk.repository import Repository
 from profiles.profile import ProfileConfig
 
 from .app import new_web
+from .dicomweb import new_dicomweb
 from .operator_api import new_operator_api
 
 logger = logging.getLogger(__name__)
 
 
+def _build_servers(specs, trusted_proxy=None):
+    servers, threads = [], []
+    try:
+        for name, app, host, port, max_body, proxied in specs:
+            proxy_options = {}
+            if proxied and trusted_proxy:
+                proxy_options = {
+                    "trusted_proxy": trusted_proxy,
+                    "trusted_proxy_count": 1,
+                    "trusted_proxy_headers": {
+                        "x-forwarded-for",
+                        "x-forwarded-host",
+                        "x-forwarded-port",
+                        "x-forwarded-proto",
+                    },
+                    "clear_untrusted_proxy_headers": True,
+                }
+            server = waitress.create_server(
+                app,
+                host=host,
+                port=port,
+                max_request_body_size=max_body,
+                **proxy_options,
+            )
+            servers.append(server)
+            threads.append(
+                threading.Thread(
+                    target=server.run, daemon=True, name=f"dicomhawk-{name}"
+                )
+            )
+    except Exception:
+        _stop_servers(servers, threads)
+        raise
+    try:
+        for thread in threads:
+            thread.start()
+    except Exception:
+        _stop_servers(servers, threads)
+        raise
+    return servers, threads
+
+
+def _stop_servers(servers, threads):
+    for server in servers:
+        try:
+            server.close()
+            server.task_dispatcher.shutdown(cancel_pending=True, timeout=5)
+        except Exception:
+            logger.exception("Failed stopping a web listener")
+    for thread in threads:
+        if thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=5)
+    servers.clear()
+    threads.clear()
+
+
 class WebComponent(Component):
-    """Attacker-facing and loopback operator apps with explicit server lifecycles."""
+    """Run the attacker and operator HTTP servers."""
 
     def __init__(
         self,
@@ -25,6 +82,8 @@ class WebComponent(Component):
         web_port: int,
         operator_port: int,
         operator_host: str = "127.0.0.1",
+        operator_token: str | None = None,
+        trusted_proxy: str | None = None,
     ):
         self.profile = profile
         self.repo = repo
@@ -33,6 +92,8 @@ class WebComponent(Component):
         self.web_port = web_port
         self.operator_port = operator_port
         self.operator_host = operator_host
+        self.operator_token = operator_token
+        self.trusted_proxy = trusted_proxy
         self._servers = []
         self._threads: list[threading.Thread] = []
 
@@ -40,7 +101,7 @@ class WebComponent(Component):
         if self._servers:
             return
         web_app = new_web(self.profile, self.repo, self.bus)
-        operator_app = new_operator_api(self.profile, self.repo, self.bus)
+        operator_app = new_operator_api(self.profile, self.bus, self.operator_token)
         specs = (
             (
                 "web",
@@ -48,6 +109,7 @@ class WebComponent(Component):
                 self.host,
                 self.web_port,
                 self.profile.web.max_request_bytes,
+                True,
             ),
             (
                 "operator",
@@ -55,42 +117,59 @@ class WebComponent(Component):
                 self.operator_host,
                 self.operator_port,
                 1_048_576,
+                False,
             ),
         )
-        try:
-            for name, app, host, port, max_body in specs:
-                server = waitress.create_server(
-                    app,
-                    host=host,
-                    port=port,
-                    max_request_body_size=max_body,
-                )
-                self._servers.append(server)
-                self._threads.append(
-                    threading.Thread(
-                        target=server.run,
-                        daemon=True,
-                        name=f"dicomhawk-{name}",
-                    )
-                )
-        except Exception:
-            self.stop()
-            raise
-        for thread in self._threads:
-            thread.start()
+        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
         logger.info(
             f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}"
         )
 
     def stop(self) -> None:
-        for server in self._servers:
-            server.close()
-            server.task_dispatcher.shutdown(cancel_pending=True, timeout=5)
-        for thread in self._threads:
-            if thread.is_alive() and thread is not threading.current_thread():
-                thread.join(timeout=5)
-        self._servers.clear()
-        self._threads.clear()
+        _stop_servers(self._servers, self._threads)
+
+
+class DicomWebComponent(Component):
+    """Run one server per profile DICOMweb port."""
+
+    def __init__(
+        self,
+        profile: ProfileConfig,
+        repo: Repository,
+        bus: logging.Logger,
+        host: str,
+        trusted_proxy: str | None = None,
+    ):
+        self.profile = profile
+        self.repo = repo
+        self.bus = bus
+        self.host = host
+        self.trusted_proxy = trusted_proxy
+        self._servers = []
+        self._threads: list[threading.Thread] = []
+
+    def start(self) -> None:
+        if self._servers:
+            return
+        apps = new_dicomweb(self.profile, self.repo, self.bus)
+        specs = [
+            (
+                f"dicomweb-{port}",
+                app,
+                self.host,
+                port,
+                app.config["MAX_CONTENT_LENGTH"],
+                True,
+            )
+            for port, app in apps.items()
+        ]
+        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
+        logger.info(
+            "DICOMweb: " + ", ".join(f"{self.host}:{port}" for port in sorted(apps))
+        )
+
+    def stop(self) -> None:
+        _stop_servers(self._servers, self._threads)
 
 
 def new_web_component(
@@ -101,7 +180,27 @@ def new_web_component(
     web_port: int,
     operator_port: int,
     operator_host: str = "127.0.0.1",
+    operator_token: str | None = None,
+    trusted_proxy: str | None = None,
 ) -> WebComponent:
     return WebComponent(
-        profile, repo, bus, host, web_port, operator_port, operator_host
+        profile,
+        repo,
+        bus,
+        host,
+        web_port,
+        operator_port,
+        operator_host,
+        operator_token,
+        trusted_proxy,
     )
+
+
+def new_dicomweb_component(
+    profile: ProfileConfig,
+    repo: Repository,
+    bus: logging.Logger,
+    host: str,
+    trusted_proxy: str | None = None,
+) -> DicomWebComponent:
+    return DicomWebComponent(profile, repo, bus, host, trusted_proxy)

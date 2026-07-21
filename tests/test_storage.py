@@ -64,3 +64,20 @@ def test_compress_gzips_content_under_traces_dir(storage):
     assert compressed.suffix == ".gz"
     with gzip.open(compressed, "rb") as f:
         assert f.read() == b"attacker payload bytes"
+
+
+def test_capture_preserves_exact_bytes_with_unique_names(storage):
+    first = storage.capture(b"first\x00payload", suffix=".stow")
+    second = storage.capture(b"second", suffix=".stow")
+    assert first != second
+    assert gzip.decompress(first.read_bytes()) == b"first\x00payload"
+    assert gzip.decompress(second.read_bytes()) == b"second"
+
+
+def test_capture_stream_does_not_require_buffering_whole_payload(storage):
+    with storage.capture_stream(suffix=".request") as output:
+        output.write(b"part-one")
+        output.write(b"part-two")
+    captured = list(storage.traces_dir.glob("*.request.gz"))
+    assert len(captured) == 1
+    assert gzip.decompress(captured[0].read_bytes()) == b"part-onepart-two"
