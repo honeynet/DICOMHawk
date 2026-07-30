@@ -10,6 +10,8 @@ services:
     environment:
       DICOMHAWK_PROFILE: "${DICOMHAWK_PROFILE:-}"
       DICOMHAWK_AE_TITLE: "${DICOMHAWK_AE_TITLE:-}"
+      # Writable cache on the persistent state volume (rootfs is read-only, so ~/.cache fails).
+      DICOMHAWK_CACHE_DIR: /opt/dicomhawk/state/cache
       DICOMHAWK_PORTS: "${DICOMHAWK_PORTS:-104}"
     ports:
       - "104:104"               # standard unencrypted DICOM port; use host privileges/capabilities as required

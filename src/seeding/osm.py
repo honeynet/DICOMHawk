@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -57,11 +58,14 @@ class OsmClient:
     ):
         self._city = city
         self._country = country
-        self._cache = (
-            Path(cache_path)
-            if cache_path
-            else Path.home() / ".cache" / "dicomhawk" / "osm.json"
-        )
+        # DICOMHAWK_CACHE_DIR points the cache at a writable dir when the rootfs is read-only.
+        _cache_dir = os.environ.get("DICOMHAWK_CACHE_DIR")
+        if cache_path:
+            self._cache = Path(cache_path)
+        elif _cache_dir:
+            self._cache = Path(_cache_dir) / "osm.json"
+        else:
+            self._cache = Path.home() / ".cache" / "dicomhawk" / "osm.json"
         self._timeout = timeout
         self._max_results = max_results
 

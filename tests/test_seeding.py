@@ -1,5 +1,7 @@
 import pytest
 from copy import deepcopy
+from pathlib import Path
+
 from pydicom import dcmread
 from pydicom.uid import EncapsulatedPDFStorage
 
@@ -9,6 +11,7 @@ from honeytoken.injector import new_honeytoken_injector
 from seeding.fallback import load_fallback_datasets
 from seeding.locations import load_locations
 from seeding.names import _patch_location
+from seeding.osm import OsmClient
 from seeding.seeder import new_seeder
 
 _LOCATIONS = load_locations(None)
@@ -122,3 +125,21 @@ def test_failed_tagged_store_retries_canary_on_next_instance():
     assert stored > 0
     assert flaky.tagged[:2] == [True, True]
     assert flaky.tagged.count(True) == 2
+
+
+def test_osm_cache_dir_env_redirects_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("DICOMHAWK_CACHE_DIR", str(tmp_path))
+    assert OsmClient(city="Paris", country="FR")._cache == tmp_path / "osm.json"
+
+
+def test_osm_cache_defaults_to_home_without_env(monkeypatch):
+    monkeypatch.delenv("DICOMHAWK_CACHE_DIR", raising=False)
+    assert OsmClient()._cache == Path.home() / ".cache" / "dicomhawk" / "osm.json"
+
+
+def test_osm_explicit_cache_path_overrides_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("DICOMHAWK_CACHE_DIR", str(tmp_path / "env"))
+    assert (
+        OsmClient(cache_path=str(tmp_path / "explicit.json"))._cache
+        == tmp_path / "explicit.json"
+    )
