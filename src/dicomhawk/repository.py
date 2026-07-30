@@ -1,9 +1,15 @@
 import logging
 from pathlib import Path
+from uuid import uuid4
 
 from pydicom import dcmread
-from pydicom.uid import UID
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileMetaDataset
+from pydicom.uid import (
+    ExplicitVRBigEndian,
+    ExplicitVRLittleEndian,
+    ImplicitVRLittleEndian,
+    UID,
+)
 
 from pynetdicom.events import Event
 from pynetdicom.apps.qrscp import db
@@ -211,9 +217,10 @@ class Repository:
         safe: bool = False,
         *,
         raw_bytes: bytes | None = None,
+        capture: bool = True,
     ) -> QRError | None:
         # Capture before validation so failed attacker payloads remain available.
-        if not safe:
+        if not safe and capture:
             try:
                 if raw_bytes is not None:
                     self.storage.capture(raw_bytes)
@@ -234,6 +241,10 @@ class Repository:
             return QRError(
                 "C-STORE dataset missing SOPInstanceUID", QRStatus.STORE_ERROR
             )
+        try:
+            sop_class_uid = ds.SOPClassUID
+        except AttributeError:
+            return QRError("C-STORE dataset missing SOPClassUID", QRStatus.STORE_ERROR)
 
         try:
             fpath = self.storage.path_for(safe, fname)
@@ -248,13 +259,31 @@ class Repository:
                 f"Instance already exists in storage directory: {fname}; overwriting"
             )
 
+        file_meta = getattr(ds, "file_meta", None)
+        if not isinstance(file_meta, FileMetaDataset):
+            file_meta = FileMetaDataset()
+            ds.file_meta = file_meta
+        file_meta.MediaStorageSOPClassUID = sop_class_uid
+        file_meta.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
+        if not getattr(file_meta, "TransferSyntaxUID", None):
+            if getattr(ds, "is_implicit_VR", False):
+                file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
+            elif getattr(ds, "is_little_endian", True) is False:
+                file_meta.TransferSyntaxUID = ExplicitVRBigEndian
+            else:
+                file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+
+        temporary = fpath.with_name(f".{fpath.name}.{uuid4().hex}.tmp")
         try:
-            ds.save_as(fpath, overwrite=True)
+            ds.save_as(temporary, enforce_file_format=True)
+            temporary.replace(fpath)
         except Exception as exc:
             return QRError(
                 f"Failed writing instance to storage directory: {exc}",
                 QRStatus.STORE_ERROR,
             )
+        finally:
+            temporary.unlink(missing_ok=True)
 
         # Missing identity prevents indexing, but the raw payload is already quarantined.
         missing = [kw for kw in INDEX_REQUIRED_KEYS if kw not in ds]

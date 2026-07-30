@@ -1,6 +1,8 @@
 """Handler unit tests and real loopback DIMSE integration tests."""
 
 import io
+import gzip
+import hashlib
 import json
 import logging
 import tempfile
@@ -343,6 +345,15 @@ def test_c_store_quarantines_visible_in_find_but_blocked_on_get(loopback, caplog
     assert event["artifact"]["sop_instance_uid"] == ds.SOPInstanceUID
     assert event["artifact"]["sop_class_uid"] == ds.SOPClassUID
     assert event["artifact"]["captured"] is True
+    capture = loopback.repo.storage.traces_dir / event["artifact"]["filename"]
+    raw = gzip.decompress(capture.read_bytes())
+    assert hashlib.sha256(raw).hexdigest() == event["artifact"]["sha256"]
+
+    canonical = loopback.repo.storage.quarantine_dir / str(ds.SOPInstanceUID)
+    assert canonical.read_bytes()[128:132] == b"DICM"
+    stored = dcmread(canonical)
+    assert stored.SOPInstanceUID == ds.SOPInstanceUID
+    assert stored.file_meta.TransferSyntaxUID == ExplicitVRLittleEndian
 
     find_results = list(
         assoc.send_c_find(

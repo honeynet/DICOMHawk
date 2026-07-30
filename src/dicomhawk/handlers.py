@@ -478,6 +478,35 @@ def handle_store(
         return
 
     try:
+        capture_path = repo.storage.capture_fileobj(raw)
+    except Exception as exc:
+        bus.error(
+            InteractionEvent(
+                event,
+                cache,
+                "C-STORE",
+                session_parameters=[
+                    f"SHA256: {file_hash}",
+                    f"Capture failure: {exc}",
+                ],
+                status=QRStatus.STORE_ERROR,
+                log_level="ERROR",
+                artifact={
+                    "filename": None,
+                    "bytes": request_bytes,
+                    "sha256": file_hash,
+                    "sop_instance_uid": None,
+                    "sop_class_uid": str(event.request.AffectedSOPClassUID),
+                    "captured": False,
+                    "disposition": "rejected",
+                    "reject_reason": f"Failed to quarantine incoming payload: {exc}",
+                },
+            )
+        )
+        yield (QRStatus.STORE_ERROR, None)
+        return
+
+    try:
         ds = event.dataset
     except Exception as exc:
         bus.error(
@@ -489,12 +518,12 @@ def handle_store(
                 status=QRStatus.FAILURE,
                 log_level="ERROR",
                 artifact={
-                    "filename": None,
+                    "filename": capture_path.name,
                     "bytes": request_bytes,
                     "sha256": file_hash,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
-                    "captured": False,
+                    "captured": True,
                     "disposition": "rejected",
                     "reject_reason": f"Dataset error: {exc}",
                 },
@@ -503,7 +532,7 @@ def handle_store(
         yield (QRStatus.FAILURE, None)
         return
 
-    if (err := repo.store(ds)) is not None:
+    if (err := repo.store(ds, capture=False)) is not None:
         bus.error(
             InteractionEvent(
                 event,
@@ -516,7 +545,7 @@ def handle_store(
                 status=err.status,
                 log_level="ERROR",
                 artifact={
-                    "filename": None,
+                    "filename": capture_path.name,
                     "bytes": request_bytes,
                     "sha256": file_hash,
                     "sop_instance_uid": str(getattr(ds, "SOPInstanceUID", "")) or None,
@@ -550,7 +579,7 @@ def handle_store(
                 status=QRStatus.SUCCESS,
                 log_level="WARNING",
                 artifact={
-                    "filename": None,
+                    "filename": capture_path.name,
                     "bytes": request_bytes,
                     "sha256": file_hash,
                     "sop_instance_uid": str(ds.SOPInstanceUID),
@@ -571,7 +600,7 @@ def handle_store(
                 session_parameters=params,
                 status=QRStatus.SUCCESS,
                 artifact={
-                    "filename": None,
+                    "filename": capture_path.name,
                     "bytes": request_bytes,
                     "sha256": file_hash,
                     "sop_instance_uid": str(ds.SOPInstanceUID),

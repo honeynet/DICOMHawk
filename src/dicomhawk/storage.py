@@ -3,6 +3,7 @@ import tempfile
 import gzip
 import shutil
 from io import BytesIO
+from typing import BinaryIO
 
 from pathlib import Path
 from datetime import datetime
@@ -80,6 +81,23 @@ class Storage:
         captured = self.traces_dir / filename
         with gzip.open(captured, "wb") as output:
             shutil.copyfileobj(BytesIO(payload), output)
+        return captured
+
+    def capture_fileobj(self, source: BinaryIO, suffix: str = ".dcm") -> Path:
+        """Preserve a seekable input stream without loading it all into memory."""
+        position = source.tell()
+        date_name = datetime.now().strftime("%YY%mm%dd_%HH%MM%SS")
+        filename = f"{date_name}_{uuid4().hex}{suffix}.gz"
+        captured = self.traces_dir / filename
+        try:
+            source.seek(0)
+            with gzip.open(captured, "wb") as output:
+                shutil.copyfileobj(source, output)
+        except Exception:
+            captured.unlink(missing_ok=True)
+            raise
+        finally:
+            source.seek(position)
         return captured
 
     @contextmanager

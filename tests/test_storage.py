@@ -1,4 +1,5 @@
 import gzip
+import io
 
 import pytest
 
@@ -81,3 +82,13 @@ def test_capture_stream_does_not_require_buffering_whole_payload(storage):
     captured = list(storage.traces_dir.glob("*.request.gz"))
     assert len(captured) == 1
     assert gzip.decompress(captured[0].read_bytes()) == b"part-onepart-two"
+
+
+def test_capture_fileobj_preserves_exact_bytes_and_position(storage):
+    source = io.BytesIO(b"exact\x00dimse-dataset")
+    source.seek(5)
+
+    captured = storage.capture_fileobj(source)
+
+    assert source.tell() == 5
+    assert gzip.decompress(captured.read_bytes()) == b"exact\x00dimse-dataset"

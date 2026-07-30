@@ -112,11 +112,14 @@ your profile automatically — you write templates and config, not routes:
   outcomes; `/api/events`, `/api/sessions`, and `/api/profiles` expose the underlying views.
 
 The API reads the active interaction log plus retained rotated backups (and also supports rotation
-being disabled), validates malformed JSONL records, and caches parsed events until a file changes.
-Every list endpoint accepts `?limit=` and `?offset=` and reports `X-Total-Count`; events additionally
-accept exact `?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters. Captured attacker
-credentials are shown in full — the plaintext an attacker submitted is the intelligence this
-loopback-only surface exists to expose. Responses are non-cacheable and carry a strict operator CSP.
+being disabled), validates malformed JSONL records, and streams aggregation without retaining every
+parsed event. Every list endpoint accepts `?limit=` and `?offset=` and reports `X-Total-Count`;
+offset is capped at 10,000. Attacker, credential, and session rollups are capped at 10,000 keys and
+report truncation in `X-Aggregation-Truncated` (and `/api/overview`'s `truncated` object). Events
+additionally accept exact `?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters. Captured
+attacker credentials are shown in full — the plaintext an attacker submitted is the intelligence
+this loopback-only surface exists to expose. Responses are non-cacheable and carry a strict
+operator CSP.
 
 Keep the default loopback bind on bare metal. Non-loopback binds fail closed unless
 `--allow-remote-operator` is supplied. Set `--operator-token`/`DICOMHAWK_OPERATOR_TOKEN` whenever

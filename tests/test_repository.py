@@ -66,6 +66,21 @@ def test_store_unsafe_quarantines_and_keeps_a_raw_capture(repo):
     assert any(repo.storage.traces_dir.glob("*.dcm.gz"))  # raw pre-parse forensic copy
 
 
+def test_store_writes_part10_canonical_file_atomically(repo):
+    ds = _ct_dataset()
+    ds.file_meta = FileMetaDataset()
+
+    assert repo.store(ds, safe=False) is None
+
+    path = repo.storage.quarantine_dir / str(ds.SOPInstanceUID)
+    assert path.read_bytes()[128:132] == b"DICM"
+    stored = dcmread(path)
+    assert stored.SOPInstanceUID == ds.SOPInstanceUID
+    assert stored.file_meta.MediaStorageSOPInstanceUID == ds.SOPInstanceUID
+    assert stored.file_meta.TransferSyntaxUID == ExplicitVRLittleEndian
+    assert not list(repo.storage.quarantine_dir.glob(".*.tmp"))
+
+
 def test_store_does_not_report_success_when_forensic_capture_fails(repo, monkeypatch):
     def fail_capture(*_args, **_kwargs):
         raise OSError("disk full")
@@ -83,6 +98,15 @@ def test_store_rejects_missing_sop_instance_uid(repo):
     err = repo.store(ds, safe=True)
     assert err is not None
     assert err.status == QRStatus.STORE_ERROR
+
+
+def test_store_rejects_missing_sop_class_uid(repo):
+    ds = _ct_dataset()
+    del ds.SOPClassUID
+    err = repo.store(ds, safe=True)
+    assert err is not None
+    assert err.status == QRStatus.STORE_ERROR
+    assert "SOPClassUID" in err.error
 
 
 def test_store_blocks_path_traversal_in_sop_instance_uid(repo):

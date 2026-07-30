@@ -5,7 +5,7 @@ import pytest
 from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
-from web.component import new_web_component
+from web.component import _QueueDepthFilter, new_web_component
 
 
 class _Dispatcher:
@@ -38,6 +38,37 @@ def _component(tmp_path):
         18080,
         18081,
     )
+
+
+def test_waitress_queue_filter_keeps_only_pressure_milestones():
+    now = [100.0]
+    queue_filter = _QueueDepthFilter(clock=lambda: now[0])
+    emitted = []
+    for depth in (1, 2, 4, 5, 6, 10, 11, 24, 25, 26):
+        record = logging.LogRecord(
+            "waitress.queue",
+            logging.WARNING,
+            "",
+            0,
+            "Task queue depth is %d",
+            (depth,),
+            None,
+        )
+        if queue_filter.filter(record):
+            emitted.append(depth)
+    assert emitted == [1, 5, 10, 25]
+
+    now[0] += 11
+    record = logging.LogRecord(
+        "waitress.queue",
+        logging.WARNING,
+        "",
+        0,
+        "Task queue depth is %d",
+        (2,),
+        None,
+    )
+    assert queue_filter.filter(record)
 
 
 def test_web_component_surfaces_bind_failure_and_closes_first(monkeypatch, tmp_path):

@@ -1,5 +1,7 @@
 import logging
+import re
 import threading
+import time
 
 import waitress
 
@@ -12,9 +14,56 @@ from .dicomweb import new_dicomweb
 from .operator_api import new_operator_api
 
 logger = logging.getLogger(__name__)
+_QUEUE_DEPTH = re.compile(r"^Task queue depth is (\d+)$")
+
+
+class _QueueDepthFilter(logging.Filter):
+    """Keep queue-pressure milestones without logging every queued request."""
+
+    def __init__(self, quiet_seconds: float = 10.0, clock=time.monotonic):
+        super().__init__()
+        self.quiet_seconds = quiet_seconds
+        self.clock = clock
+        self.last_seen = 0.0
+        self.next_depth = 1
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def _next_milestone(depth: int) -> int:
+        for milestone in (5, 10, 25, 50, 100):
+            if depth < milestone:
+                return milestone
+        return 2 ** depth.bit_length()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "waitress.queue":
+            return True
+        match = _QUEUE_DEPTH.match(record.getMessage())
+        if match is None:
+            return True
+        depth = int(match.group(1))
+        now = self.clock()
+        with self.lock:
+            if now - self.last_seen >= self.quiet_seconds:
+                self.next_depth = 1
+            self.last_seen = now
+            if depth < self.next_depth:
+                return False
+            self.next_depth = self._next_milestone(depth)
+            return True
+
+
+_queue_depth_filter = _QueueDepthFilter()
+
+
+def _install_waitress_queue_filter() -> None:
+    queue_logger = logging.getLogger("waitress.queue")
+    if _queue_depth_filter not in queue_logger.filters:
+        queue_logger.addFilter(_queue_depth_filter)
 
 
 def _build_servers(specs, trusted_proxy=None):
+    _install_waitress_queue_filter()
     servers, threads = [], []
     try:
         for name, app, host, port, max_body, proxied in specs:
