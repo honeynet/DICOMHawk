@@ -2,6 +2,7 @@ import gc
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from dicomhawk.bus import (
     InteractionEvent,
@@ -10,6 +11,7 @@ from dicomhawk.bus import (
     _extract_params,
     hash_request,
     new_bus,
+    new_dev_log,
     recent_events,
 )
 from dicomhawk.status import QRStatus
@@ -204,3 +206,16 @@ def test_new_bus_replaces_its_handlers_instead_of_duplicating(tmp_path):
     rotating = next(h for h in logger.handlers if isinstance(h, RotatingFileHandler))
     assert rotating.maxBytes == 50 * 1024 * 1024
     assert rotating.backupCount == 5
+
+
+def test_new_bus_silences_pynetdicoms_own_exception_tracebacks(tmp_path, capsys):
+    new_bus(str(tmp_path / "bus.log"), verbose=False)
+    logging.getLogger("pynetdicom.association").exception(ValueError("boom"))
+    assert "boom" not in capsys.readouterr().err
+
+
+def test_new_dev_log_reinstates_pynetdicom_detail_over_new_bus_default(tmp_path, capsys):
+    new_bus(str(tmp_path / "bus.log"), verbose=False)
+    new_dev_log(str(tmp_path / "dev.log"))
+    logging.getLogger("pynetdicom.association").exception(ValueError("boom"))
+    assert "boom" in Path(tmp_path / "dev.log").read_text()

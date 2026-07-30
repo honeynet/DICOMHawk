@@ -388,6 +388,13 @@ def new_bus(
         h = logging.StreamHandler(sys.stdout)
         h.setFormatter(_ConsoleFormatter(use_color=sys.stdout.isatty()))
         lg.addHandler(_owned(h))
+
+    # pynetdicom's own exception logging is redundant with our EVT_ABORTED handler; quiet by default, --dev-log-path opts back in.
+    pn = logging.getLogger("pynetdicom")
+    pn.setLevel(logging.CRITICAL)
+    pn.propagate = False
+    _remove_owned_handlers(pn)
+    pn.addHandler(_owned(logging.NullHandler()))
     return lg
 
 
