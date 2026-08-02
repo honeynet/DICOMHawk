@@ -18,7 +18,7 @@ Start the DICOM honeypot server.
 | `--log-backups` | | `5` | Number of rotated event logs to keep |
 | `--dev-log` | | | Path for Python-level warnings, errors, and pynetdicom protocol events |
 | `--web-port` | | `8080` | Port for the attacker-facing web UI (`pacs`-kind profiles with `web.enabled` only) |
-| `--operator-port` | | `8081` | Port for the read-only operator dashboard (`/`) and API (`/api/overview`, `/api/stats`, `/api/attackers`, `/api/credentials`, `/api/uploads`, `/api/events`, `/api/sessions`, `/api/profiles`) |
+| `--operator-port` | | `8081` | Port for the read-only operator dashboard (`/`) and API (`/api/overview`, `/api/stats`, `/api/attackers`, `/api/credentials`, `/api/uploads`, `/api/events`, `/api/sessions`, `/api/profiles`, `/api/artifacts`) |
 | `--operator-host` | | `127.0.0.1` | Bind address for the operator surface. A non-loopback value also requires `--allow-remote-operator`. In Docker, use `0.0.0.0`; the supplied host mapping still publishes it only on `127.0.0.1`. |
 | `--operator-token` | | *(unset)* | Optional operator password/Bearer token; also read from `DICOMHAWK_OPERATOR_TOKEN`. Browsers use Basic auth (any username), while API clients may use Basic or `Authorization: Bearer …`. |
 | `--allow-remote-operator` | | off | Explicitly permit a non-loopback operator bind. The supplied Docker configuration sets this because container loopback cannot be published; it retains a host-side loopback-only port mapping. |
@@ -26,6 +26,12 @@ Start the DICOM honeypot server.
 | `--backend-server` | | *(profile value)* | Per-deployment `X-Backendserver` value; also read from `DICOMHAWK_BACKEND_SERVER` |
 | `--public-base-url` | | *(request origin)* | External HTTP(S) origin for generated OIDC redirect URIs; also read from `DICOMHAWK_PUBLIC_BASE_URL` |
 | `--verbose` | `-v` | | Print a compact colored event summary to stdout; auto-enabled when stdout is a TTY |
+| `--analysis` / `--no-analysis` | | on | Run captured payloads through the static analysis pipeline (see [Payload analysis](./analysis.md)) |
+| `--analysis-db` | | `analysis.db` | SQLite path for the durable analysis job table; also read from `DICOMHAWK_ANALYSIS_DB` |
+| `--analysis-rules` | | *(none)* | Directory of additional operator `.yar` files, on top of the shipped starters; also read from `DICOMHAWK_ANALYSIS_RULES` |
+| `--analysis-timeout` | | `10.0` | Hard wall-clock deadline per analysis job, in seconds; also read from `DICOMHAWK_ANALYSIS_TIMEOUT` |
+| `--analysis-max-bytes` | | `67108864` | Bounded read/extraction cap per analyzed capture; also read from `DICOMHAWK_ANALYSIS_MAX_BYTES` |
+| `--analysis-queue-size` | | `256` | In-memory wake-up queue bound; the durable job table is the source of truth, not this queue; also read from `DICOMHAWK_ANALYSIS_QUEUE_SIZE` |
 
 **Profiles** decide which device the honeypot impersonates. With no `--profile`, it runs a generic default (AE title `ORTHANC`, all storage classes, no web surface). `--profile fujifilm` makes it present as a Fujifilm Synapse PACS — that device's identity, supported SOP classes, status codes, and a matching web login/worklist. `--profile generic-pacs` is a vendor-neutral second profile with the same web surface but plain, unbranded pages and generic headers — useful as a starting point for a custom profile. To impersonate a different device, write a profile YAML in the same format and pass its path — see [Adding a profile](./profiles.md) for the full schema and how to build the optional web surface.
 

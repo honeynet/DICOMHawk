@@ -33,7 +33,10 @@ from werkzeug.serving import WSGIRequestHandler
 from dicomhawk.bus import InteractionEvent
 from dicomhawk.handlers import _FIND_LEVEL_UID
 from dicomhawk.repository import Repository
+from dicomhawk.storage import ArtifactSink, SubmittedArtifact
 from profiles.profile import ProfileConfig
+
+logger = logging.getLogger(__name__)
 
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOG_FIELD_LIMIT = 4096
@@ -249,6 +252,42 @@ def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifac
             artifact=artifact,
         )
     )
+
+
+def _local_port() -> int | None:
+    try:
+        return int(request.environ.get("SERVER_PORT"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _submit_artifact(
+    capture,
+    *,
+    request_type: str,
+    disposition: str,
+    sop_class_uid: str | None = None,
+    sop_instance_uid: str | None = None,
+) -> None:
+    sink: ArtifactSink = current_app.config["ARTIFACT_SINK"]
+    try:
+        sink(
+            SubmittedArtifact(
+                capture,
+                channel="WEB",
+                request_type=request_type,
+                disposition=disposition,
+                source_encoding="part10",  # the browse upload only ever accepts .dcm Part-10 files
+                session_id=_http_session_id(),
+                ip=request.remote_addr,
+                local_port=_local_port(),
+                sop_class_uid=sop_class_uid,
+                sop_instance_uid=sop_instance_uid,
+            )
+        )
+    except Exception:
+        # Analysis must never change what the peer sees; the payload is already captured.
+        logger.exception("Artifact sink failed for %s", capture.artifact_id)
 
 
 def _issue_session() -> str:
@@ -652,12 +691,11 @@ def upload_get():
     )
 
 
-def _capture_rejected_upload(repo: Repository, raw: bytes) -> str | None:
+def _capture_rejected_upload(repo: Repository, raw: bytes):
     try:
-        repo.storage.capture(raw, suffix=".web-upload")
+        return repo.storage.capture(raw, suffix=".web-upload"), None
     except Exception as exc:
-        return str(exc)
-    return None
+        return None, str(exc)
 
 
 def _validate_upload_dataset(ds: Dataset) -> str:
@@ -709,7 +747,7 @@ def upload_post():
         for f in files[max_files:]:
             raw = f.stream.read()
             digest = hashlib.sha256(raw).hexdigest()
-            capture_error = _capture_rejected_upload(repo, raw)
+            capture, capture_error = _capture_rejected_upload(repo, raw)
             params = [
                 f"File: {_bounded(f.filename)}",
                 f"Bytes: {len(raw)}",
@@ -727,13 +765,18 @@ def upload_post():
                     "filename": _bounded(f.filename),
                     "bytes": len(raw),
                     "sha256": digest,
+                    "artifact_id": capture.artifact_id if capture else None,
                     "sop_instance_uid": None,
                     "sop_class_uid": None,
-                    "captured": capture_error is None,
+                    "captured": capture is not None,
                     "disposition": "rejected",
                     "reject_reason": "file-count limit",
                 },
             )
+            if capture is not None:
+                _submit_artifact(
+                    capture, request_type="WEB_UPLOAD", disposition="rejected"
+                )
     seen_sops = set()
     for f in files[:max_files]:
         raw = f.stream.read()
@@ -751,7 +794,7 @@ def upload_post():
             seen_sops.add(sop)
         except Exception as exc:
             failed += 1
-            capture_error = _capture_rejected_upload(repo, raw)
+            capture, capture_error = _capture_rejected_upload(repo, raw)
             params = base_params + [f"Rejected: {_bounded(exc)}"]
             if capture_error:
                 params.append(f"Capture failure: {_bounded(capture_error)}")
@@ -764,16 +807,23 @@ def upload_post():
                     "filename": _bounded(f.filename),
                     "bytes": len(raw),
                     "sha256": digest,
+                    "artifact_id": capture.artifact_id if capture else None,
                     "sop_instance_uid": None,
                     "sop_class_uid": None,
-                    "captured": capture_error is None,
+                    "captured": capture is not None,
                     "disposition": "rejected",
                     "reject_reason": _bounded(exc),
                 },
             )
+            if capture is not None:
+                _submit_artifact(
+                    capture, request_type="WEB_UPLOAD", disposition="rejected"
+                )
             continue
         # safe=False -> quarantined; raw_bytes preserves the exact attacker payload.
-        err = repo.store(ds, raw_bytes=raw)
+        part_captures = []
+        err = repo.store(ds, raw_bytes=raw, on_captured=part_captures.append)
+        part_capture = part_captures[0] if part_captures else None
         if err is None:
             stored += 1
         else:
@@ -789,14 +839,22 @@ def upload_post():
                 "filename": _bounded(f.filename),
                 "bytes": len(raw),
                 "sha256": digest,
+                "artifact_id": part_capture.artifact_id if part_capture else None,
                 "sop_instance_uid": _bounded(sop),
                 "sop_class_uid": _bounded(ds.SOPClassUID),
-                "captured": err is None
-                or not err.error.startswith("Failed to quarantine incoming payload"),
+                "captured": part_capture is not None,
                 "disposition": "rejected" if err else "stored",
                 "reject_reason": _bounded(err.error) if err else None,
             },
         )
+        if part_capture is not None:
+            _submit_artifact(
+                part_capture,
+                request_type="WEB_UPLOAD",
+                disposition="rejected" if err else "stored",
+                sop_class_uid=_bounded(ds.SOPClassUID),
+                sop_instance_uid=_bounded(sop),
+            )
     message = (
         f"{stored} file(s) received, {failed} rejected."
         if (stored or failed)
@@ -962,7 +1020,12 @@ class _SpoofHandler(WSGIRequestHandler):
         self.send_response_only(code, message)
 
 
-def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
+def new_web(
+    profile: ProfileConfig,
+    repo: Repository,
+    bus: Logger,
+    sink: ArtifactSink | None = None,
+) -> Flask:
     """Build the attacker-facing Flask app for `profile` — routes/cookies come from its own web config."""
     profile_dir = profile.web.assets_dir or os.path.join(
         _SRC, "profiles", profile.web.templates_dir, "web"
@@ -975,6 +1038,7 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
     app.config["WEB"] = profile.web
     app.config["BUS"] = bus
     app.config["REPO"] = repo
+    app.config["ARTIFACT_SINK"] = sink or (lambda _artifact: None)
     app.config["WEB_SESSIONS"] = {}
     app.config["WEB_SESSIONS_LOCK"] = threading.Lock()
     app.config["WEB_STORAGE_CLASSES"] = {

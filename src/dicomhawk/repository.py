@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
 from pydicom import dcmread
@@ -21,7 +22,7 @@ from sqlalchemy.schema import MetaData
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
 
 from .status import QRStatus
-from .storage import Storage
+from .storage import Capture, Storage
 
 logger = logging.getLogger(__name__)
 
@@ -218,12 +219,15 @@ class Repository:
         *,
         raw_bytes: bytes | None = None,
         capture: bool = True,
+        on_captured: Callable[[Capture], None] | None = None,
     ) -> QRError | None:
         # Capture before validation so failed attacker payloads remain available.
         if not safe and capture:
             try:
                 if raw_bytes is not None:
-                    self.storage.capture(raw_bytes)
+                    captured = self.storage.capture(raw_bytes)
+                    if on_captured is not None:
+                        on_captured(captured)
                 else:
                     with self.storage.temp() as tf:
                         ds.save_as(tf, enforce_file_format=False)

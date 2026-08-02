@@ -4,6 +4,8 @@ import signal
 import sys
 
 import typer
+from analysis.component import new_analysis_component
+from analysis.config import new_analysis_config
 from dicomhawk.app import new_dicomhawk
 from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.repository import new_repo
@@ -130,6 +132,41 @@ def serve(
         "-v",
         help="Print a compact colored event summary to stdout (auto-enabled when stdout is a TTY)",
     ),
+    analysis: bool = typer.Option(
+        True,
+        "--analysis/--no-analysis",
+        help="Run captured payloads through the static analysis pipeline",
+    ),
+    analysis_db: str = typer.Option(
+        "analysis.db",
+        "--analysis-db",
+        envvar="DICOMHAWK_ANALYSIS_DB",
+        help="SQLite path for the durable artifact/analysis-job table",
+    ),
+    analysis_rules: str | None = typer.Option(
+        None,
+        "--analysis-rules",
+        envvar="DICOMHAWK_ANALYSIS_RULES",
+        help="Directory of additional operator .yar files (beyond the shipped starters)",
+    ),
+    analysis_timeout: float = typer.Option(
+        10.0,
+        "--analysis-timeout",
+        envvar="DICOMHAWK_ANALYSIS_TIMEOUT",
+        help="Hard wall-clock deadline per analysis job, in seconds",
+    ),
+    analysis_max_bytes: int = typer.Option(
+        64 * 1024 * 1024,
+        "--analysis-max-bytes",
+        envvar="DICOMHAWK_ANALYSIS_MAX_BYTES",
+        help="Bounded read/extraction cap per analyzed capture",
+    ),
+    analysis_queue_size: int = typer.Option(
+        256,
+        "--analysis-queue-size",
+        envvar="DICOMHAWK_ANALYSIS_QUEUE_SIZE",
+        help="In-memory wake-up queue bound; the durable job table is the source of truth",
+    ),
 ):
 
     try:
@@ -150,6 +187,12 @@ def serve(
         raise typer.BadParameter("log-max-bytes and log-backups cannot be negative")
     if log_max_bytes and log_backups < 1:
         raise typer.BadParameter("rotating logs require at least one backup")
+    if analysis_timeout <= 0:
+        raise typer.BadParameter("analysis-timeout must be positive")
+    if analysis_max_bytes < 1:
+        raise typer.BadParameter("analysis-max-bytes must be positive")
+    if analysis_queue_size < 1:
+        raise typer.BadParameter("analysis-queue-size must be positive")
     try:
         operator_is_loopback = (
             operator_host == "localhost"
@@ -250,7 +293,29 @@ def serve(
     if trusted_proxy:
         logger.info("Trusted HTTP proxy: %s", trusted_proxy)
 
-    dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes)
+    components = []
+    sink = None
+    analysis_store = None
+    if analysis:
+        analysis_component = new_analysis_component(
+            new_analysis_config(
+                db_path=analysis_db,
+                rules_dir=analysis_rules,
+                timeout=analysis_timeout,
+                max_bytes=analysis_max_bytes,
+                queue_size=analysis_queue_size,
+            ),
+            bus,
+        )
+        # First in `components` -> starts before ingress listeners, stops after they close.
+        components.append(analysis_component)
+        sink = analysis_component.sink
+        analysis_store = analysis_component.store
+        logger.info("Analysis: enabled, rules=%s", analysis_rules or "shipped starters only")
+    else:
+        logger.info("Analysis: disabled (--no-analysis)")
+
+    dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes, sink=sink)
 
     handlers = []
     for op in prof.dicom.operations:
@@ -260,7 +325,6 @@ def serve(
         if h := dimse_fact.get(always_on):
             handlers.append(h)
 
-    components = []
     if prof.kind == "pacs" and prof.web.enabled:
         components.append(
             new_web_component(
@@ -273,11 +337,15 @@ def serve(
                 operator_host,
                 operator_token,
                 trusted_proxy,
+                sink,
+                analysis_store,
             )
         )
     # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.
     if prof.kind == "pacs" and prof.dicomweb.enabled:
-        components.append(new_dicomweb_component(prof, repo, bus, host, trusted_proxy))
+        components.append(
+            new_dicomweb_component(prof, repo, bus, host, trusted_proxy, sink)
+        )
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, components)

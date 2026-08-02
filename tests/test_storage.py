@@ -70,18 +70,31 @@ def test_compress_gzips_content_under_traces_dir(storage):
 def test_capture_preserves_exact_bytes_with_unique_names(storage):
     first = storage.capture(b"first\x00payload", suffix=".stow")
     second = storage.capture(b"second", suffix=".stow")
-    assert first != second
-    assert gzip.decompress(first.read_bytes()) == b"first\x00payload"
-    assert gzip.decompress(second.read_bytes()) == b"second"
+    assert first.artifact_id != second.artifact_id
+    assert first.path != second.path
+    assert gzip.decompress(first.path.read_bytes()) == b"first\x00payload"
+    assert gzip.decompress(second.path.read_bytes()) == b"second"
+
+
+def test_capture_records_size_and_sha256_of_the_exact_payload(storage):
+    import hashlib
+
+    payload = b"first\x00payload"
+    captured = storage.capture(payload)
+    assert captured.size == len(payload)
+    assert captured.sha256 == hashlib.sha256(payload).hexdigest()
 
 
 def test_capture_stream_does_not_require_buffering_whole_payload(storage):
     with storage.capture_stream(suffix=".request") as output:
         output.write(b"part-one")
         output.write(b"part-two")
-    captured = list(storage.traces_dir.glob("*.request.gz"))
-    assert len(captured) == 1
-    assert gzip.decompress(captured[0].read_bytes()) == b"part-onepart-two"
+        captured = output.result()
+    files = list(storage.traces_dir.glob("*.request.gz"))
+    assert len(files) == 1
+    assert files[0] == captured.path
+    assert gzip.decompress(captured.path.read_bytes()) == b"part-onepart-two"
+    assert captured.size == len(b"part-onepart-two")
 
 
 def test_capture_fileobj_preserves_exact_bytes_and_position(storage):
@@ -91,4 +104,5 @@ def test_capture_fileobj_preserves_exact_bytes_and_position(storage):
     captured = storage.capture_fileobj(source)
 
     assert source.tell() == 5
-    assert gzip.decompress(captured.read_bytes()) == b"exact\x00dimse-dataset"
+    assert gzip.decompress(captured.path.read_bytes()) == b"exact\x00dimse-dataset"
+    assert captured.size == len(b"exact\x00dimse-dataset")

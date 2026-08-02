@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import sys
 import threading
@@ -118,20 +117,6 @@ def _extract_params(ds: Dataset) -> list[str] | None:
     return params if params else None
 
 
-def hash_request(evt: Event) -> str:
-    """SHA-256 of the raw C-STORE request bytes as received over the wire."""
-    raw = evt.request.DataSet
-    pos = raw.tell()
-    raw.seek(0)
-    digest = hashlib.sha256()
-    try:
-        while chunk := raw.read(1024 * 1024):
-            digest.update(chunk)
-        return digest.hexdigest()
-    finally:
-        raw.seek(pos)
-
-
 class InteractionEvent:
     """One JSON line in the interaction log; `channel` tags the protocol (DIMSE/WEB/DICOMWEB)."""
 
@@ -212,6 +197,38 @@ class InteractionEvent:
         )
         return self
 
+    @classmethod
+    def background(
+        cls,
+        channel: str,
+        request_type: str,
+        *,
+        session_id: str | None,
+        artifact_id: str | None = None,
+        analysis: dict | None = None,
+        session_parameters: list[str] | None = None,
+        log_level: str = "INFO",
+    ) -> "InteractionEvent":
+        """Build a log line with no live request/association context — e.g. an async analysis result."""
+        self = cls.__new__(cls)
+        self._populate(
+            channel=channel,
+            session_id=session_id,
+            request_type=request_type,
+            query_level=None,
+            session_parameters=session_parameters,
+            matches=None,
+            status=None,
+            log_level=log_level,
+            version=None,
+            ip=None,
+            port=None,
+            local_port=None,
+            artifact_id=artifact_id,
+            analysis=analysis,
+        )
+        return self
+
     def _populate(
         self,
         *,
@@ -231,6 +248,8 @@ class InteractionEvent:
         path=None,
         user_agent=None,
         artifact=None,
+        artifact_id=None,
+        analysis=None,
     ) -> None:
         self.channel = channel
         self.session_id = session_id
@@ -253,6 +272,9 @@ class InteractionEvent:
         self.user_agent = user_agent
         # Structured payload metadata avoids parsing display strings in the operator API.
         self.artifact = artifact
+        # Correlates an async ANALYSIS_RESULT/FAILED/TIMEOUT event back to its originating artifact.
+        self.artifact_id = artifact_id
+        self.analysis = analysis
         self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     def __str__(self) -> str:
@@ -273,6 +295,8 @@ class InteractionEvent:
                 "method": self.method,
                 "path": self.path,
                 "user_agent": self.user_agent,
+                "artifact_id": self.artifact_id,
+                "analysis": self.analysis,
                 "artifact": self.artifact,
                 "timestamp": self.timestamp,
             },
@@ -310,19 +334,22 @@ class _ConsoleFormatter(logging.Formatter):
         dim = _DIM if self._color else ""
 
         ts = ie.timestamp[11:19]  # HH:MM:SS from ISO string
-        parts = [
-            f"{dim}{ts}{reset}",
-            f"{dim}{ie.channel}{reset}",
-            f"{ie.ip}:{ie.port}",
-            f":{ie.local_port}",
-            f"{c}{ie.request_type:<22}{reset}",
-        ]
+        parts = [f"{dim}{ts}{reset}", f"{dim}{ie.channel}{reset}"]
+        # Background events (async analysis results) have no live peer to report.
+        if ie.ip is not None:
+            parts.append(f"{ie.ip}:{ie.port}")
+            parts.append(f":{ie.local_port}")
+        elif ie.session_id:
+            parts.append(f"session={ie.session_id}")
+        parts.append(f"{c}{ie.request_type:<22}{reset}")
         if ie.query_level:
             parts.append(ie.query_level)
         if ie.matches is not None:
             parts.append(f"matches={ie.matches}")
         if ie.status:
             parts.append(f"{dim}->{reset} {ie.status}")
+        if ie.artifact_id:
+            parts.append(f"artifact={ie.artifact_id[:12]}")
         if ie.session_parameters:
             parts.append("  ".join(p[:60] for p in ie.session_parameters))
         if ie.version:

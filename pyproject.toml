@@ -29,6 +29,9 @@ dependencies = [
     "waitress>=3.0,<4",
     "ujson>=5.0,<6",
     "faker>=30,<50",
+    # for static payload analysis
+    "python-magic>=0.4,<1",
+    "yara-python>=4.5,<5",
 ]
 
 [project.optional-dependencies]
@@ -42,12 +45,13 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*", "honeytoken", "honeytoken.*"]
+include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*", "honeytoken", "honeytoken.*", "analysis", "analysis.*"]
 
 [tool.setuptools.package-data]
 seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md", "config.yaml", "locations.json"]
 profiles = ["*/*.yaml", "*/web/templates/*.html", "*/web/static/**/*"]
 web = ["templates/*.html", "static/*"]
+analysis = ["rules/*.yar", "rules/ATTRIBUTION.md"]
 
 [project.urls]
 Homepage = "https://github.com/honeynet/DICOMHawk"

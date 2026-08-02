@@ -98,6 +98,25 @@ docker run --rm --user 0 \
 
 Do not use `docker compose down -v` for migration; it deletes the evidence instead of fixing it.
 
+## Payload analysis
+
+Static analysis of captured payloads (see [Payload analysis](./analysis.md) for what it does
+and what it records) runs by default and needs no network access — it stays inside the egress
+lockdown. Its durable job table (`--analysis-db`, default `analysis.db`) is a second SQLite
+file; keep it on the same state volume as `--database`, not the traces volume, for the same
+reason the main database is kept off traces — a storage-flood on traces must not break the
+analysis job table.
+
+The analysis worker runs as its own supervised process inside the same container, under the
+same non-root user, capability drops, and `no-new-privileges` as the rest of the honeypot; a
+crashed or hung worker (bounded by `--analysis-timeout`) restarts automatically and resumes
+any `pending`/`running` work. If the in-memory hand-off queue ever fills up (very high
+sustained upload volume), the durable job table still has every job recorded — nothing is
+silently dropped, it is just picked up on the worker's next backlog sweep instead of
+immediately. `--analysis-rules` is a deployment setting like everything else on this page, not
+part of a profile — point it at a bind-mounted directory of your own `.yar` files if you want
+detections beyond the shipped starters.
+
 ## TLS
 
 The built-in web listener is plain HTTP/1.1 and the DICOM listeners are plaintext. A

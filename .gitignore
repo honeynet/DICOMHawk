@@ -54,4 +54,5 @@ venv.bak/
 traces/
 data/
 *.log
+*.db
 

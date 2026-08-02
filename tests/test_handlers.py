@@ -393,6 +393,67 @@ def test_c_store_rejects_instance_over_configured_size(loopback):
     assert not (loopback.repo.storage.quarantine_dir / str(ds.SOPInstanceUID)).exists()
 
 
+def test_c_store_submits_accepted_artifact_to_sink(tmp_path):
+    """The injected ArtifactSink receives one SubmittedArtifact for an accepted C-STORE."""
+    submitted = []
+    bus = logging.getLogger(f"test-sink-{tmp_path.name}")
+    bus.setLevel(logging.INFO)
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+
+    scp = AE(ae_title="SCPTEST")
+    scp.add_supported_context(CTImageStorage, scu_role=True, scp_role=True)
+    handlers = list(
+        new_dimse_factory(repo, bus, sink=submitted.append).values()
+    )
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    port = server.socket.getsockname()[1]
+    try:
+        scu = AE(ae_title="SCUTEST")
+        scu.add_requested_context(CTImageStorage)
+        assoc = scu.associate("127.0.0.1", port)
+        ds = _ct_dataset()
+        status = assoc.send_c_store(ds)
+        assoc.release()
+    finally:
+        server.shutdown()
+        repo.stop()
+
+    assert status.Status == 0x0000
+    assert len(submitted) == 1
+    artifact = submitted[0]
+    assert artifact.channel == "DIMSE"
+    assert artifact.request_type == "C-STORE"
+    assert artifact.disposition == "stored"
+    assert artifact.source_encoding == "dimse-dataset"
+    assert artifact.sop_instance_uid == str(ds.SOPInstanceUID)
+    assert artifact.capture.sha256
+
+
+def test_c_store_succeeds_even_when_the_artifact_sink_raises(tmp_path):
+    """Analysis failures must never change what the peer sees; the payload is already captured."""
+    def exploding_sink(_artifact):
+        raise RuntimeError("analysis store unavailable")
+
+    bus = logging.getLogger(f"test-sink-raise-{tmp_path.name}")
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+    scp = AE(ae_title="SCPTEST")
+    scp.add_supported_context(CTImageStorage, scu_role=True, scp_role=True)
+    handlers = list(new_dimse_factory(repo, bus, sink=exploding_sink).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    port = server.socket.getsockname()[1]
+    try:
+        scu = AE(ae_title="SCUTEST")
+        scu.add_requested_context(CTImageStorage)
+        assoc = scu.associate("127.0.0.1", port)
+        status = assoc.send_c_store(_ct_dataset())
+        assoc.release()
+    finally:
+        server.shutdown()
+        repo.stop()
+
+    assert status.Status == 0x0000
+
+
 def test_c_get_retrieves_a_safely_seeded_instance(loopback):
     ds = _ct_dataset(patient_id="SAFEPAT")
     assert loopback.repo.store(ds, safe=True) is None

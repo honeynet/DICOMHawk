@@ -34,6 +34,8 @@ services:
       - "${DICOMHAWK_AE_TITLE:-}"       # empty = use the profile's AE title; set to override it
       - -db
       - "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}"   # own volume, off the flood-prone traces volume
+      - --analysis-db
+      - "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}"
       - -t
       - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
       - -l

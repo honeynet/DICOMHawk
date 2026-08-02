@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from logging import FileHandler, Logger
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
-from typing import Callable, Iterable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterable, Iterator
 
 import ujson
 from flask import (
@@ -23,6 +23,9 @@ from flask import (
 
 from dicomhawk.bus import recent_events
 from profiles.profile import ProfileConfig
+
+if TYPE_CHECKING:  # annotation only — the operator API must not hard-depend on the analysis package
+    from analysis.store import AnalysisStore
 
 bp = Blueprint("operator", __name__)
 
@@ -721,6 +724,56 @@ def sessions():
     return response
 
 
+def _artifact_record(record) -> dict:
+    # Never includes capture_path — the operator API exposes findings, not a download endpoint.
+    return {
+        "artifact_id": record.artifact_id,
+        "size": record.size,
+        "sha256": record.sha256,
+        "channel": record.channel,
+        "request_type": record.request_type,
+        "disposition": record.disposition,
+        "source_encoding": record.source_encoding,
+        "session_id": record.session_id,
+        "ip": record.ip,
+        "local_port": record.local_port,
+        "sop_class_uid": record.sop_class_uid,
+        "sop_instance_uid": record.sop_instance_uid,
+        "state": record.state,
+        "attempts": record.attempts,
+        "analyzer_version": record.analyzer_version,
+        "ruleset_version": record.ruleset_version,
+        "matched_rules": record.matched_rules.split(",") if record.matched_rules else [],
+        "result": record.result,
+        "error": record.error,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+    }
+
+
+@bp.route("/api/artifacts")
+def artifacts():
+    store: "AnalysisStore | None" = current_app.config.get("ANALYSIS_STORE")
+    if store is None:
+        return jsonify([])
+    limit = _int_arg("limit", 50, minimum=1, maximum=500)
+    offset = _int_arg("offset", 0, minimum=0, maximum=10_000)
+    rows, total = store.list_artifacts(
+        state=request.args.get("state"),
+        channel=request.args.get("channel"),
+        ip=request.args.get("ip"),
+        sha256=request.args.get("sha256"),
+        rule=request.args.get("rule"),
+        offset=offset,
+        limit=limit,
+    )
+    response = jsonify([_artifact_record(row) for row in rows])
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return response
+
+
 @bp.route("/api/overview")
 def overview():
     source = _log_events()
@@ -763,12 +816,14 @@ def new_operator_api(
     profile: ProfileConfig,
     bus: Logger,
     operator_token: str | None = None,
+    analysis_store: "AnalysisStore | None" = None,
 ) -> Flask:
     app = Flask(__name__)
     app.config["PROFILE"] = profile
     app.config["BUS"] = bus
     app.config["EVENTS"] = recent_events(bus)
     app.config["OPERATOR_TOKEN"] = operator_token or None
+    app.config["ANALYSIS_STORE"] = analysis_store
     app.before_request(_authenticate_operator)
     app.after_request(_operator_headers)
     app.register_blueprint(bp)

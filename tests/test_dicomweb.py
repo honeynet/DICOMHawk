@@ -447,6 +447,42 @@ def test_stow_preserves_exact_raw_part(repo, apps):
     assert gzip.decompress(traces[0].read_bytes()) == raw
 
 
+def test_stow_submits_accepted_part_to_sink(repo, bus):
+    submitted = []
+    apps = new_dicomweb(load_profile("fujifilm"), repo, bus, sink=submitted.append)
+    ds = _ct_dataset()
+    resp = _client(apps, STOW).post(
+        "/stow-rs/studies",
+        data=_stow_body(ds),
+        content_type=_STOW_CT,
+        headers=_CREDS,
+    )
+    assert resp.status_code == 200
+    assert len(submitted) == 1
+    artifact = submitted[0]
+    assert artifact.channel == "DICOMWEB"
+    assert artifact.request_type == "DICOMWEB_STOW_PAYLOAD"
+    assert artifact.disposition == "stored"
+    assert artifact.source_encoding == "part10"
+    assert artifact.sop_instance_uid == str(ds.SOPInstanceUID)
+
+
+def test_stow_succeeds_even_when_the_artifact_sink_raises(repo, bus):
+    """Analysis failures must never change what the peer sees; the payload is already captured."""
+    def exploding_sink(_artifact):
+        raise RuntimeError("analysis store unavailable")
+
+    apps = new_dicomweb(load_profile("fujifilm"), repo, bus, sink=exploding_sink)
+    resp = _client(apps, STOW).post(
+        "/stow-rs/studies",
+        data=_stow_body(_ct_dataset()),
+        content_type=_STOW_CT,
+        headers=_CREDS,
+    )
+
+    assert resp.status_code == 200
+
+
 def test_stow_mime_parser_does_not_split_boundary_bytes_inside_dicom(apps):
     ds = _ct_dataset(pixels=True)
     ds.PixelData = b"inside--BNDbytes"

@@ -5,8 +5,10 @@ import time
 
 import waitress
 
+from analysis.store import AnalysisStore
 from dicomhawk.component import Component
 from dicomhawk.repository import Repository
+from dicomhawk.storage import ArtifactSink
 from profiles.profile import ProfileConfig
 
 from .app import new_web
@@ -133,6 +135,8 @@ class WebComponent(Component):
         operator_host: str = "127.0.0.1",
         operator_token: str | None = None,
         trusted_proxy: str | None = None,
+        sink: ArtifactSink | None = None,
+        analysis_store: AnalysisStore | None = None,
     ):
         self.profile = profile
         self.repo = repo
@@ -143,14 +147,18 @@ class WebComponent(Component):
         self.operator_host = operator_host
         self.operator_token = operator_token
         self.trusted_proxy = trusted_proxy
+        self.sink = sink
+        self.analysis_store = analysis_store
         self._servers = []
         self._threads: list[threading.Thread] = []
 
     def start(self) -> None:
         if self._servers:
             return
-        web_app = new_web(self.profile, self.repo, self.bus)
-        operator_app = new_operator_api(self.profile, self.bus, self.operator_token)
+        web_app = new_web(self.profile, self.repo, self.bus, self.sink)
+        operator_app = new_operator_api(
+            self.profile, self.bus, self.operator_token, self.analysis_store
+        )
         specs = (
             (
                 "web",
@@ -188,19 +196,21 @@ class DicomWebComponent(Component):
         bus: logging.Logger,
         host: str,
         trusted_proxy: str | None = None,
+        sink: ArtifactSink | None = None,
     ):
         self.profile = profile
         self.repo = repo
         self.bus = bus
         self.host = host
         self.trusted_proxy = trusted_proxy
+        self.sink = sink
         self._servers = []
         self._threads: list[threading.Thread] = []
 
     def start(self) -> None:
         if self._servers:
             return
-        apps = new_dicomweb(self.profile, self.repo, self.bus)
+        apps = new_dicomweb(self.profile, self.repo, self.bus, self.sink)
         specs = [
             (
                 f"dicomweb-{port}",
@@ -231,6 +241,8 @@ def new_web_component(
     operator_host: str = "127.0.0.1",
     operator_token: str | None = None,
     trusted_proxy: str | None = None,
+    sink: ArtifactSink | None = None,
+    analysis_store: AnalysisStore | None = None,
 ) -> WebComponent:
     return WebComponent(
         profile,
@@ -242,6 +254,8 @@ def new_web_component(
         operator_host,
         operator_token,
         trusted_proxy,
+        sink,
+        analysis_store,
     )
 
 
@@ -251,5 +265,6 @@ def new_dicomweb_component(
     bus: logging.Logger,
     host: str,
     trusted_proxy: str | None = None,
+    sink: ArtifactSink | None = None,
 ) -> DicomWebComponent:
-    return DicomWebComponent(profile, repo, bus, host, trusted_proxy)
+    return DicomWebComponent(profile, repo, bus, host, trusted_proxy, sink)

@@ -602,6 +602,46 @@ def test_web_upload_preserves_exact_valid_bytes(repo, bus):
         assert source.read() == raw
 
 
+def test_web_upload_submits_accepted_artifact_to_sink(repo, bus):
+    submitted = []
+    ds, buf = _upload_dicom()
+    client = new_web(load_profile("generic-pacs"), repo, bus, sink=submitted.append).test_client()
+    _login_generic(client)
+
+    response = client.post(
+        "/portal/upload",
+        data={"dicomFiles": (buf, "ok.dcm")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert len(submitted) == 1
+    artifact = submitted[0]
+    assert artifact.channel == "WEB"
+    assert artifact.request_type == "WEB_UPLOAD"
+    assert artifact.disposition == "stored"
+    assert artifact.source_encoding == "part10"
+    assert artifact.sop_instance_uid == str(ds.SOPInstanceUID)
+
+
+def test_web_upload_succeeds_even_when_the_artifact_sink_raises(repo, bus):
+    """Analysis failures must never change what the peer sees; the payload is already captured."""
+    def exploding_sink(_artifact):
+        raise RuntimeError("analysis store unavailable")
+
+    _ds, buf = _upload_dicom()
+    client = new_web(load_profile("generic-pacs"), repo, bus, sink=exploding_sink).test_client()
+    _login_generic(client)
+
+    response = client.post(
+        "/portal/upload",
+        data={"dicomFiles": (buf, "ok.dcm")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+
+
 @pytest.mark.parametrize(
     "defect", ["unsupported-sop", "mismatched-meta", "missing-patient"]
 )

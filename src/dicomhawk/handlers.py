@@ -12,10 +12,10 @@ from pynetdicom.events import Event, EventHandlerType, EventType
 
 from .status import QRStatus
 from .repository import Repository, INDEX_REQUIRED_KEYS
+from .storage import ArtifactSink, SubmittedArtifact
 from .bus import (
     InteractionEvent,
     SessionCache,
-    hash_request,
     _query_level,
     _extract_params,
 )
@@ -391,6 +391,44 @@ def handle_move(
     yield (None, None)
 
 
+def _submit_artifact(
+    sink: ArtifactSink,
+    event: Event,
+    cache: SessionCache,
+    capture,
+    *,
+    request_type: str,
+    disposition: str,
+    sop_class_uid: str | None = None,
+    sop_instance_uid: str | None = None,
+) -> None:
+    assoc = event.assoc
+    addr = getattr(event, "address", None)
+    ip, _port = (
+        (addr[0], addr[1])
+        if addr is not None
+        else (assoc.requestor.address, assoc.requestor.port)
+    )
+    try:
+        sink(
+            SubmittedArtifact(
+                capture,
+                channel="DIMSE",
+                request_type=request_type,
+                disposition=disposition,
+                source_encoding="dimse-dataset",
+                session_id=cache.get_session_id(assoc),
+                ip=ip,
+                local_port=getattr(assoc.acceptor, "port", None),
+                sop_class_uid=sop_class_uid,
+                sop_instance_uid=sop_instance_uid,
+            )
+        )
+    except Exception:
+        # Analysis must never change what the peer sees; the payload is already captured.
+        logger.exception("Artifact sink failed for %s", capture.artifact_id)
+
+
 def handle_store(
     repo: Repository,
     bus: Logger,
@@ -398,6 +436,7 @@ def handle_store(
     event: Event,
     *,
     max_store_bytes: int | None = None,
+    sink: ArtifactSink | None = None,
 ) -> QRResult:
     try:
         raw = event.request.DataSet
@@ -418,6 +457,7 @@ def handle_store(
                     "filename": None,
                     "bytes": None,
                     "sha256": None,
+                    "artifact_id": None,
                     "sop_instance_uid": None,
                     "sop_class_uid": None,
                     "captured": False,
@@ -441,6 +481,7 @@ def handle_store(
                     "filename": None,
                     "bytes": request_bytes,
                     "sha256": None,
+                    "artifact_id": None,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
                     "captured": False,
@@ -452,49 +493,21 @@ def handle_store(
         yield (QRStatus.STORE_ERROR, None)
         return
     try:
-        file_hash = hash_request(event)
+        capture = repo.storage.capture_fileobj(raw)
     except Exception as exc:
         bus.error(
             InteractionEvent(
                 event,
                 cache,
                 "C-STORE",
-                session_parameters=[f"Hash error: {exc}"],
-                status=QRStatus.FAILURE,
-                log_level="ERROR",
-                artifact={
-                    "filename": None,
-                    "bytes": request_bytes,
-                    "sha256": None,
-                    "sop_instance_uid": None,
-                    "sop_class_uid": str(event.request.AffectedSOPClassUID),
-                    "captured": False,
-                    "disposition": "rejected",
-                    "reject_reason": f"Hash error: {exc}",
-                },
-            )
-        )
-        yield (QRStatus.FAILURE, None)
-        return
-
-    try:
-        capture_path = repo.storage.capture_fileobj(raw)
-    except Exception as exc:
-        bus.error(
-            InteractionEvent(
-                event,
-                cache,
-                "C-STORE",
-                session_parameters=[
-                    f"SHA256: {file_hash}",
-                    f"Capture failure: {exc}",
-                ],
+                session_parameters=[f"Capture failure: {exc}"],
                 status=QRStatus.STORE_ERROR,
                 log_level="ERROR",
                 artifact={
                     "filename": None,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": None,
+                    "artifact_id": None,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
                     "captured": False,
@@ -518,9 +531,10 @@ def handle_store(
                 status=QRStatus.FAILURE,
                 log_level="ERROR",
                 artifact={
-                    "filename": capture_path.name,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
                     "captured": True,
@@ -529,6 +543,16 @@ def handle_store(
                 },
             )
         )
+        if sink is not None:
+            _submit_artifact(
+                sink,
+                event,
+                cache,
+                capture,
+                request_type="C-STORE",
+                disposition="rejected",
+                sop_class_uid=str(event.request.AffectedSOPClassUID),
+            )
         yield (QRStatus.FAILURE, None)
         return
 
@@ -539,15 +563,16 @@ def handle_store(
                 cache,
                 "C-STORE",
                 session_parameters=[
-                    f"SHA256: {file_hash}",
+                    f"SHA256: {capture.sha256}",
                     f"Error: {err.error}",
                 ],
                 status=err.status,
                 log_level="ERROR",
                 artifact={
-                    "filename": capture_path.name,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": str(getattr(ds, "SOPInstanceUID", "")) or None,
                     "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
                     or str(event.request.AffectedSOPClassUID),
@@ -559,11 +584,23 @@ def handle_store(
                 },
             )
         )
+        if sink is not None:
+            _submit_artifact(
+                sink,
+                event,
+                cache,
+                capture,
+                request_type="C-STORE",
+                disposition="rejected",
+                sop_class_uid=str(getattr(ds, "SOPClassUID", ""))
+                or str(event.request.AffectedSOPClassUID),
+                sop_instance_uid=str(getattr(ds, "SOPInstanceUID", "")) or None,
+            )
         yield (err.status, None)
         return
 
     params = [
-        f"SHA256: {file_hash}",
+        f"SHA256: {capture.sha256}",
         f"SOPInstanceUID: {ds.SOPInstanceUID}",
     ]
     # Missing identity keys: quarantined but unindexed — surface it, it's a signal.
@@ -579,9 +616,10 @@ def handle_store(
                 status=QRStatus.SUCCESS,
                 log_level="WARNING",
                 artifact={
-                    "filename": capture_path.name,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": str(ds.SOPInstanceUID),
                     "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
                     or str(event.request.AffectedSOPClassUID),
@@ -600,9 +638,10 @@ def handle_store(
                 session_parameters=params,
                 status=QRStatus.SUCCESS,
                 artifact={
-                    "filename": capture_path.name,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": str(ds.SOPInstanceUID),
                     "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
                     or str(event.request.AffectedSOPClassUID),
@@ -611,6 +650,18 @@ def handle_store(
                     "reject_reason": None,
                 },
             )
+        )
+    if sink is not None:
+        _submit_artifact(
+            sink,
+            event,
+            cache,
+            capture,
+            request_type="C-STORE",
+            disposition="stored-unindexed" if missing else "stored",
+            sop_class_uid=str(getattr(ds, "SOPClassUID", ""))
+            or str(event.request.AffectedSOPClassUID),
+            sop_instance_uid=str(ds.SOPInstanceUID),
         )
     yield (QRStatus.SUCCESS, None)
 
@@ -665,14 +716,17 @@ _handlers: list[tuple[str, EventType, EventHandler]] = [
 
 
 def new_dimse_factory(
-    repo: Repository, bus: Logger, max_store_bytes: int | None = None
+    repo: Repository,
+    bus: Logger,
+    max_store_bytes: int | None = None,
+    sink: ArtifactSink | None = None,
 ) -> dict[str, EventHandlerType]:
     """Map handler name -> (event type, pynetdicom callback). One SessionCache shared by all."""
     cache = SessionCache()
     handlers: dict[str, EventHandlerType] = {}
     for n, t, h in _handlers:
         if n == "store":
-            h = partial(h, max_store_bytes=max_store_bytes)
+            h = partial(h, max_store_bytes=max_store_bytes, sink=sink)
         if t in _ACSE_EVENTS or t == evt.EVT_CONN_OPEN:
             binder = bind_acse(h, repo, bus, cache)
         elif t in _QR_EVENTS:

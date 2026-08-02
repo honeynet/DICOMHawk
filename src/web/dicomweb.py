@@ -33,6 +33,7 @@ from pynetdicom.sop_class import StudyRootQueryRetrieveInformationModelFind
 from dicomhawk.bus import InteractionEvent, _BULK_DATA_KEYWORDS
 from dicomhawk.handlers import _FIND_LEVEL_UID
 from dicomhawk.repository import Repository
+from dicomhawk.storage import ArtifactSink, Capture, SubmittedArtifact
 from profiles.profile import DicomWebService, ProfileConfig
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,36 @@ def _server_port() -> int | None:
         return int(request.environ.get("SERVER_PORT"))
     except (TypeError, ValueError):
         return None
+
+
+def _submit_artifact(
+    capture: Capture,
+    *,
+    request_type: str,
+    disposition: str,
+    source_encoding: str = "part10",
+    sop_class_uid: str | None = None,
+    sop_instance_uid: str | None = None,
+) -> None:
+    sink: ArtifactSink = current_app.config["ARTIFACT_SINK"]
+    try:
+        sink(
+            SubmittedArtifact(
+                capture,
+                channel="DICOMWEB",
+                request_type=request_type,
+                disposition=disposition,
+                source_encoding=source_encoding,
+                session_id=_session_id(),
+                ip=request.remote_addr,
+                local_port=_server_port(),
+                sop_class_uid=sop_class_uid,
+                sop_instance_uid=sop_instance_uid,
+            )
+        )
+    except Exception:
+        # Analysis must never change what the peer sees; the payload is already captured.
+        logger.exception("Artifact sink failed for %s", capture.artifact_id)
 
 
 def _json_response(
@@ -905,22 +936,19 @@ def wado_uri():
 
 def _multipart_parts(content_type: str, repo: Repository):
     parser = BytesFeedParser(policy=email_policy)
-    digest = hashlib.sha256()
-    size = 0
     parser.feed(f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode())
     with repo.storage.capture_stream(suffix=".stow-request") as raw_capture:
         while chunk := request.stream.read(1024 * 1024):
             raw_capture.write(chunk)
             parser.feed(chunk)
-            digest.update(chunk)
-            size += len(chunk)
+        capture = raw_capture.result()
     message = parser.close()
     if not message.is_multipart():
-        return None, size, digest.hexdigest(), "Malformed multipart body"
+        return None, capture, "Malformed multipart body"
     parts = list(message.iter_parts())
     if len(parts) > current_app.config["MAX_STOW_PARTS"]:
-        return None, size, digest.hexdigest(), "Too many multipart items"
-    return parts, size, digest.hexdigest(), None
+        return None, capture, "Too many multipart items"
+    return parts, capture, None
 
 
 def _stow_response(stored, failed) -> dict:
@@ -978,20 +1006,19 @@ def _validate_stow_dataset(ds: Dataset, study: str | None) -> tuple[str, str]:
     return sop_class, sop_instance
 
 
-def _capture_rejected(repo: Repository, raw: bytes) -> bool:
+def _capture_rejected(repo: Repository, raw: bytes) -> Capture | None:
     try:
-        repo.storage.capture(raw, suffix=".stow-part")
+        return repo.storage.capture(raw, suffix=".stow-part")
     except Exception as exc:
         _log("DICOMWEB_STOW_CAPTURE_FAILURE", level="ERROR", params=[_bounded(exc)])
-        return False
-    return True
+        return None
 
 
 def _stow_artifact(
     raw: bytes,
     *,
     disposition: str,
-    captured: bool,
+    capture: Capture | None,
     reject_reason: str | None = None,
     sop_instance_uid: str | None = None,
     sop_class_uid: str | None = None,
@@ -999,10 +1026,11 @@ def _stow_artifact(
     return {
         "filename": None,
         "bytes": len(raw),
-        "sha256": hashlib.sha256(raw).hexdigest(),
+        "sha256": capture.sha256 if capture else hashlib.sha256(raw).hexdigest(),
+        "artifact_id": capture.artifact_id if capture else None,
         "sop_instance_uid": _bounded(sop_instance_uid) or None,
         "sop_class_uid": _bounded(sop_class_uid) or None,
-        "captured": captured,
+        "captured": capture is not None,
         "disposition": disposition,
         "reject_reason": _bounded(reject_reason) or None,
     }
@@ -1016,25 +1044,33 @@ def _log_stow_rejection(
     sop_instance_uid: str | None = None,
     sop_class_uid: str | None = None,
 ) -> None:
-    captured = _capture_rejected(repo, raw)
+    capture = _capture_rejected(repo, raw)
     _log(
         "DICOMWEB_STOW_PAYLOAD",
         level="WARNING",
         matches=0,
         params=[
             f"Bytes: {len(raw)}",
-            f"SHA256: {hashlib.sha256(raw).hexdigest()}",
+            f"SHA256: {capture.sha256 if capture else hashlib.sha256(raw).hexdigest()}",
             f"Rejected: {_bounded(reason)}",
         ],
         artifact=_stow_artifact(
             raw,
             disposition="rejected",
-            captured=captured,
+            capture=capture,
             reject_reason=reason,
             sop_instance_uid=sop_instance_uid,
             sop_class_uid=sop_class_uid,
         ),
     )
+    if capture is not None:
+        _submit_artifact(
+            capture,
+            request_type="DICOMWEB_STOW_PAYLOAD",
+            disposition="rejected",
+            sop_class_uid=sop_class_uid,
+            sop_instance_uid=sop_instance_uid,
+        )
 
 
 def stow_studies(study=None):
@@ -1046,11 +1082,10 @@ def stow_studies(study=None):
         or params.get("type", "").lower() != "application/dicom"
     ):
         raw = request.get_data(cache=False)
-        captured = False
+        capture = None
         if raw:
             try:
-                repo.storage.capture(raw, suffix=".stow-request")
-                captured = True
+                capture = repo.storage.capture(raw, suffix=".stow-request")
             except Exception:
                 logger.exception("Failed capturing a rejected STOW request")
         _log(
@@ -1060,20 +1095,26 @@ def stow_studies(study=None):
             artifact=_stow_artifact(
                 raw,
                 disposition="rejected",
-                captured=captured,
+                capture=capture,
                 reject_reason="Bad Content-Type",
             ),
         )
+        if capture is not None:
+            _submit_artifact(
+                capture,
+                request_type="DICOMWEB_STOW_REQUEST",
+                disposition="rejected",
+                source_encoding="http-body",
+            )
         return _problem(
             415, 'Content-Type must be multipart/related; type="application/dicom"'
         )
     if not params.get("boundary"):
         raw = request.get_data(cache=False)
-        captured = False
+        capture = None
         if raw:
             try:
-                repo.storage.capture(raw, suffix=".stow-request")
-                captured = True
+                capture = repo.storage.capture(raw, suffix=".stow-request")
             except Exception:
                 logger.exception("Failed capturing a boundary-less STOW request")
         _log(
@@ -1083,17 +1124,22 @@ def stow_studies(study=None):
             artifact=_stow_artifact(
                 raw,
                 disposition="rejected",
-                captured=captured,
+                capture=capture,
                 reject_reason="Missing multipart boundary",
             ),
         )
+        if capture is not None:
+            _submit_artifact(
+                capture,
+                request_type="DICOMWEB_STOW_REQUEST",
+                disposition="rejected",
+                source_encoding="http-body",
+            )
         return _problem(400, "Missing multipart boundary")
 
     stored, failed = [], []
     try:
-        parts, request_bytes, request_sha256, parse_error = _multipart_parts(
-            content_type, repo
-        )
+        parts, capture, parse_error = _multipart_parts(content_type, repo)
     except OSError as exc:
         _log(
             "DICOMWEB_STOW_STORAGE_FAILURE",
@@ -1104,6 +1150,7 @@ def stow_studies(study=None):
                 "filename": None,
                 "bytes": None,
                 "sha256": None,
+                "artifact_id": None,
                 "sop_instance_uid": None,
                 "sop_class_uid": None,
                 "captured": False,
@@ -1122,6 +1169,7 @@ def stow_studies(study=None):
                 "filename": None,
                 "bytes": None,
                 "sha256": None,
+                "artifact_id": None,
                 "sop_instance_uid": None,
                 "sop_class_uid": None,
                 "captured": False,
@@ -1136,20 +1184,27 @@ def stow_studies(study=None):
             level="WARNING",
             matches=0,
             params=[
-                f"Bytes: {request_bytes}",
-                f"SHA256: {request_sha256}",
+                f"Bytes: {capture.size}",
+                f"SHA256: {capture.sha256}",
                 f"Rejected: {_bounded(parse_error)}",
             ],
             artifact={
                 "filename": None,
-                "bytes": request_bytes,
-                "sha256": request_sha256,
+                "bytes": capture.size,
+                "sha256": capture.sha256,
+                "artifact_id": capture.artifact_id,
                 "sop_instance_uid": None,
                 "sop_class_uid": None,
                 "captured": True,
                 "disposition": "rejected",
                 "reject_reason": _bounded(parse_error),
             },
+        )
+        _submit_artifact(
+            capture,
+            request_type="DICOMWEB_STOW_REQUEST",
+            disposition="rejected",
+            source_encoding="http-body",
         )
         return _problem(400, "Malformed multipart request")
     if not parts:
@@ -1160,14 +1215,21 @@ def stow_studies(study=None):
             params=["No DICOM parts"],
             artifact={
                 "filename": None,
-                "bytes": request_bytes,
-                "sha256": request_sha256,
+                "bytes": capture.size,
+                "sha256": capture.sha256,
+                "artifact_id": capture.artifact_id,
                 "sop_instance_uid": None,
                 "sop_class_uid": None,
                 "captured": True,
                 "disposition": "rejected",
                 "reject_reason": "No DICOM parts",
             },
+        )
+        _submit_artifact(
+            capture,
+            request_type="DICOMWEB_STOW_REQUEST",
+            disposition="rejected",
+            source_encoding="http-body",
         )
         return _problem(400, "At least one application/dicom part is required")
 
@@ -1234,7 +1296,9 @@ def stow_studies(study=None):
             failed.append((sop, 0x0111, reason))
             continue
         seen_sops.add(sop)
-        err = repo.store(ds, raw_bytes=raw)  # exact raw trace + quarantine/index
+        part_captures: list[Capture] = []
+        err = repo.store(ds, raw_bytes=raw, on_captured=part_captures.append)
+        part_capture = part_captures[0] if part_captures else None
         if err is not None:
             _log(
                 "DICOMWEB_STOW_PAYLOAD",
@@ -1249,14 +1313,20 @@ def stow_studies(study=None):
                 artifact=_stow_artifact(
                     raw,
                     disposition="rejected",
-                    captured=not err.error.startswith(
-                        "Failed to quarantine incoming payload"
-                    ),
+                    capture=part_capture,
                     reject_reason=err.error,
                     sop_instance_uid=sop,
                     sop_class_uid=sop_class,
                 ),
             )
+            if part_capture is not None:
+                _submit_artifact(
+                    part_capture,
+                    request_type="DICOMWEB_STOW_PAYLOAD",
+                    disposition="rejected",
+                    sop_class_uid=sop_class,
+                    sop_instance_uid=sop,
+                )
             failed.append((sop, 0x0110, err.error))
         else:
             stored.append((sop_class, sop))
@@ -1271,11 +1341,19 @@ def stow_studies(study=None):
                 artifact=_stow_artifact(
                     raw,
                     disposition="stored",
-                    captured=True,
+                    capture=part_capture,
                     sop_instance_uid=sop,
                     sop_class_uid=sop_class,
                 ),
             )
+            if part_capture is not None:
+                _submit_artifact(
+                    part_capture,
+                    request_type="DICOMWEB_STOW_PAYLOAD",
+                    disposition="stored",
+                    sop_class_uid=sop_class,
+                    sop_instance_uid=sop,
+                )
 
     params = [f"Stored: {len(stored)}", f"Failed: {len(failed)}"]
     params += [f"SOPInstanceUID: {sop}" for _cls, sop in stored[:20]]
@@ -1445,7 +1523,10 @@ def _reject_unexpected_body():
 
 
 def new_dicomweb(
-    profile: ProfileConfig, repo: Repository, bus: Logger
+    profile: ProfileConfig,
+    repo: Repository,
+    bus: Logger,
+    sink: ArtifactSink | None = None,
 ) -> dict[int, Flask]:
     """One Flask app per bound port (per-port isolation), keyed by port."""
     by_port: dict[int, list[DicomWebService]] = {}
@@ -1458,6 +1539,7 @@ def new_dicomweb(
         app = Flask(f"dicomweb_{port}")
         app.config["REPO"] = repo
         app.config["BUS"] = bus
+        app.config["ARTIFACT_SINK"] = sink or (lambda _artifact: None)
         app.config["PROFILE"] = profile
         app.config["DICOMWEB_PORT"] = port
         app.config["WEB_HEADERS"] = profile.web.headers
