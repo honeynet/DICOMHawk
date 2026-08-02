@@ -37,6 +37,7 @@ class SubmittedArtifact:
         local_port: int | None,
         sop_class_uid: str | None = None,
         sop_instance_uid: str | None = None,
+        transfer_syntax_uid: str | None = None,
     ):
         self.capture: Capture = capture
         self.channel: str = channel
@@ -49,6 +50,8 @@ class SubmittedArtifact:
         self.local_port: int | None = local_port
         self.sop_class_uid: str | None = sop_class_uid
         self.sop_instance_uid: str | None = sop_instance_uid
+        # Set only for "dimse-dataset": the association actually negotiated this, no guessing needed.
+        self.transfer_syntax_uid: str | None = transfer_syntax_uid
 
 
 # Ingestion call sites submit here; core never imports the concrete (analysis) implementation.

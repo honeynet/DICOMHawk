@@ -739,6 +739,7 @@ def _artifact_record(record) -> dict:
         "local_port": record.local_port,
         "sop_class_uid": record.sop_class_uid,
         "sop_instance_uid": record.sop_instance_uid,
+        "transfer_syntax_uid": record.transfer_syntax_uid,
         "state": record.state,
         "attempts": record.attempts,
         "analyzer_version": record.analyzer_version,

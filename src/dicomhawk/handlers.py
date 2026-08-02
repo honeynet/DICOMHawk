@@ -409,6 +409,7 @@ def _submit_artifact(
         if addr is not None
         else (assoc.requestor.address, assoc.requestor.port)
     )
+    context = getattr(event, "context", None)
     try:
         sink(
             SubmittedArtifact(
@@ -422,6 +423,8 @@ def _submit_artifact(
                 local_port=getattr(assoc.acceptor, "port", None),
                 sop_class_uid=sop_class_uid,
                 sop_instance_uid=sop_instance_uid,
+                # The association already negotiated this — pass it through instead of guessing.
+                transfer_syntax_uid=str(context.transfer_syntax) if context else None,
             )
         )
     except Exception:

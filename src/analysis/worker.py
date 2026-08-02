@@ -19,6 +19,9 @@ RULES_DIR = Path(__file__).parent / "rules"
 
 _RECOVERY_INTERVAL_SECONDS = 5.0  # backlog/crash-recovery sweep for jobs the queue missed
 
+# RLIMIT_CPU is cumulative for the process's whole life, not per job — a generous backstop only.
+_WORKER_CPU_BACKSTOP_SECONDS = 3600
+
 
 class _JobTimeout(Exception):
     pass
@@ -33,7 +36,7 @@ def _set_resource_limits() -> None:
     import resource
 
     for res, value in (
-        (resource.RLIMIT_CPU, (30, 30)),
+        (resource.RLIMIT_CPU, (_WORKER_CPU_BACKSTOP_SECONDS, _WORKER_CPU_BACKSTOP_SECONDS)),
         (resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024)),
         (resource.RLIMIT_NOFILE, (256, 256)),
     ):
@@ -48,7 +51,9 @@ def _analyze(record, config: AnalysisConfig, rules) -> dict:
     # Keep YARA's own deadline inside the job deadline it runs under.
     timeout = max(1, int(config.TIMEOUT))
     matches, scan_state = yara_engine.scan(rules, data, timeout=timeout)
-    dicom = analyzers.extract_dicom_metadata(data, record.source_encoding)
+    dicom = analyzers.extract_dicom_metadata(
+        data, record.source_encoding, record.transfer_syntax_uid
+    )
     result = {
         "truncated": truncated,
         "size_analyzed": len(data),
@@ -61,17 +66,22 @@ def _analyze(record, config: AnalysisConfig, rules) -> dict:
     }
     if dicom and dicom["has_encapsulated_document"]:
         result["encapsulated_document"] = _analyze_encapsulated_document(
-            data, record.source_encoding, config, rules, timeout
+            data, record.source_encoding, record.transfer_syntax_uid, config, rules, timeout
         )
     return result
 
 
 def _analyze_encapsulated_document(
-    data: bytes, source_encoding: str, config: AnalysisConfig, rules, timeout: int
+    data: bytes,
+    source_encoding: str,
+    transfer_syntax_uid: str | None,
+    config: AnalysisConfig,
+    rules,
+    timeout: int,
 ) -> dict | None:
     """Scanned separately because `at 0`/`filesize` rules only hold when the inner file is the buffer."""
     extracted = analyzers.extract_encapsulated_document(
-        data, source_encoding, config.MAX_BYTES
+        data, source_encoding, config.MAX_BYTES, transfer_syntax_uid
     )
     if extracted is None:
         return None

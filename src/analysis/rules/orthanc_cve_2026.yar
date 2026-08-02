@@ -124,3 +124,99 @@ rule DICOM_Orthanc_PMSCT_RLE1_CVE_2026_5441_Known_Test
         @codec_name < @codec_tag + 96 and
         @known_bad_value > @compressed_data_tag
 }
+
+
+// Big Endian siblings of the rules above (accepted for storage; see ATTRIBUTION.md for why GDCM/5437 have none).
+
+
+rule DICOM_Rows_Columns_Encoded_As_UL_BigEndian
+{
+    meta:
+        description = "Rows or Columns encoded as Explicit VR UL under Big Endian, same prerequisite as the Little Endian rule"
+        author = "DICOMHawk project"
+        license = "MIT"
+        severity = "high"
+        cve = "CVE-2026-5442,CVE-2026-5443"
+        reference = "https://kb.cert.org/vuls/id/536588"
+
+    strings:
+        $evrbe_uid = "1.2.840.10008.1.2.2" ascii
+        $rows_ul_be = { 00 28 00 10 55 4c 00 04 }
+        $columns_ul_be = { 00 28 00 11 55 4c 00 04 }
+
+    condition:
+        DICOM_Part10 and
+        $evrbe_uid and
+        1 of ($rows_ul_be, $columns_ul_be)
+}
+
+
+rule DICOM_Orthanc_CVE_2026_5442_Known_Test_BigEndian
+{
+    meta:
+        description = "Exact published Orthanc Rows x Columns = 65536 x 65536 integer-wrap test case, Big Endian encoding"
+        author = "DICOMHawk project"
+        license = "MIT"
+        severity = "critical"
+        cve = "CVE-2026-5442"
+        reference = "https://kb.cert.org/vuls/id/536588"
+
+    strings:
+        $rows_65536_be = { 00 28 00 10 55 4c 00 04 00 01 00 00 }
+        $columns_65536_be = { 00 28 00 11 55 4c 00 04 00 01 00 00 }
+
+    condition:
+        DICOM_Part10 and
+        all of them
+}
+
+
+rule DICOM_Orthanc_CVE_2026_5443_Known_Test_BigEndian
+{
+    meta:
+        description = "Exact published Orthanc PALETTE COLOR Rows=3 Columns=1431655766 arithmetic-wrap test case, Big Endian encoding"
+        author = "DICOMHawk project"
+        license = "MIT"
+        severity = "critical"
+        cve = "CVE-2026-5443"
+        reference = "https://kb.cert.org/vuls/id/536588"
+
+    strings:
+        $palette = "PALETTE COLOR" ascii
+        $rows_3_be = { 00 28 00 10 55 4c 00 04 00 00 00 03 }
+        $columns_1431655766_be = { 00 28 00 11 55 4c 00 04 55 55 55 56 }
+
+    condition:
+        DICOM_Part10 and
+        all of them
+}
+
+
+rule DICOM_Orthanc_PMSCT_RLE1_CVE_2026_5441_Known_Test_BigEndian
+{
+    meta:
+        description = "Published PMSCT_RLE1 trailing RLE-escape out-of-bounds test value, Big Endian tag encoding"
+        author = "DICOMHawk project"
+        license = "MIT"
+        severity = "critical"
+        cve = "CVE-2026-5441"
+        reference = "https://kb.cert.org/vuls/id/536588"
+
+    strings:
+        $codec_tag_be = { 07 a1 10 11 }
+        $codec_name = "PMSCT_RLE1" ascii
+        $compressed_data_tag_be = { 07 a1 10 0a }
+        $known_bad_value = {
+            00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00
+            00 00 00 00 00 00
+            a5 ff
+        }
+
+    condition:
+        DICOM_Part10 and
+        all of them and
+        @codec_name > @codec_tag_be and
+        @codec_name < @codec_tag_be + 96 and
+        @known_bad_value > @compressed_data_tag_be
+}

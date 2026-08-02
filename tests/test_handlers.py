@@ -426,7 +426,47 @@ def test_c_store_submits_accepted_artifact_to_sink(tmp_path):
     assert artifact.disposition == "stored"
     assert artifact.source_encoding == "dimse-dataset"
     assert artifact.sop_instance_uid == str(ds.SOPInstanceUID)
+    assert artifact.transfer_syntax_uid  # the association's actual negotiated syntax, not a guess
     assert artifact.capture.sha256
+
+
+def test_c_store_submitted_artifact_carries_the_actual_negotiated_transfer_syntax(tmp_path):
+    """Regression guard: the analyzer must not have to guess a DIMSE dataset's encoding."""
+    from pydicom.uid import ExplicitVRBigEndian
+
+    submitted = []
+    bus = logging.getLogger(f"test-ts-{tmp_path.name}")
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+    scp = AE(ae_title="SCPTEST")
+    scp.add_supported_context(
+        CTImageStorage, transfer_syntax=[ExplicitVRBigEndian], scu_role=True, scp_role=True
+    )
+    handlers = list(new_dimse_factory(repo, bus, sink=submitted.append).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    port = server.socket.getsockname()[1]
+    try:
+        scu = AE(ae_title="SCUTEST")
+        scu.add_requested_context(CTImageStorage, transfer_syntax=[ExplicitVRBigEndian])
+        assoc = scu.associate("127.0.0.1", port)
+        ds = Dataset()
+        ds.file_meta = FileMetaDataset()
+        ds.file_meta.TransferSyntaxUID = ExplicitVRBigEndian
+        ds.file_meta.MediaStorageSOPClassUID = CTImageStorage
+        uid = generate_uid()
+        ds.file_meta.MediaStorageSOPInstanceUID = uid
+        ds.SOPClassUID = CTImageStorage
+        ds.SOPInstanceUID = uid
+        ds.PatientID = "TESTPAT"
+        ds.StudyInstanceUID = generate_uid()
+        ds.SeriesInstanceUID = generate_uid()
+        assoc.send_c_store(ds)
+        assoc.release()
+    finally:
+        server.shutdown()
+        repo.stop()
+
+    assert len(submitted) == 1
+    assert submitted[0].transfer_syntax_uid == str(ExplicitVRBigEndian)
 
 
 def test_c_store_succeeds_even_when_the_artifact_sink_raises(tmp_path):

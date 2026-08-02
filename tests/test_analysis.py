@@ -7,6 +7,7 @@ from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian, generate_uid
 
 from analysis import analyzers, worker, yara_engine
+from analysis.config import AnalysisConfig
 from analysis.store import MAX_ATTEMPTS, AnalysisState, new_analysis_store
 from dicomhawk.storage import SubmittedArtifact, new_store
 
@@ -529,3 +530,124 @@ def test_matched_rule_names_merges_inner_document_hits_for_api_filtering():
         },
     }
     assert worker._matched_rule_names(result) == ["Outer_Rule", "Inner_Rule"]
+
+
+# --- Big Endian rule siblings (2026-08-02): fujifilm's storage classes accept Explicit VR BE too ---
+
+
+def test_yara_detects_orthanc_cve_2026_5442_exact_dimensions_big_endian():
+    rows_be = bytes([0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
+    columns_be = bytes([0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
+    uid = b"1.2.840.10008.1.2.2"  # Explicit VR Big Endian
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+    matches, state = yara_engine.scan(rules, _bare_part10(uid + rows_be + columns_be))
+    assert state is None
+    assert {
+        "DICOM_Orthanc_CVE_2026_5442_Known_Test_BigEndian",
+        "DICOM_Rows_Columns_Encoded_As_UL_BigEndian",
+    } <= {m["rule"] for m in matches}
+
+
+def test_yara_detects_orthanc_cve_2026_5443_exact_dimensions_big_endian():
+    palette = b"PALETTE COLOR"
+    rows_3_be = bytes([0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03])
+    columns_wrap_be = bytes([0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x55, 0x55, 0x55, 0x56])
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+    matches, state = yara_engine.scan(rules, _bare_part10(palette + rows_3_be + columns_wrap_be))
+    assert state is None
+    assert any(m["rule"] == "DICOM_Orthanc_CVE_2026_5443_Known_Test_BigEndian" for m in matches)
+
+
+def test_yara_detects_pmsct_rle1_big_endian():
+    codec_tag_be = bytes([0x07, 0xA1, 0x10, 0x11])
+    codec_name = b"PMSCT_RLE1"
+    compressed_tag_be = bytes([0x07, 0xA1, 0x10, 0x0A])
+    bad_value = bytes(22) + bytes([0xA5, 0xFF])
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+    matches, state = yara_engine.scan(
+        rules, _bare_part10(codec_tag_be + codec_name + compressed_tag_be + bad_value)
+    )
+    assert state is None
+    assert any(
+        m["rule"] == "DICOM_Orthanc_PMSCT_RLE1_CVE_2026_5441_Known_Test_BigEndian"
+        for m in matches
+    )
+
+
+def test_yara_little_endian_only_rules_do_not_fire_on_big_endian_encoding():
+    """Regression guard: LE-specific rules must not already cover BE, or this fix was unnecessary."""
+    rows_be = bytes([0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
+    columns_be = bytes([0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
+    uid = b"1.2.840.10008.1.2.2"
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+    matches, _state = yara_engine.scan(rules, _bare_part10(uid + rows_be + columns_be))
+    le_only = {"DICOM_Orthanc_CVE_2026_5442_Known_Test", "DICOM_Rows_Columns_Encoded_As_UL"}
+    assert not (le_only & {m["rule"] for m in matches})
+
+
+# --- negotiated transfer syntax threading (2026-08-02) ---
+
+
+def test_extract_dicom_metadata_uses_negotiated_transfer_syntax_not_a_guess():
+    """A raw DIMSE dataset given its actual negotiated transfer syntax must not go through dcmread's guessing heuristic."""
+    from pydicom.uid import ExplicitVRBigEndian
+
+    ds = _ct_dataset()
+    del ds.file_meta
+    ds.is_implicit_VR = ExplicitVRBigEndian.is_implicit_VR
+    ds.is_little_endian = ExplicitVRBigEndian.is_little_endian
+    raw = BytesIO()
+    ds.save_as(raw, enforce_file_format=False)
+
+    meta = analyzers.extract_dicom_metadata(
+        raw.getvalue(), "dimse-dataset", str(ExplicitVRBigEndian)
+    )
+
+    assert meta is not None
+    assert meta["sop_class_uid"] == str(CTImageStorage)
+    assert meta["modality"] == "CT"
+    assert str(ExplicitVRBigEndian) in meta["parse_assumption"]
+    assert "guessed" not in meta["parse_assumption"]
+
+
+def test_extract_dicom_metadata_without_negotiated_transfer_syntax_falls_back_to_guessing():
+    ds = _ct_dataset()
+    del ds.file_meta
+    ds.is_implicit_VR = False
+    ds.is_little_endian = True
+    raw = BytesIO()
+    ds.save_as(raw, enforce_file_format=False)
+
+    meta = analyzers.extract_dicom_metadata(raw.getvalue(), "dimse-dataset", None)
+
+    assert meta is not None
+    assert "guessed" in meta["parse_assumption"]
+
+
+# --- RLIMIT_CPU backstop (2026-08-02): must not be a small per-job-conflated value ---
+
+
+def test_worker_cpu_backstop_is_a_generous_lifetime_value_not_a_per_job_timeout():
+    """RLIMIT_CPU is cumulative for the process's whole life, so a small value kills a healthy worker eventually."""
+    assert worker._WORKER_CPU_BACKSTOP_SECONDS >= 3600
+    assert worker._WORKER_CPU_BACKSTOP_SECONDS != int(AnalysisConfig().TIMEOUT)
+
+
+def test_set_resource_limits_applies_the_cpu_backstop(tmp_path):
+    import multiprocessing
+
+    def child(result_path):
+        import resource
+
+        worker._set_resource_limits()
+        soft, hard = resource.getrlimit(resource.RLIMIT_CPU)
+        Path(result_path).write_text(f"{soft},{hard}")
+
+    result_path = tmp_path / "rlimit.txt"
+    p = multiprocessing.Process(target=child, args=(str(result_path),))
+    p.start()
+    p.join(timeout=10)
+
+    soft, hard = (int(x) for x in result_path.read_text().split(","))
+    assert soft == worker._WORKER_CPU_BACKSTOP_SECONDS
+    assert hard == worker._WORKER_CPU_BACKSTOP_SECONDS

@@ -101,9 +101,21 @@ Analysis never changes what an attacker sees: response codes, headers, routes, a
 every DICOM/web/DICOMweb surface are identical whether analysis is enabled, disabled, caught
 up, or backlogged.
 
+Two independent timeouts protect the worker: a per-job wall-clock deadline (`--analysis-timeout`,
+what actually bounds a single analysis) and a much larger process-lifetime CPU-time backstop
+(1 hour cumulative, not configurable) that only matters if a job somehow gets stuck in
+non-interruptible native code the wall-clock timeout can't preempt. The backstop is
+deliberately not tied to `--analysis-timeout`: it is a *cumulative* total across every job the
+worker has ever run, so a small value there would eventually kill a perfectly healthy worker
+after enough ordinary jobs, not just a stuck one.
+
 ## Operator API
 
 `/api/artifacts` (loopback-only, same auth as the rest of the operator API) lists analyzed
 artifacts with paging and filters (`state`, `channel`, `ip`, `sha256`, `rule`). It returns
 findings only — never the raw captured bytes or the internal file path; there is no download
 endpoint. The operator dashboard's "Analyzed artifacts" panel shows the same data.
+
+`rule` is a **substring** match, not an exact one — `rule=PMSCT` finds every
+`DICOM_Orthanc_PMSCT_RLE1_...` hit without typing the full rule name, and a rule's Big Endian
+sibling (e.g. `..._BigEndian`) shows up under the same query as its Little Endian counterpart.

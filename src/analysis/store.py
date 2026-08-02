@@ -46,6 +46,7 @@ class ArtifactRecord(Base):
     local_port = Column(Integer, nullable=True)
     sop_class_uid = Column(String, nullable=True)
     sop_instance_uid = Column(String, nullable=True)
+    transfer_syntax_uid = Column(String, nullable=True)
     state = Column(String, nullable=False, default=AnalysisState.PENDING, index=True)
     attempts = Column(Integer, nullable=False, default=0)
     analyzer_version = Column(String, nullable=True)
@@ -114,6 +115,7 @@ class AnalysisStore:
             local_port=artifact.local_port,
             sop_class_uid=artifact.sop_class_uid,
             sop_instance_uid=artifact.sop_instance_uid,
+            transfer_syntax_uid=artifact.transfer_syntax_uid,
             state=AnalysisState.PENDING,
             attempts=0,
             created_at=_now(),

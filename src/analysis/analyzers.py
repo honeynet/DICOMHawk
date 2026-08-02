@@ -11,6 +11,8 @@ from pathlib import Path
 
 import magic
 from pydicom import dcmread
+from pydicom.filereader import read_dataset
+from pydicom.uid import UID
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +111,14 @@ def _declared_length(ds, keyword: str) -> int | None:
         return None
 
 
-def _read_dataset(data: bytes, source_encoding: str):
+def _read_dataset(data: bytes, source_encoding: str, transfer_syntax_uid: str | None = None):
+    """part10 is self-describing; a raw DIMSE dataset uses the negotiated transfer syntax if known, else dcmread's own heuristic."""
     try:
         if source_encoding == "part10":
             return dcmread(BytesIO(data))
+        if transfer_syntax_uid:
+            ts = UID(transfer_syntax_uid)
+            return read_dataset(BytesIO(data), ts.is_implicit_VR, ts.is_little_endian)
         return dcmread(BytesIO(data), force=True)
     except Exception:
         return None
@@ -128,10 +134,10 @@ def _content_conflicts_with_declared_mime(declared: str | None, detected: str | 
 
 
 def extract_encapsulated_document(
-    data: bytes, source_encoding: str, max_bytes: int
+    data: bytes, source_encoding: str, max_bytes: int, transfer_syntax_uid: str | None = None
 ) -> tuple[dict, bytes] | None:
     """Unwrap (0042,0011) so offset/filesize-anchored rules see the real file, not the DICOM wrapper."""
-    ds = _read_dataset(data, source_encoding)
+    ds = _read_dataset(data, source_encoding, transfer_syntax_uid)
     if ds is None or "EncapsulatedDocument" not in ds:
         return None
     try:
@@ -168,9 +174,19 @@ def extract_encapsulated_document(
     return metadata, document
 
 
-def extract_dicom_metadata(data: bytes, source_encoding: str) -> dict | None:
-    """Bounded, non-PHI DICOM metadata, or None if unparseable; a DIMSE dataset is a best-effort guess (see parse_assumption)."""
-    ds = _read_dataset(data, source_encoding)
+def _parse_assumption(source_encoding: str, transfer_syntax_uid: str | None) -> str | None:
+    if source_encoding == "part10":
+        return None
+    if transfer_syntax_uid:
+        return f"Parsed using the transfer syntax negotiated for this association ({transfer_syntax_uid})"
+    return "Transfer syntax unknown; guessed from the bytes themselves (pydicom's VR/endian heuristic)"
+
+
+def extract_dicom_metadata(
+    data: bytes, source_encoding: str, transfer_syntax_uid: str | None = None
+) -> dict | None:
+    """Bounded, non-PHI DICOM metadata, or None if unparseable; see parse_assumption for how a raw DIMSE dataset was decoded."""
+    ds = _read_dataset(data, source_encoding, transfer_syntax_uid)
     if ds is None:
         return None
 
@@ -179,7 +195,9 @@ def extract_dicom_metadata(data: bytes, source_encoding: str) -> dict | None:
         "sop_class_uid": _bounded(ds, "SOPClassUID"),
         "sop_instance_uid": _bounded(ds, "SOPInstanceUID"),
         "transfer_syntax_uid": (
-            _bounded(file_meta, "TransferSyntaxUID") if file_meta is not None else None
+            _bounded(file_meta, "TransferSyntaxUID")
+            if file_meta is not None
+            else transfer_syntax_uid
         ),
         "modality": _bounded(ds, "Modality"),
         "encapsulated_document_mime": _bounded(ds, "MIMETypeOfEncapsulatedDocument"),
@@ -189,9 +207,5 @@ def extract_dicom_metadata(data: bytes, source_encoding: str) -> dict | None:
         "declared_encapsulated_document_bytes": _declared_length(
             ds, "EncapsulatedDocument"
         ),
-        "parse_assumption": (
-            "Implicit VR Little Endian assumed; negotiated transfer syntax unknown"
-            if source_encoding != "part10"
-            else None
-        ),
+        "parse_assumption": _parse_assumption(source_encoding, transfer_syntax_uid),
     }
