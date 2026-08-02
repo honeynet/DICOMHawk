@@ -651,3 +651,61 @@ def test_set_resource_limits_applies_the_cpu_backstop(tmp_path):
     soft, hard = (int(x) for x in result_path.read_text().split(","))
     assert soft == worker._WORKER_CPU_BACKSTOP_SECONDS
     assert hard == worker._WORKER_CPU_BACKSTOP_SECONDS
+
+
+def _dead_component(tmp_path):
+    from analysis.component import new_analysis_component
+    from analysis.config import new_analysis_config
+    import logging
+
+    comp = new_analysis_component(
+        new_analysis_config(db_path=str(tmp_path / "missing" / "\0bad" / "a.db")),
+        logging.getLogger("bus"),
+    )
+    comp.start()
+    return comp
+
+
+def test_unopenable_store_disables_analysis_without_killing_the_process(tmp_path):
+    comp = _dead_component(tmp_path)  # must not raise: an optional feature can't take the honeypot down
+    assert comp.store.ready() is False
+    assert comp._process is None and comp._supervisor is None
+    assert comp.store.list_artifacts() == ([], 0)
+    comp.stop()
+
+
+def test_sink_is_safe_when_the_analysis_store_never_opened(tmp_path):
+    comp = _dead_component(tmp_path)
+    storage = new_store(str(tmp_path / "traces"))
+    capture = storage.capture(b"x" * 32, suffix=".dcm")
+
+    comp.sink(
+        SubmittedArtifact(
+            capture,
+            channel="DIMSE",
+            request_type="C-STORE",
+            disposition="stored",
+            source_encoding="dimse-dataset",
+            session_id="1",
+            ip="1.2.3.4",
+            local_port=104,
+        )
+    )
+    comp.stop()
+
+
+def test_operator_api_artifacts_survive_a_store_that_never_opened(tmp_path):
+    import logging
+
+    from profiles.profile import load_profile
+    from web.operator_api import new_operator_api
+
+    comp = _dead_component(tmp_path)
+    client = new_operator_api(
+        load_profile("generic-pacs"), logging.getLogger("bus"), None, comp.store
+    ).test_client()
+
+    response = client.get("/api/artifacts")
+    assert response.status_code == 200
+    assert response.get_json() == []
+    comp.stop()

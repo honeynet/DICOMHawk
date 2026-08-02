@@ -31,6 +31,10 @@ Start the DICOM honeypot server.
 | `--analysis-rules` | | *(none)* | Directory of additional operator `.yar` files, on top of the shipped starters; also read from `DICOMHAWK_ANALYSIS_RULES` |
 | `--analysis-timeout` | | `10.0` | Hard wall-clock deadline per analysis job, in seconds; also read from `DICOMHAWK_ANALYSIS_TIMEOUT` |
 | `--analysis-max-bytes` | | `67108864` | Bounded read/extraction cap per analyzed capture; also read from `DICOMHAWK_ANALYSIS_MAX_BYTES` |
+| `--fingerprint` / `--no-fingerprint` | | on | Serve the browser fingerprint collector on profiles whose `web.fingerprint` is enabled (see [Browser fingerprinting](./fingerprinting.md)) |
+| `--fingerprint-db` | | `fingerprint.db` | SQLite path for collected browser fingerprints, separate from every other store; also read from `DICOMHAWK_FINGERPRINT_DB` |
+| `--fingerprint-max-bytes` | | `65536` | Hard cap on one collector submission body; also read from `DICOMHAWK_FINGERPRINT_MAX_BYTES` |
+| `--fingerprint-max-per-session` | | `20` | Submissions stored per web session before further ones are dropped; also read from `DICOMHAWK_FINGERPRINT_MAX_PER_SESSION` |
 | `--analysis-queue-size` | | `256` | In-memory wake-up queue bound; the durable job table is the source of truth, not this queue; also read from `DICOMHAWK_ANALYSIS_QUEUE_SIZE` |
 
 **Profiles** decide which device the honeypot impersonates. With no `--profile`, it runs a generic default (AE title `ORTHANC`, all storage classes, no web surface). `--profile fujifilm` makes it present as a Fujifilm Synapse PACS — that device's identity, supported SOP classes, status codes, and a matching web login/worklist. `--profile generic-pacs` is a vendor-neutral second profile with the same web surface but plain, unbranded pages and generic headers — useful as a starting point for a custom profile. To impersonate a different device, write a profile YAML in the same format and pass its path — see [Adding a profile](./profiles.md) for the full schema and how to build the optional web surface.

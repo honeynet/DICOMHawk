@@ -36,8 +36,13 @@ class AnalysisComponent(Component):
     def start(self) -> None:
         if self._process is not None:
             return
-        self.store.start()
-        recovered = self.store.recover_stale()
+        try:
+            self.store.start()
+            recovered = self.store.recover_stale()
+        except Exception:
+            # An optional analysis feature must never take the honeypot down with it.
+            logger.exception("Analysis disabled: could not open %s", self.config.DB_PATH)
+            return
         self._queue = multiprocessing.Queue(maxsize=self.config.QUEUE_SIZE)
         self._stopping.clear()
         self._spawn()
@@ -111,6 +116,8 @@ class AnalysisComponent(Component):
 
     def sink(self, artifact: SubmittedArtifact) -> None:
         """The ArtifactSink for DIMSE/web/DICOMweb ingestion; must never raise or block into a response."""
+        if not self.store.ready():
+            return  # store never opened; the capture itself is unaffected
         try:
             artifact_id = self.store.enqueue_pending(artifact)
         except Exception as exc:

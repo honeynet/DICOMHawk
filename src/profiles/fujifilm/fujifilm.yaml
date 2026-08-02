@@ -304,6 +304,9 @@ web:
 
   # No honey hint: it would fingerprint the Synapse login capture.
 
+  fingerprint:
+    enabled: true
+
   # Synapse paths and cookie names sourced from public passive recon.
   routes:
     entry: /Synapse
@@ -315,6 +318,9 @@ web:
     sts_authorize: /SynapseSignOn/sts/connect/authorize
     csp_report: /SynapseSignOn/sts/csp/report
     translated_items: /synapse/error/TranslatedItems
+    # Sits in the same asset prefix and namespace as the real scripts, so it doesn't stand out.
+    fingerprint_script: /static/synapse/ClientCapabilities.min.js
+    fingerprint_ingest: /synapse/error/ClientInfo
   cookies:
     antiforgery: idsrv.xsrf
     session: IdpCookie

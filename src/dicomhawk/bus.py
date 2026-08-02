@@ -174,6 +174,7 @@ class InteractionEvent:
         path: str | None = None,
         user_agent: str | None = None,
         artifact: dict | None = None,
+        fingerprint_hash: str | None = None,
     ) -> "InteractionEvent":
         """Build the same log line from an HTTP request (web / DICOMweb), no pynetdicom Event."""
         self = cls.__new__(cls)
@@ -194,6 +195,7 @@ class InteractionEvent:
             path=path,
             user_agent=user_agent,
             artifact=artifact,
+            fingerprint_hash=fingerprint_hash,
         )
         return self
 
@@ -250,6 +252,7 @@ class InteractionEvent:
         artifact=None,
         artifact_id=None,
         analysis=None,
+        fingerprint_hash=None,
     ) -> None:
         self.channel = channel
         self.session_id = session_id
@@ -275,6 +278,8 @@ class InteractionEvent:
         # Correlates an async ANALYSIS_RESULT/FAILED/TIMEOUT event back to its originating artifact.
         self.artifact_id = artifact_id
         self.analysis = analysis
+        # Links a web event to the browser fingerprint collected for that session.
+        self.fingerprint_hash = fingerprint_hash
         self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     def __str__(self) -> str:
@@ -298,6 +303,7 @@ class InteractionEvent:
                 "artifact_id": self.artifact_id,
                 "analysis": self.analysis,
                 "artifact": self.artifact,
+                "fingerprint_hash": self.fingerprint_hash,
                 "timestamp": self.timestamp,
             },
             escape_forward_slashes=False,

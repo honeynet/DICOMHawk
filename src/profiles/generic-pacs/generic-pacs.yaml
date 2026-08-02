@@ -15,6 +15,9 @@ web:
   honey_credentials:
     - username: test
       password: test
+  # Opting in with no signal list or route overrides: everything comes from default_profile().
+  fingerprint:
+    enabled: true
 # Opt in to DICOMweb; inherits the generic single-port /dicom-web/ fallback, not a vendor-shaped one.
 dicomweb:
   enabled: true

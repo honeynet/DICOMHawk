@@ -72,8 +72,8 @@ class AnalysisStore:
         self.session = None
 
     def start(self) -> "AnalysisStore":
-        if self.db_path != ":memory:":
-            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        # Needs a real path: under NullPool a new ":memory:" connection is a fresh empty database.
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.engine = create_engine(
             f"sqlite:///{self.db_path}",
             poolclass=NullPool,  # a fixed pool would block C-STORE on checkout once saturated
@@ -91,6 +91,10 @@ class AnalysisStore:
             self.session.remove()
         if self.engine:
             self.engine.dispose()
+
+    def ready(self) -> bool:
+        """False when the store never opened; callers degrade instead of raising."""
+        return self.session is not None
 
     def _commit(self) -> None:
         """Roll back on failure so one transient error can't poison this thread's session."""
@@ -232,6 +236,8 @@ class AnalysisStore:
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[ArtifactRecord], int]:
+        if not self.ready():
+            return [], 0
         query = self.session.query(ArtifactRecord)
         if state:
             query = query.filter(ArtifactRecord.state == state)

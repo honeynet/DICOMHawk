@@ -36,6 +36,8 @@ services:
       - "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}"   # own volume, off the flood-prone traces volume
       - --analysis-db
       - "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}"
+      - --fingerprint-db
+      - "${DICOMHAWK_FINGERPRINT_DB:-/opt/dicomhawk/state/fingerprint.db}"
       - -t
       - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
       - -l

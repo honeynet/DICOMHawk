@@ -45,13 +45,14 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*", "honeytoken", "honeytoken.*", "analysis", "analysis.*"]
+include = ["dicomhawk", "dicomhawk.*", "commands", "commands.*", "seeding", "seeding.*", "profiles", "profiles.*", "web", "web.*", "honeytoken", "honeytoken.*", "analysis", "analysis.*", "fingerprint", "fingerprint.*"]
 
 [tool.setuptools.package-data]
 seeding = ["fallback_data/**/*.dcm", "fallback_data/**/ATTRIBUTION.md", "config.yaml", "locations.json"]
 profiles = ["*/*.yaml", "*/web/templates/*.html", "*/web/static/**/*"]
 web = ["templates/*.html", "static/*"]
-analysis = ["rules/*.yar", "rules/ATTRIBUTION.md"]
+analysis = ["rules/*.yar"]
+fingerprint = ["static/*.js"]
 
 [project.urls]
 Homepage = "https://github.com/honeynet/DICOMHawk"

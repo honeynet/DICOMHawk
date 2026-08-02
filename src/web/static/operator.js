@@ -115,6 +115,24 @@ function renderArtifacts(items) {
   });
 }
 
+function renderFingerprints(items) {
+  const root = byId("fingerprints"); root.replaceChildren();
+  items.forEach((item) => {
+    const row = document.createElement("tr");
+    cell(row, time(item.created_at), "muted"); cell(row, item.ip || "—", "mono");
+    const verdict = cell(row, "");
+    if (item.bot_verdict) { verdict.textContent = ""; badge(verdict, item.bot_verdict, "bad"); }
+    else verdict.textContent = "—";
+    const checks = (item.bot_checks || []);
+    const checksCell = cell(row, checks.length ? "" : "—");
+    checks.forEach((check) => badge(checksCell, check.check, "warn"));
+    const agent = cell(row, item.user_agent || "—"); agent.title = item.user_agent || "";
+    const hash = item.fingerprint_hash ? `${item.fingerprint_hash.slice(0, 12)}…` : "—";
+    const hashCell = cell(row, hash, "mono"); hashCell.title = item.fingerprint_hash || "";
+    root.appendChild(row);
+  });
+}
+
 function query() {
   const params = new URLSearchParams();
   const hours = byId("range").value;
@@ -132,9 +150,10 @@ async function refresh() {
   const notice = byId("notice");
   notice.className = "notice"; notice.textContent = "Refreshing retained activity…";
   try {
-    const [overviewResponse, artifactsResponse] = await Promise.all([
+    const [overviewResponse, artifactsResponse, fingerprintsResponse] = await Promise.all([
       fetch(`/api/overview?${query()}`, {cache: "no-store"}),
       fetch("/api/artifacts?limit=50", {cache: "no-store"}),
+      fetch("/api/fingerprints?limit=50", {cache: "no-store"}),
     ]);
     if (!overviewResponse.ok) throw new Error(`Operator API returned ${overviewResponse.status}`);
     const data = await overviewResponse.json(); const stats = data.stats;
@@ -146,6 +165,7 @@ async function refresh() {
     renderChannels(stats.by_channel); renderAttackers(data.attackers); renderEvents(data.events);
     renderUploads(data.uploads); renderCredentials(data.credentials);
     renderArtifacts(artifactsResponse.ok ? await artifactsResponse.json() : []);
+    renderFingerprints(fingerprintsResponse.ok ? await fingerprintsResponse.json() : []);
     const skipped = stats.skipped_records ? ` · ${stats.skipped_records} malformed record(s) skipped` : "";
     notice.textContent = `Updated ${new Date().toLocaleTimeString()}${skipped}`;
   } catch (error) {

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 _DATA_PKG = "profiles"
 _OPERATIONS = frozenset({"echo", "find", "get", "move", "store"})
 _HONEYTRAP_RESPONSES = frozenset({"login_redirect", "api_404", "unauthorized_page"})
+_FINGERPRINT_SIGNALS = frozenset({"browser", "rendering", "math", "screen", "bot"})
 _DICOMWEB_SERVICES = frozenset({"qido", "wado_rs", "stow", "wado_uri"})
 _REQUIRED_TEMPLATES = frozenset(
     {
@@ -58,6 +59,13 @@ class DicomConfig:
 
 
 @dataclass
+class FingerprintConfig:
+    # Signal categories the served collector is allowed to run; an empty list means off.
+    enabled: bool = False
+    signals: list[str] = field(default_factory=list)
+
+
+@dataclass
 class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
@@ -77,9 +85,8 @@ class WebConfig:
     )
     # (path, response_kind); a profile with none declared gets no honeytrap routes at all.
     honeytraps: list[tuple[str, str]] = field(default_factory=list)
-    fingerprint_script: str | None = (
-        None  # static-asset filename; Weeks 5-6 injection seam only, no collector yet
-    )
+    # Browser-fingerprint collector; its two URL paths live in `routes` like every other route.
+    fingerprint: FingerprintConfig = field(default_factory=FingerprintConfig)
     # (username, password) bait pairs; using one grants access unconditionally (see login_post).
     honey_credentials: list[tuple[str, str]] = field(default_factory=list)
     # URL paths for every route the engine serves; keeps one profile's identity out of another's address bar.
@@ -220,6 +227,9 @@ def default_profile() -> ProfileConfig:
                 "search": "/portal/search",
                 "upload": "/portal/upload",
                 "logout": "/portal/logout",
+                # Collector asset + its ingest endpoint (registered only when web.fingerprint is on).
+                "fingerprint_script": "/portal/static/telemetry.js",
+                "fingerprint_ingest": "/portal/telemetry",
             },
             cookies={
                 "antiforgery": "portal.xsrf",
@@ -235,6 +245,10 @@ def default_profile() -> ProfileConfig:
                 "text2": "Unable to log in using Windows Authentication.",
                 "text3": "Log in directly",
             },
+            # Off unless a profile opts in; opting in with no `signals` key gets every category.
+            fingerprint=FingerprintConfig(
+                enabled=False, signals=sorted(_FINGERPRINT_SIGNALS)
+            ),
         ),
         # Generic single-port /dicom-web/ fallback; a profile opts in and inherits it.
         dicomweb=DicomWebConfig(
@@ -712,6 +726,30 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     else:
         honey_credentials = d.web.honey_credentials
 
+    fingerprint_raw = _mapping(web_raw.get("fingerprint"), "web.fingerprint")
+    if "enabled" in fingerprint_raw and not isinstance(
+        fingerprint_raw["enabled"], bool
+    ):
+        raise ValueError("Profile 'web.fingerprint.enabled' must be boolean")
+    if "signals" in fingerprint_raw:
+        if not isinstance(fingerprint_raw["signals"], list):
+            raise ValueError("Profile 'web.fingerprint.signals' must be a list")
+        fingerprint_signals = [str(s) for s in fingerprint_raw["signals"]]
+        unknown = sorted(set(fingerprint_signals) - _FINGERPRINT_SIGNALS)
+        if unknown:
+            raise ValueError(
+                f"Unknown web.fingerprint.signals: {', '.join(unknown)} "
+                f"(known: {', '.join(sorted(_FINGERPRINT_SIGNALS))})"
+            )
+    else:
+        fingerprint_signals = list(d.web.fingerprint.signals)
+    fingerprint = FingerprintConfig(
+        # An explicit empty signal list means off, so we never serve a collector that collects nothing.
+        enabled=bool(fingerprint_raw.get("enabled", d.web.fingerprint.enabled))
+        and bool(fingerprint_signals),
+        signals=fingerprint_signals,
+    )
+
     def web_dict(key: str, default: dict) -> dict:
         return {**default, **_mapping(web_raw.get(key), f"web.{key}")}
 
@@ -861,7 +899,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             oidc=oidc,
             favicon=web_raw.get("favicon"),
             honeytraps=honeytraps,
-            fingerprint_script=web_raw.get("fingerprint_script"),
+            fingerprint=fingerprint,
             honey_credentials=honey_credentials,
             routes=routes,
             cookies=cookies,

@@ -12,6 +12,8 @@ from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
 from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
+from fingerprint.component import new_fingerprint_component
+from fingerprint.config import new_fingerprint_config
 
 from profiles.profile import load_profile
 from web.component import new_dicomweb_component, new_web_component
@@ -167,6 +169,29 @@ def serve(
         envvar="DICOMHAWK_ANALYSIS_QUEUE_SIZE",
         help="In-memory wake-up queue bound; the durable job table is the source of truth",
     ),
+    fingerprint: bool = typer.Option(
+        True,
+        "--fingerprint/--no-fingerprint",
+        help="Serve the browser fingerprint collector on profiles whose web.fingerprint is enabled",
+    ),
+    fingerprint_db: str = typer.Option(
+        "fingerprint.db",
+        "--fingerprint-db",
+        envvar="DICOMHAWK_FINGERPRINT_DB",
+        help="SQLite path for collected browser fingerprints (its own store, separate from every other)",
+    ),
+    fingerprint_max_bytes: int = typer.Option(
+        64 * 1024,
+        "--fingerprint-max-bytes",
+        envvar="DICOMHAWK_FINGERPRINT_MAX_BYTES",
+        help="Hard cap on one collector submission body",
+    ),
+    fingerprint_max_per_session: int = typer.Option(
+        20,
+        "--fingerprint-max-per-session",
+        envvar="DICOMHAWK_FINGERPRINT_MAX_PER_SESSION",
+        help="Submissions stored per web session before further ones are dropped",
+    ),
 ):
 
     try:
@@ -193,6 +218,10 @@ def serve(
         raise typer.BadParameter("analysis-max-bytes must be positive")
     if analysis_queue_size < 1:
         raise typer.BadParameter("analysis-queue-size must be positive")
+    if fingerprint_max_bytes < 1:
+        raise typer.BadParameter("fingerprint-max-bytes must be positive")
+    if fingerprint_max_per_session < 1:
+        raise typer.BadParameter("fingerprint-max-per-session must be positive")
     try:
         operator_is_loopback = (
             operator_host == "localhost"
@@ -315,6 +344,29 @@ def serve(
     else:
         logger.info("Analysis: disabled (--no-analysis)")
 
+    fingerprint_sink = None
+    fingerprint_store = None
+    if not fingerprint:
+        # The flag overrides the profile, so no collector is served and no route is registered.
+        prof.web.fingerprint.enabled = False
+    # Only build the store when a profile actually serves a collector, so nothing is created unused.
+    if fingerprint and prof.kind == "pacs" and prof.web.enabled and prof.web.fingerprint.enabled:
+        fingerprint_component = new_fingerprint_component(
+            new_fingerprint_config(
+                db_path=fingerprint_db,
+                max_body_bytes=fingerprint_max_bytes,
+                max_per_session=fingerprint_max_per_session,
+            )
+        )
+        components.append(fingerprint_component)
+        fingerprint_sink = fingerprint_component.sink
+        fingerprint_store = fingerprint_component.store
+        logger.info(
+            "Fingerprinting: signals=%s", ",".join(prof.web.fingerprint.signals)
+        )
+    else:
+        logger.info("Fingerprinting: disabled")
+
     dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes, sink=sink)
 
     handlers = []
@@ -339,6 +391,8 @@ def serve(
                 trusted_proxy,
                 sink,
                 analysis_store,
+                fingerprint_sink,
+                fingerprint_store,
             )
         )
     # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.

@@ -84,8 +84,7 @@ The shipped rules are original and MIT-licensed. They cover two tiers of detecti
   stored XSS (CVE-2023-7238), and oversized declared-vs-actual ZIP/gzip expansion ratios
   (CVE-2026-5438, CVE-2026-5439).
 
-These are a starting point, not a substitute for your own threat intelligence — rule
-provenance and sourcing are documented in `src/analysis/rules/ATTRIBUTION.md`.
+These are a starting point, not a substitute for your own threat intelligence.
 
 ## Operation and limits
 

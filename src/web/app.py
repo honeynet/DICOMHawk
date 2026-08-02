@@ -231,7 +231,15 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
     )
 
 
-def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifact=None):
+def _log_probe(
+    request_type,
+    params=None,
+    *,
+    matches=None,
+    level="INFO",
+    artifact=None,
+    fingerprint_hash=None,
+):
     """Log a bare honeytrap/scan/browse hit (no credentials), same channel=WEB path as _capture."""
     log = current_app.config["BUS"]
     emit = log.warning if level == "WARNING" else log.info
@@ -250,6 +258,7 @@ def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifac
             path=_bounded(request.full_path.rstrip("?")),
             user_agent=_bounded(request.headers.get("User-Agent", "")),
             artifact=artifact,
+            fingerprint_hash=fingerprint_hash,
         )
     )
 
@@ -399,12 +408,16 @@ def _apply_request_limit():
 
 
 def _inject_context():
-    # fingerprint_seam is the Weeks 5-6 injection point; empty unless web.fingerprint_script is set.
+    # The collector reads its enabled categories from data-signals, so the asset itself stays static.
     nonce = g.get("csp_nonce", "")
+    web = _web()
     seam = ""
-    script = _web().fingerprint_script
-    if script:
-        seam = f'<script nonce="{nonce}" src="{url_for("static", filename=script)}"></script>'
+    if web.fingerprint.enabled:
+        seam = (
+            f'<script nonce="{nonce}" src="{web.routes["fingerprint_script"]}" '
+            f'data-signals="{",".join(web.fingerprint.signals)}" '
+            f'data-ingest="{web.routes["fingerprint_ingest"]}" defer></script>'
+        )
     return {"csp_nonce": nonce, "fingerprint_seam": seam}
 
 
@@ -430,6 +443,39 @@ def favicon():
     return send_from_directory(
         current_app.static_folder, _web().favicon, mimetype="image/x-icon"
     )
+
+
+def fingerprint_script():
+    # Served from the fingerprint package, so one collector covers every profile that opts in.
+    return send_from_directory(
+        os.path.join(_SRC, "fingerprint", "static"),
+        "collector.js",
+        mimetype="application/javascript",
+    )
+
+
+def fingerprint_ingest():
+    """Absorb one collector submission. Always answers 204, whatever the store does."""
+    fingerprint_hash = None
+    try:
+        sink = current_app.config["FINGERPRINT_SINK"]
+        fingerprint_hash = sink(
+            request.get_data(cache=False),
+            session_id=_http_session_id(),
+            ip=request.remote_addr,
+            local_port=_local_port(),
+            path=_bounded(request.path),
+            user_agent=_bounded(request.headers.get("User-Agent", "")) or None,
+        )
+    except Exception:
+        # Fingerprinting must never change what the peer sees; the response below is unconditional.
+        logger.exception("Fingerprint sink failed")
+    _log_probe(
+        "WEB_FINGERPRINT",
+        params=["Stored: yes" if fingerprint_hash else "Stored: no"],
+        fingerprint_hash=fingerprint_hash,
+    )
+    return ("", 204)
 
 
 def robots_txt():
@@ -1025,6 +1071,7 @@ def new_web(
     repo: Repository,
     bus: Logger,
     sink: ArtifactSink | None = None,
+    fingerprint_sink=None,
 ) -> Flask:
     """Build the attacker-facing Flask app for `profile` — routes/cookies come from its own web config."""
     profile_dir = profile.web.assets_dir or os.path.join(
@@ -1039,6 +1086,7 @@ def new_web(
     app.config["BUS"] = bus
     app.config["REPO"] = repo
     app.config["ARTIFACT_SINK"] = sink or (lambda _artifact: None)
+    app.config["FINGERPRINT_SINK"] = fingerprint_sink or (lambda _body, **_kwargs: None)
     app.config["WEB_SESSIONS"] = {}
     app.config["WEB_SESSIONS_LOCK"] = threading.Lock()
     app.config["WEB_STORAGE_CLASSES"] = {
@@ -1089,6 +1137,18 @@ def new_web(
         forgot_password_post,
         methods=["POST"],
     )
+
+    # A profile that never opts in gets no collector asset and no ingest endpoint at all.
+    if profile.web.fingerprint.enabled:
+        app.add_url_rule(
+            routes["fingerprint_script"], "fingerprint_script", fingerprint_script
+        )
+        app.add_url_rule(
+            routes["fingerprint_ingest"],
+            "fingerprint_ingest",
+            fingerprint_ingest,
+            methods=["POST"],
+        )
 
     # Capture-only profiles do not register browse routes.
     if profile.web.browse:

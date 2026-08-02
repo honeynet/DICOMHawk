@@ -775,6 +775,45 @@ def artifacts():
     return response
 
 
+def _fingerprint_record(record) -> dict:
+    return {
+        "fingerprint_id": record.fingerprint_id,
+        "fingerprint_hash": record.fingerprint_hash,
+        "session_id": record.session_id,
+        "ip": record.ip,
+        "local_port": record.local_port,
+        "path": record.path,
+        "user_agent": record.user_agent,
+        "bot_verdict": record.bot_verdict,
+        "bot_checks": record.bot_checks or [],
+        "source_errors": record.source_errors,
+        "signals": record.signals,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+    }
+
+
+@bp.route("/api/fingerprints")
+def fingerprints():
+    store = current_app.config.get("FINGERPRINT_STORE")
+    if store is None:
+        return jsonify([])
+    limit = _int_arg("limit", 50, minimum=1, maximum=500)
+    offset = _int_arg("offset", 0, minimum=0, maximum=10_000)
+    rows, total = store.list_fingerprints(
+        fingerprint_hash=request.args.get("hash"),
+        session_id=request.args.get("session_id"),
+        ip=request.args.get("ip"),
+        verdict=request.args.get("verdict"),
+        offset=offset,
+        limit=limit,
+    )
+    response = jsonify([_fingerprint_record(row) for row in rows])
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return response
+
+
 @bp.route("/api/overview")
 def overview():
     source = _log_events()
@@ -818,6 +857,7 @@ def new_operator_api(
     bus: Logger,
     operator_token: str | None = None,
     analysis_store: "AnalysisStore | None" = None,
+    fingerprint_store=None,
 ) -> Flask:
     app = Flask(__name__)
     app.config["PROFILE"] = profile
@@ -825,6 +865,7 @@ def new_operator_api(
     app.config["EVENTS"] = recent_events(bus)
     app.config["OPERATOR_TOKEN"] = operator_token or None
     app.config["ANALYSIS_STORE"] = analysis_store
+    app.config["FINGERPRINT_STORE"] = fingerprint_store
     app.before_request(_authenticate_operator)
     app.after_request(_operator_headers)
     app.register_blueprint(bp)

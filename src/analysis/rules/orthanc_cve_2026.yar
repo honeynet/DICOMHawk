@@ -126,7 +126,7 @@ rule DICOM_Orthanc_PMSCT_RLE1_CVE_2026_5441_Known_Test
 }
 
 
-// Big Endian siblings of the rules above (accepted for storage; see ATTRIBUTION.md for why GDCM/5437 have none).
+// Big Endian siblings of the rules above .
 
 
 rule DICOM_Rows_Columns_Encoded_As_UL_BigEndian

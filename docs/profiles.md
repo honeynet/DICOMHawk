@@ -157,8 +157,9 @@ If `web.browse: true`, three more templates are required and validated at startu
 
 Every template also receives `csp_nonce` (put it on any inline `<script>` tag — the CSP
 is nonce-based) and `fingerprint_seam` (put `{{ fingerprint_seam|safe }}` before
-`</head>`; it's empty unless you set `web.fingerprint_script`, the seam a future browser
-fingerprinting pass will use — nothing to build here yet).
+`</head>`; it renders the browser fingerprint collector when the profile enables
+`web.fingerprint`, and is empty otherwise — see
+[Browser fingerprinting](./fingerprinting.md)).
 
 ### `web:` config reference
 

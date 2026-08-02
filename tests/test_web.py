@@ -53,19 +53,26 @@ def test_synapse_entry_redirects_to_login(client):
     assert "/SynapseSignOn/sts/login" in resp.headers["Location"]
 
 
-def test_fingerprint_seam_empty_by_default(client):
-    resp = client.get("/SynapseSignOn/sts/login?signin=abc")
-    assert "probe.js" not in resp.get_data(as_text=True)
-
-
-def test_fingerprint_seam_injects_configured_script(repo, bus):
+def test_fingerprint_seam_empty_when_disabled(repo, bus):
     profile = load_profile("fujifilm")
-    profile.web.fingerprint_script = "synapse/probe.js"
+    profile.web.fingerprint.enabled = False
     client = new_web(profile, repo, bus).test_client()
 
-    resp = client.get("/SynapseSignOn/sts/login?signin=abc")
+    resp = client.get(profile.web.routes["login"] + "?signin=abc")
+    assert "data-signals" not in resp.get_data(as_text=True)
+
+
+def test_fingerprint_seam_injects_collector_with_enabled_signals(repo, bus):
+    profile = load_profile("fujifilm")
+    profile.web.fingerprint.enabled = True
+    profile.web.fingerprint.signals = ["math", "screen"]
+    client = new_web(profile, repo, bus).test_client()
+
+    resp = client.get(profile.web.routes["login"] + "?signin=abc")
     body = resp.get_data(as_text=True)
-    assert '<script nonce="' in body and "synapse/probe.js" in body
+    assert '<script nonce="' in body
+    assert profile.web.routes["fingerprint_script"] in body
+    assert 'data-signals="math,screen"' in body
 
 
 def test_honey_credential_grants_unconditionally_and_logs_distinctly(repo, bus, caplog):

@@ -117,6 +117,20 @@ immediately. `--analysis-rules` is a deployment setting like everything else on 
 part of a profile — point it at a bind-mounted directory of your own `.yar` files if you want
 detections beyond the shipped starters.
 
+## Browser fingerprints
+
+Profiles that enable `web.fingerprint` serve a small collector on the attacker-facing web
+surface (see [Browser fingerprinting](./fingerprinting.md)). Its data goes to a third SQLite
+file, `--fingerprint-db`, which belongs on the state volume for the same reason as the other
+two — the container's root filesystem is read-only, and a traces flood must not affect it.
+
+Collection is bounded on purpose: one submission is capped by `--fingerprint-max-bytes`, and
+each web session may store at most `--fingerprint-max-per-session` of them, so a visitor
+submitting in a loop cannot grow the database without limit. Storage problems never reach the
+visitor — the endpoint answers identically whether the write succeeded or failed. Run with
+`--no-fingerprint` to stop collecting entirely; nothing is served and no endpoint is
+registered, and the database file can then be deleted on its own.
+
 ## TLS
 
 The built-in web listener is plain HTTP/1.1 and the DICOM listeners are plaintext. A

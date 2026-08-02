@@ -137,6 +137,8 @@ class WebComponent(Component):
         trusted_proxy: str | None = None,
         sink: ArtifactSink | None = None,
         analysis_store: AnalysisStore | None = None,
+        fingerprint_sink=None,
+        fingerprint_store=None,
     ):
         self.profile = profile
         self.repo = repo
@@ -149,15 +151,23 @@ class WebComponent(Component):
         self.trusted_proxy = trusted_proxy
         self.sink = sink
         self.analysis_store = analysis_store
+        self.fingerprint_sink = fingerprint_sink
+        self.fingerprint_store = fingerprint_store
         self._servers = []
         self._threads: list[threading.Thread] = []
 
     def start(self) -> None:
         if self._servers:
             return
-        web_app = new_web(self.profile, self.repo, self.bus, self.sink)
+        web_app = new_web(
+            self.profile, self.repo, self.bus, self.sink, self.fingerprint_sink
+        )
         operator_app = new_operator_api(
-            self.profile, self.bus, self.operator_token, self.analysis_store
+            self.profile,
+            self.bus,
+            self.operator_token,
+            self.analysis_store,
+            self.fingerprint_store,
         )
         specs = (
             (
@@ -243,6 +253,8 @@ def new_web_component(
     trusted_proxy: str | None = None,
     sink: ArtifactSink | None = None,
     analysis_store: AnalysisStore | None = None,
+    fingerprint_sink=None,
+    fingerprint_store=None,
 ) -> WebComponent:
     return WebComponent(
         profile,
@@ -256,6 +268,8 @@ def new_web_component(
         trusted_proxy,
         sink,
         analysis_store,
+        fingerprint_sink,
+        fingerprint_store,
     )
 
 
