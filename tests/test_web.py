@@ -3,6 +3,7 @@ import gzip
 import io
 import json
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import pytest
 from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
+from seeding.locations import load_locations
 from web.app import new_web
 
 
@@ -612,7 +614,9 @@ def test_web_upload_preserves_exact_valid_bytes(repo, bus):
 def test_web_upload_submits_accepted_artifact_to_sink(repo, bus):
     submitted = []
     ds, buf = _upload_dicom()
-    client = new_web(load_profile("generic-pacs"), repo, bus, sink=submitted.append).test_client()
+    client = new_web(
+        load_profile("generic-pacs"), repo, bus, sink=submitted.append
+    ).test_client()
     _login_generic(client)
 
     response = client.post(
@@ -633,11 +637,14 @@ def test_web_upload_submits_accepted_artifact_to_sink(repo, bus):
 
 def test_web_upload_succeeds_even_when_the_artifact_sink_raises(repo, bus):
     """Analysis failures must never change what the peer sees; the payload is already captured."""
+
     def exploding_sink(_artifact):
         raise RuntimeError("analysis store unavailable")
 
     _ds, buf = _upload_dicom()
-    client = new_web(load_profile("generic-pacs"), repo, bus, sink=exploding_sink).test_client()
+    client = new_web(
+        load_profile("generic-pacs"), repo, bus, sink=exploding_sink
+    ).test_client()
     _login_generic(client)
 
     response = client.post(
@@ -811,3 +818,394 @@ def test_fujifilm_does_not_expose_browse(repo, bus):
     ):
         assert client.get(path).status_code == 404
     assert client.post("/portal/logout").status_code == 404
+
+
+# --- Fujifilm worklist page ---
+
+
+def _worklist_client(repo, bus, seed=True):
+    """Signed-in fujifilm client with one seeded CT study on the worklist."""
+    if seed:
+        from seeding.seeder import new_seeder
+
+        seeder = new_seeder(repo)
+        assert seeder._seed_fallback(seeder._locations[0], "CT", "worklist-epoch") > 0
+    client = new_web(load_profile("fujifilm"), repo, bus).test_client()
+    login = client.post(
+        "/SynapseSignOn/sts/login?signin=x",
+        data={"username": "svc_dicom", "password": "svc_dicom"},
+    )
+    assert login.status_code == 302
+    return client
+
+
+def test_fujifilm_honey_credential_lands_on_the_worklist(repo, bus, caplog):
+    client = new_web(load_profile("fujifilm"), repo, bus).test_client()
+
+    with caplog.at_level(logging.INFO, logger="bus"):
+        login = client.post(
+            "/SynapseSignOn/sts/login?signin=x",
+            data={"username": "svc_dicom", "password": "svc_dicom"},
+        )
+
+    assert login.status_code == 302
+    assert login.headers["Location"] == "/WorkflowUI/"
+    cookies = "\n".join(login.headers.getlist("Set-Cookie"))
+    assert "IdpCookie=" in cookies
+    assert "Secure" in cookies
+    assert "WEB_HONEY_CREDENTIAL_USED" in caplog.text
+    assert client.get("/WorkflowUI/").status_code == 200
+
+
+def test_fujifilm_wrong_password_is_still_denied(repo, bus):
+    """A honeypot that accepts any password identifies itself on the first wrong guess."""
+    client = new_web(load_profile("fujifilm"), repo, bus).test_client()
+
+    denied = client.post(
+        "/SynapseSignOn/sts/login?signin=x",
+        data={"username": "svc_dicom", "password": "not-the-password"},
+    )
+
+    assert denied.status_code == 200
+    assert b"incorrect" in denied.data
+    assert "IdpCookie=" not in "\n".join(denied.headers.getlist("Set-Cookie"))
+    assert client.get("/WorkflowUI/").status_code == 302
+
+
+def test_fujifilm_login_page_never_reveals_the_honey_credential(repo, bus):
+    profile = load_profile("fujifilm")
+    client = new_web(profile, repo, bus).test_client()
+
+    body = client.get("/SynapseSignOn/sts/login?signin=x").get_data(as_text=True)
+
+    for username, password in profile.web.honey_credentials:
+        assert username not in body
+        assert password not in body
+
+
+def test_worklist_renders_seeded_studies_with_real_image_counts(repo, bus):
+    client = _worklist_client(repo, bus)
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+    uids = re.findall(r'<tr data-uid="([^"]+)"', body)
+    expected = repo.count_instances(uids)
+
+    assert "worklist-table" in body
+    assert "No studies." not in body
+    assert expected
+    for count in expected.values():
+        assert f"<td>{count}</td>" in body
+
+
+def test_worklist_formats_person_names_without_the_dicom_caret(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    # No PACS shows raw PN; the caret would be an instant tell.
+    assert "^" not in body
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("Miller^Monica", "Miller, Monica"),
+        ("Miller^Monica^A^Dr^MD", "Miller, Monica"),
+        ("Cher", "Cher"),
+        ("Miller^", "Miller"),
+        ("^Monica", "Monica"),
+        ("", ""),
+        (None, ""),
+    ],
+)
+def test_format_person_name_cases(value, expected):
+    from web.app import _format_person_name
+
+    assert _format_person_name(value) == expected
+
+
+def test_worklist_shows_attributes_the_qr_index_cannot_hold(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    # Sex, DOB, body part and institution live in the detail index, not db.Instance.
+    assert "<td>M</td>" in body or "<td>F</td>" in body
+    assert "<td>CHEST</td>" in body
+    assert any(loc.institution in body for loc in load_locations(None))
+
+
+def test_worklist_renders_the_generated_procedure_description(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    # Seeded studies carry a real StudyDescription, so the placeholder must not appear.
+    assert "UNKNOWN" not in body
+
+
+def test_worklist_falls_back_to_the_profile_placeholder_without_a_description(
+    repo, bus
+):
+    from pydicom.dataset import Dataset, FileMetaDataset
+    from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian, generate_uid
+
+    ds = Dataset()
+    ds.file_meta = FileMetaDataset()
+    ds.file_meta.MediaStorageSOPClassUID = CTImageStorage
+    ds.file_meta.MediaStorageSOPInstanceUID = generate_uid()
+    ds.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    ds.SOPClassUID = CTImageStorage
+    ds.SOPInstanceUID = ds.file_meta.MediaStorageSOPInstanceUID
+    ds.StudyInstanceUID = generate_uid()
+    ds.SeriesInstanceUID = generate_uid()
+    ds.PatientID = "NODESC"
+    ds.PatientName = "Doe^Jane"
+    ds.Modality = "CT"
+    repo.start()
+    assert repo.store(ds, safe=True) is None
+    client = _worklist_client(repo, bus, seed=False)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    assert "UNKNOWN" in body
+    # The literal is profile data, never a hardcoded string in the engine.
+    assert "UNKNOWN" not in Path("src/web/app.py").read_text()
+
+
+def test_worklist_shows_the_signed_in_username(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    assert "SVC_DICOM" in body
+
+
+def test_worklist_username_is_escaped_and_bounded(repo, bus):
+    from web.app import _WEB_USERNAME_LIMIT
+
+    profile = load_profile("fujifilm")
+    profile.web.grant_access = True
+    client = new_web(profile, repo, bus).test_client()
+    hostile = "<script>alert(1)</script>" + "A" * 5000
+    client.post(
+        "/SynapseSignOn/sts/login?signin=x",
+        data={"username": hostile, "password": "x"},
+    )
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    assert "<script>alert(1)</script>" not in body
+    assert "<SCRIPT>ALERT(1)</SCRIPT>" not in body
+    assert "&lt;SCRIPT&gt;" in body
+    assert "A" * (_WEB_USERNAME_LIMIT + 1) not in body
+
+
+def test_worklist_shell_strings_come_from_the_profile(repo, bus):
+    profile = load_profile("fujifilm")
+    profile.web.worklist["sidebar"] = [
+        {"label": "Injected Section", "items": [{"label": "Injected Folder"}]}
+    ]
+    client = new_web(profile, repo, bus).test_client()
+    client.post(
+        "/SynapseSignOn/sts/login?signin=x",
+        data={"username": "svc_dicom", "password": "svc_dicom"},
+    )
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    assert "Injected Section" in body
+    assert "Injected Folder" in body
+    assert "Global Worklists" not in body
+
+
+def test_worklist_template_hardcodes_no_folder_names():
+    template = Path("src/profiles/fujifilm/web/templates/worklist.html").read_text()
+
+    # The old stub inlined its folder list; every label is profile data now.
+    for literal in ("All Studies", "Assigned to me", "STAT", "Unread"):
+        assert literal not in template
+
+
+def test_worklist_sidebar_folder_filters_the_study_list(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    matching = client.get("/WorkflowUI/?path=CT").get_data(as_text=True)
+    other = client.get("/WorkflowUI/?path=CR").get_data(as_text=True)
+
+    assert "No studies." not in matching
+    assert "No studies." in other
+
+
+def test_worklist_unknown_folder_falls_back_without_reflecting_it(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/?path=../../etc/passwd").get_data(as_text=True)
+
+    assert "No studies." not in body
+    assert "etc/passwd" not in body
+
+
+def test_worklist_detail_panel_opens_for_a_listed_study(repo, bus, caplog):
+    client = _worklist_client(repo, bus)
+    listing = client.get("/WorkflowUI/").get_data(as_text=True)
+    uid = listing.split('data-uid="')[1].split('"')[0]
+
+    with caplog.at_level(logging.INFO, logger="bus"):
+        body = client.get(
+            f"/WorkflowUI/?action=Study+Information&study={uid}"
+        ).get_data(as_text=True)
+
+    assert '<div class="wl-detail">' in body
+    assert f"Study: {uid}" in caplog.text
+
+
+def test_worklist_detail_cannot_probe_for_an_unlisted_study(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/?study=1.2.3.not.a.real.study").get_data(
+        as_text=True
+    )
+
+    assert '<div class="wl-detail">' not in body
+    assert "1.2.3.not.a.real.study" not in body
+
+
+def test_worklist_action_renders_the_configured_error(repo, bus, caplog):
+    client = _worklist_client(repo, bus)
+    message = load_profile("fujifilm").web.worklist["messages"]["action_failed"]
+
+    with caplog.at_level(logging.INFO, logger="bus"):
+        body = client.get("/WorkflowUI/?action=Open+Viewer").get_data(as_text=True)
+
+    assert "alert-danger" in body
+    assert message in body
+    assert "Action: Open Viewer" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["<script>alert(1)</script>", "Open Viewer'; DROP TABLE", "A" * 5000, ""],
+)
+def test_worklist_unknown_action_never_reflects_raw_input(repo, bus, action):
+    client = _worklist_client(repo, bus)
+
+    resp = client.get("/WorkflowUI/", query_string={"action": action})
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    if action:
+        assert action not in body
+        assert "alert-danger" in body
+
+
+def test_worklist_column_filter_is_bounded_in_the_log(repo, bus, caplog):
+    from web.app import _WORKLIST_PARAM_LIMIT
+
+    client = _worklist_client(repo, bus)
+
+    with caplog.at_level(logging.INFO, logger="bus"):
+        client.get("/WorkflowUI/", query_string={"filter_patient_name": "B" * 10_000})
+
+    logged = [
+        record
+        for record in caplog.records
+        if "WEB_WORKLIST_VIEW" in record.getMessage()
+    ]
+    params = json.loads(logged[-1].getMessage())["session_parameters"]
+    term = next(p for p in params if p.startswith("Filter patient_name"))
+
+    assert len(term.split(": ", 1)[1]) == _WORKLIST_PARAM_LIMIT
+
+
+def test_worklist_unknown_filter_parameter_is_ignored(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get(
+        "/WorkflowUI/", query_string={"filter_nosuchcolumn": "PWNED"}
+    ).get_data(as_text=True)
+
+    assert "PWNED" not in body
+
+
+def test_worklist_inline_scripts_carry_the_csp_nonce(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    resp = client.get("/WorkflowUI/")
+    body = resp.get_data(as_text=True)
+    nonce = re.search(r"'nonce-([^']+)'", resp.headers["Content-Security-Policy"])
+    inline = re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", body)
+
+    assert nonce is not None
+    assert inline
+    for tag in inline:
+        assert f'nonce="{nonce.group(1)}"' in tag
+
+
+def test_worklist_loads_no_external_assets(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    # A strict default-src 'self' CSP would block these anyway; catch them at authoring time.
+    assert not re.findall(r'(?:src|href)="https?://', body)
+
+
+def test_worklist_footer_counts_every_indexed_study(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    assert f"of {repo.count_studies()} items" in body
+
+
+def test_generic_pacs_worklist_still_renders_without_synapse_chrome(repo, bus):
+    from seeding.seeder import new_seeder
+
+    seeder = new_seeder(repo)
+    assert seeder._seed_fallback(seeder._locations[0], "CT", "epoch") > 0
+    client = new_web(load_profile("generic-pacs"), repo, bus).test_client()
+    client.post("/portal/login?signin=x", data={"username": "test", "password": "test"})
+
+    resp = client.get("/portal/worklist/")
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert "No studies." not in body
+    for leaked in ("Synapse", "WorkflowUI", "Global Worklists", "UNKNOWN"):
+        assert leaked not in body
+
+
+def test_engine_holds_no_worklist_vendor_strings():
+    source = Path("src/web/app.py").read_text()
+
+    # Login-page vendor strings predate this work; the worklist must add none of its own.
+    for token in ("Proc Description", "All Studies", "Global Worklists", "UNKNOWN"):
+        assert token not in source
+
+
+@pytest.mark.parametrize(
+    "born,studied,expected",
+    [
+        ("19670202", "20140809", "47Y"),
+        ("19670202", "20140201", "46Y"),
+        ("20140809", "20140809", "0Y"),
+        ("", "20140809", ""),
+        ("19670202", "", ""),
+        ("notadate", "20140809", ""),
+        ("20200101", "19900101", ""),
+    ],
+)
+def test_age_at_cases(born, studied, expected):
+    from web.app import _display_age
+
+    assert _display_age(born, studied) == expected
+
+
+def test_worklist_shows_the_patient_age_on_the_study_date(repo, bus):
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/").get_data(as_text=True)
+    ages = re.findall(r"<td>(\d{1,3}Y)</td>", body)
+
+    # Derived from the seeded DOB and study date, not carried over from the source data.
+    assert ages

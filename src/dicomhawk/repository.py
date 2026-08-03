@@ -16,7 +16,8 @@ from pynetdicom.events import Event
 from pynetdicom.apps.qrscp import db
 from pynetdicom.presentation import QueryRetrievePresentationContexts
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Column, Engine, String, create_engine, func
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import MetaData
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
@@ -32,6 +33,49 @@ INDEX_REQUIRED_KEYS: tuple[str, ...] = (
     "StudyInstanceUID",
     "SeriesInstanceUID",
 )
+
+# Rollup queries take a caller-supplied UID list; these cap an oversized or hostile caller.
+_ROLLUP_MAX_STUDIES = 500
+_ROLLUP_MAX_MODALITIES = 8
+
+# Our own base, so the extra table never lands in pynetdicom's Q/R schema.
+DetailBase = declarative_base()
+
+
+class StudyDetail(DetailBase):
+    """Per-study attributes the Q/R index does not carry, so display never reads files."""
+
+    __tablename__ = "study_detail"
+
+    study_instance_uid = Column(String, primary_key=True)
+    patient_sex = Column(String)
+    patient_birth_date = Column(String)
+    study_description = Column(String)
+    body_part = Column(String)
+    series_description = Column(String)
+    institution_name = Column(String)
+    station_name = Column(String)
+    referring_physician = Column(String)
+    manufacturer = Column(String)
+    model = Column(String)
+
+
+# Detail column -> the DICOM keyword it is populated from.
+_DETAIL_KEYWORDS: dict[str, str] = {
+    "patient_sex": "PatientSex",
+    "patient_birth_date": "PatientBirthDate",
+    "study_description": "StudyDescription",
+    "body_part": "BodyPartExamined",
+    "series_description": "SeriesDescription",
+    "institution_name": "InstitutionName",
+    "station_name": "StationName",
+    "referring_physician": "ReferringPhysicianName",
+    "manufacturer": "Manufacturer",
+    "model": "ManufacturerModelName",
+}
+
+# Attacker-supplied values reach the operator UI; cap them at the DICOM long-string bound.
+_DETAIL_MAX_LEN = 64
 
 
 class QRError:
@@ -78,6 +122,7 @@ class Repository:
             Path(self.location).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(url, **kwargs)
         db.Base.metadata.create_all(engine)
+        DetailBase.metadata.create_all(engine)
         meta = MetaData()
         meta.reflect(bind=engine)
         return engine
@@ -165,6 +210,8 @@ class Repository:
         dedup_col: str,
         offset: int,
         limit: int,
+        order_col: str | None = None,
+        descending: bool = False,
     ) -> QRResult:
         """Return one bounded page of unique Q/R entities without materializing all rows."""
         for elem in ds:
@@ -189,9 +236,10 @@ class Repository:
                     break
 
             column = getattr(db.Instance, dedup_col)
+            ordering = getattr(db.Instance, order_col) if order_col else column
             matches = (
                 query.group_by(column)
-                .order_by(column)
+                .order_by(ordering.desc() if descending else ordering)
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -211,6 +259,98 @@ class Repository:
             )
 
         return QRResult(matches=matches)
+
+    def count_studies(self) -> int:
+        """Distinct indexed studies; a display total, so a failure degrades to zero."""
+        try:
+            total = self.conn.query(
+                func.count(func.distinct(db.Instance.study_instance_uid))
+            ).scalar()
+        except Exception as exc:
+            self.conn.rollback()
+            logger.warning(f"Failed counting studies: {exc}")
+            return 0
+        return int(total or 0)
+
+    def count_instances(self, study_uids: list[str]) -> dict[str, int]:
+        """Instance count per study for a bounded UID list; the list itself is the bound."""
+        uids = list(study_uids)[:_ROLLUP_MAX_STUDIES]
+        if not uids:
+            return {}
+        try:
+            rows = (
+                self.conn.query(
+                    db.Instance.study_instance_uid,
+                    func.count(db.Instance.sop_instance_uid),
+                )
+                .filter(db.Instance.study_instance_uid.in_(uids))
+                .group_by(db.Instance.study_instance_uid)
+                .all()
+            )
+        except Exception as exc:
+            self.conn.rollback()
+            logger.warning(f"Failed counting instances: {exc}")
+            return {}
+        return {str(uid): int(count) for uid, count in rows}
+
+    def study_modalities(self, study_uids: list[str]) -> dict[str, list[str]]:
+        """Modality is a SERIES attribute, so a STUDY-level find never returns it."""
+        uids = list(study_uids)[:_ROLLUP_MAX_STUDIES]
+        if not uids:
+            return {}
+        try:
+            rows = (
+                self.conn.query(db.Instance.study_instance_uid, db.Instance.modality)
+                .filter(db.Instance.study_instance_uid.in_(uids))
+                .distinct()
+                .limit(len(uids) * _ROLLUP_MAX_MODALITIES)
+                .all()
+            )
+        except Exception as exc:
+            self.conn.rollback()
+            logger.warning(f"Failed reading study modalities: {exc}")
+            return {}
+        found: dict[str, set[str]] = {}
+        for uid, modality in rows:
+            if modality:
+                found.setdefault(str(uid), set()).add(str(modality))
+        return {uid: sorted(values) for uid, values in found.items()}
+
+    def study_details(self, study_uids: list[str]) -> dict[str, dict]:
+        """Attributes the Q/R index lacks, read from our own table instead of the files."""
+        uids = list(study_uids)[:_ROLLUP_MAX_STUDIES]
+        if not uids:
+            return {}
+        try:
+            rows = (
+                self.conn.query(StudyDetail)
+                .filter(StudyDetail.study_instance_uid.in_(uids))
+                .all()
+            )
+        except Exception as exc:
+            self.conn.rollback()
+            logger.warning(f"Failed reading study details: {exc}")
+            return {}
+        return {
+            str(row.study_instance_uid): {
+                col: getattr(row, col) or "" for col in _DETAIL_KEYWORDS
+            }
+            for row in rows
+        }
+
+    def _index_detail(self, ds: Dataset) -> None:
+        """Upsert the display-only attributes for this study; last write per study wins."""
+        uid = str(ds.StudyInstanceUID)
+        values = {}
+        for column, keyword in _DETAIL_KEYWORDS.items():
+            value = str(getattr(ds, keyword, "") or "")
+            values[column] = value[:_DETAIL_MAX_LEN]
+        row = self.conn.get(StudyDetail, uid)
+        if row is None:
+            self.conn.add(StudyDetail(study_instance_uid=uid, **values))
+            return
+        for column, value in values.items():
+            setattr(row, column, value)
 
     def store(
         self,
@@ -306,6 +446,8 @@ class Repository:
             )
 
             db.add_instance(ds, self.conn, str(fpath.resolve()))
+            self._index_detail(ds)
+            self.conn.commit()
             if not matches:
                 logger.info("Instance added to database")
             else:

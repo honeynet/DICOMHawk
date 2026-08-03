@@ -1,4 +1,5 @@
 import copy
+import fnmatch
 import logging
 from functools import partial
 from logging import Logger
@@ -11,7 +12,7 @@ from pydicom.dataset import Dataset
 from pynetdicom.events import Event, EventHandlerType, EventType
 
 from .status import QRStatus
-from .repository import Repository, INDEX_REQUIRED_KEYS
+from .repository import Repository, INDEX_REQUIRED_KEYS, _ROLLUP_MAX_STUDIES
 from .storage import ArtifactSink, SubmittedArtifact
 from .bus import (
     InteractionEvent,
@@ -62,6 +63,104 @@ _FIND_LEVEL_UID: dict[str, str] = {
     "STUDY": "study_instance_uid",
     "SERIES": "series_instance_uid",
 }
+
+
+# Attributes a real PACS answers C-FIND with, which pynetdicom's index has no column for.
+_ENRICHED_KEYWORDS: dict[str, str] = {
+    "PatientSex": "patient_sex",
+    "PatientBirthDate": "patient_birth_date",
+    "StudyDescription": "study_description",
+    "SeriesDescription": "series_description",
+    "BodyPartExamined": "body_part",
+    "InstitutionName": "institution_name",
+    "StationName": "station_name",
+    "ReferringPhysicianName": "referring_physician",
+    "Manufacturer": "manufacturer",
+    "ManufacturerModelName": "model",
+}
+# Derived per study rather than stored, so they are answered from the same rollups the web uses.
+_MODALITIES_IN_STUDY = "ModalitiesInStudy"
+_INSTANCE_COUNT = "NumberOfStudyRelatedInstances"
+
+
+def _enriched_match(value, query) -> bool:
+    """Single-value DICOM matching for keys filtered in Python, not by the SQL query."""
+    if query is None or str(query) == "":
+        return True
+    text, pattern = str(value or "").upper(), str(query).upper()
+    if "*" in pattern or "?" in pattern:
+        return fnmatch.fnmatchcase(text, pattern)
+    return text == pattern
+
+
+def _chunked(repo_call, uids: list[str]) -> dict:
+    """Rollups cap their UID list, so a large result set is read in bounded slices."""
+    merged: dict = {}
+    for start in range(0, len(uids), _ROLLUP_MAX_STUDIES):
+        merged.update(repo_call(uids[start : start + _ROLLUP_MAX_STUDIES]))
+    return merged
+
+
+def _enriched_request(idt: Dataset) -> dict[str, str]:
+    """Snapshot before repo.find(): db.search deletes in place every key its index lacks."""
+    keywords = list(_ENRICHED_KEYWORDS) + [_MODALITIES_IN_STUDY, _INSTANCE_COUNT]
+    return {kw: str(idt[kw].value or "") for kw in keywords if kw in idt}
+
+
+def _enrichment(repo: Repository, requested: dict[str, str], matches) -> dict:
+    """Fetch only what this query actually asked for; an unenriched query costs nothing."""
+    if not requested:
+        return {}
+    wanted = any(kw in requested for kw in _ENRICHED_KEYWORDS)
+    uids = list(dict.fromkeys(str(m.study_instance_uid) for m in matches))
+    return {
+        "details": _chunked(repo.study_details, uids) if wanted else {},
+        "modalities": (
+            _chunked(repo.study_modalities, uids)
+            if _MODALITIES_IN_STUDY in requested
+            else {}
+        ),
+        "counts": (
+            _chunked(repo.count_instances, uids) if _INSTANCE_COUNT in requested else {}
+        ),
+    }
+
+
+def _enriched_filtered(requested: dict[str, str], matches, enrichment: dict) -> list:
+    """Drop matches contradicting a requested value, so a filtered query stays coherent."""
+    filters = {
+        kw: value
+        for kw, value in requested.items()
+        if value != "" and kw in _ENRICHED_KEYWORDS
+    }
+    if not filters:
+        return list(matches)
+    details = enrichment.get("details", {})
+    kept = []
+    for m in matches:
+        detail = details.get(str(getattr(m, "study_instance_uid", "") or ""), {})
+        if all(
+            _enriched_match(detail.get(_ENRICHED_KEYWORDS[kw], ""), value)
+            for kw, value in filters.items()
+        ):
+            kept.append(m)
+    return kept
+
+
+def _apply_enrichment(
+    res: Dataset, requested: dict[str, str], match, enrichment: dict
+) -> None:
+    if not enrichment:
+        return
+    uid = str(getattr(match, "study_instance_uid", "") or "")
+    detail = enrichment.get("details", {}).get(uid, {})
+    for keyword, column in _ENRICHED_KEYWORDS.items():
+        if keyword in requested:
+            setattr(res, keyword, detail.get(column, ""))
+    if _MODALITIES_IN_STUDY in requested:
+        setattr(res, _MODALITIES_IN_STUDY, enrichment["modalities"].get(uid, []))
+    if _INSTANCE_COUNT in requested:
+        setattr(res, _INSTANCE_COUNT, enrichment["counts"].get(uid, 0))
 
 
 def _strip_sublevel_tags(ds: Dataset, model) -> tuple[Dataset, list[str]]:
@@ -229,6 +328,8 @@ def handle_find(
     params = _extract_params(idt)
     if stripped:
         params = (params or []) + [f"Stripped: {', '.join(stripped)}"]
+    # Captured first: repo.find() hands the identifier to db.search, which deletes these.
+    requested = _enriched_request(idt)
 
     result = repo.find(idt, model)
     if (err := result.error) is not None:
@@ -259,6 +360,10 @@ def handle_find(
                 deduped.append(m)
         matches = deduped
 
+    # The web worklist shows these; C-FIND must agree or the two surfaces contradict.
+    enrichment = _enrichment(repo, requested, matches)
+    matches = _enriched_filtered(requested, matches, enrichment)
+
     bus.info(
         InteractionEvent(
             event,
@@ -275,6 +380,7 @@ def handle_find(
             yield (QRStatus.CANCEL, None)
             return
         res = m.as_identifier(idt, model)
+        _apply_enrichment(res, requested, m, enrichment)
         res.RetrieveAETitle = event.assoc.ae.ae_title
         yield (QRStatus.PENDING, res)
 

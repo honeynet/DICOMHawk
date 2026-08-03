@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from hashlib import md5
 from pathlib import Path
 
@@ -8,6 +8,7 @@ from faker import Faker
 from pydicom.dataset import Dataset
 
 from .locations import Location
+from .procedures import Procedures, procedure_pool
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,23 @@ def _stable_date(start: date, day_range: int, key: str, salt: str) -> str:
     """Deterministic YYYYMMDD date derived from a hash of key+salt."""
     digest = int(md5(f"{key}{salt}".encode()).hexdigest(), 16)
     return (start + timedelta(days=digest % day_range)).strftime("%Y%m%d")
+
+
+def _age_at(birth_date: str, study_date: str) -> str | None:
+    """DICOM AS age between two YYYYMMDD dates, so DOB and study date stay consistent."""
+    try:
+        born = datetime.strptime(birth_date, "%Y%m%d").date()
+        studied = datetime.strptime(study_date, "%Y%m%d").date()
+    except (TypeError, ValueError):
+        return None
+    years = (
+        studied.year
+        - born.year
+        - ((studied.month, studied.day) < (born.month, born.day))
+    )
+    if not 0 <= years <= 999:
+        return None
+    return f"{years:03d}Y"
 
 
 def faker_pools(locale: str = "en_US") -> NamePools:
@@ -82,6 +100,7 @@ def _patch_location(
     female_pool: tuple[str, ...],
     physician_pool: tuple[str, ...],
     epoch: str = "",
+    procedures: Procedures | None = None,
 ) -> Dataset:
     # Epoch salts rotate identities while keeping each dataset consistent.
     patient_key = str(
@@ -113,6 +132,19 @@ def _patch_location(
     ds.StudyDate = _stable_date(_STUDY_DATE_START, _STUDY_DATE_RANGE, skey, "std")
     ds.SeriesDate = ds.StudyDate
     ds.ReferringPhysicianName = _stable_pick(physician_pool, skey)
+
+    # Only rewrite an age the source already carried; a patched DOB would otherwise contradict it.
+    if "PatientAge" in ds:
+        age = _age_at(ds.PatientBirthDate, ds.StudyDate)
+        if age is not None:
+            ds.PatientAge = age
+
+    # TCIA rarely carries StudyDescription, and a PACS worklist's procedure column needs one.
+    if procedures is not None and not getattr(ds, "StudyDescription", ""):
+        pool = procedure_pool(
+            procedures, modality, str(getattr(ds, "BodyPartExamined", "") or "")
+        )
+        ds.StudyDescription = _stable_pick(pool, skey)
 
     for tag in _SENSITIVITY_TAGS:
         if hasattr(ds, tag):

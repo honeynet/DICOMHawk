@@ -10,11 +10,14 @@ from dicomhawk.storage import new_store
 from honeytoken.injector import new_honeytoken_injector
 from seeding.fallback import load_fallback_datasets
 from seeding.locations import load_locations
-from seeding.names import _patch_location
+from seeding.names import _age_at, _patch_location
 from seeding.osm import OsmClient
+from seeding.procedures import load_procedures, procedure_pool
 from seeding.seeder import new_seeder
 
 _LOCATIONS = load_locations(None)
+_PROCEDURES = load_procedures(None)
+_POOLS = (("Patient^Male",), ("Patient^Female",), ("Doctor^One",))
 
 
 @pytest.fixture
@@ -51,6 +54,108 @@ def test_station_names_are_stable_but_vary_by_location():
         repeated.StationName
         == _patch_location(deepcopy(source), _LOCATIONS[0], *pools).StationName
     )
+
+
+def test_patient_age_is_recomputed_from_the_patched_dates():
+    """Source ages come from TCIA and contradict the DOB and study date we overwrite."""
+    source = next(iter(load_fallback_datasets("CT")))
+    assert source.PatientAge == "075Y"
+
+    patched = _patch_location(deepcopy(source), _LOCATIONS[0], *_POOLS, "test-epoch")
+
+    assert patched.PatientAge == _age_at(patched.PatientBirthDate, patched.StudyDate)
+    assert patched.PatientAge != source.PatientAge
+
+
+def test_patient_age_is_not_invented_when_the_source_lacks_it():
+    source = deepcopy(next(iter(load_fallback_datasets("CT"))))
+    del source.PatientAge
+
+    patched = _patch_location(source, _LOCATIONS[0], *_POOLS, "test-epoch")
+
+    assert "PatientAge" not in patched
+
+
+def test_study_description_is_generated_when_absent():
+    source = next(iter(load_fallback_datasets("CT")))
+    assert not getattr(source, "StudyDescription", "")
+
+    patched = _patch_location(
+        deepcopy(source), _LOCATIONS[0], *_POOLS, "test-epoch", _PROCEDURES
+    )
+
+    assert patched.StudyDescription
+    assert patched.StudyDescription in procedure_pool(
+        _PROCEDURES, patched.Modality, patched.BodyPartExamined
+    )
+
+
+def test_study_description_is_stable_for_a_study_and_rotates_by_epoch():
+    """A description that changed on reload would expose the worklist as generated."""
+    source = next(iter(load_fallback_datasets("CT")))
+    first = _patch_location(
+        deepcopy(source), _LOCATIONS[0], *_POOLS, "epoch-a", _PROCEDURES
+    ).StudyDescription
+    again = _patch_location(
+        deepcopy(source), _LOCATIONS[0], *_POOLS, "epoch-a", _PROCEDURES
+    ).StudyDescription
+    rotated = {
+        _patch_location(
+            deepcopy(source), _LOCATIONS[0], *_POOLS, f"epoch-{n}", _PROCEDURES
+        ).StudyDescription
+        for n in range(12)
+    }
+
+    assert first == again
+    assert len(rotated) > 1
+
+
+def test_study_description_never_overwrites_a_supplied_one():
+    source = deepcopy(next(iter(load_fallback_datasets("CT"))))
+    source.StudyDescription = "ATTACKER SUPPLIED"
+
+    patched = _patch_location(source, _LOCATIONS[0], *_POOLS, "test-epoch", _PROCEDURES)
+
+    assert patched.StudyDescription == "ATTACKER SUPPLIED"
+
+
+def test_study_description_is_absent_without_a_procedure_pool():
+    source = next(iter(load_fallback_datasets("CT")))
+
+    patched = _patch_location(deepcopy(source), _LOCATIONS[0], *_POOLS, "test-epoch")
+
+    assert not getattr(patched, "StudyDescription", "")
+
+
+def test_procedure_pool_matches_the_body_part_it_is_given():
+    chest = procedure_pool(_PROCEDURES, "CT", "CHEST")
+    head = procedure_pool(_PROCEDURES, "CT", "HEAD")
+
+    assert chest != head
+    assert all("CHEST" in entry.upper() for entry in chest)
+    assert all("HEAD" in entry.upper() or "NECK" in entry.upper() for entry in head)
+
+
+@pytest.mark.parametrize(
+    "modality,body_part",
+    [("CT", "NO_SUCH_PART"), ("NO_SUCH_MODALITY", "CHEST"), ("", ""), (None, None)],
+)
+def test_procedure_pool_falls_back_for_unknown_keys(modality, body_part):
+    assert procedure_pool(_PROCEDURES, modality, body_part)
+
+
+def test_procedure_pool_lookup_is_case_insensitive():
+    assert procedure_pool(_PROCEDURES, "ct", "chest") == procedure_pool(
+        _PROCEDURES, "CT", "CHEST"
+    )
+
+
+def test_procedures_file_without_a_default_is_rejected(tmp_path):
+    broken = tmp_path / "procedures.json"
+    broken.write_text('{"CT": {"CHEST": ["CT CHEST"]}}')
+
+    # A malformed custom file must degrade to the packaged defaults, not crash the seeder.
+    assert load_procedures(str(broken)) == _PROCEDURES
 
 
 def test_seed_with_honeytoken_tags_exactly_one_instance(repo):

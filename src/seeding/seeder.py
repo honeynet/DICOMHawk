@@ -13,6 +13,7 @@ from honeytoken.injector import Middleware
 from .fallback import load_fallback_datasets
 from .locations import Location, load_locations
 from .names import NamePools, _patch_location, faker_pools
+from .procedures import Procedures, load_procedures
 from .tcia import TciaClient
 
 logger = logging.getLogger(__name__)
@@ -86,10 +87,12 @@ class Seeder:
         locale: str = "en_US",
         name_pools: NamePools | None = None,
         honeytoken: Middleware | None = None,
+        procedures: Procedures | None = None,
     ):
         self._repo = repo
         self._client = TciaClient()
         self._locations = locations or load_locations(None)
+        self._procedures = procedures or load_procedures(None)
         self._male_pool, self._female_pool, self._physician_pool = (
             name_pools or faker_pools(locale)
         )
@@ -161,7 +164,13 @@ class Seeder:
                 logger.error(f"Error reading {sop_uid}: {exc}")
                 continue
             ds = _patch_location(
-                ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
+                ds,
+                loc,
+                self._male_pool,
+                self._female_pool,
+                self._physician_pool,
+                epoch,
+                self._procedures,
             )
             ds, tagged = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
@@ -178,7 +187,13 @@ class Seeder:
         stored = 0
         for ds in load_fallback_datasets(modality):
             ds = _patch_location(
-                ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
+                ds,
+                loc,
+                self._male_pool,
+                self._female_pool,
+                self._physician_pool,
+                epoch,
+                self._procedures,
             )
             ds, tagged = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
@@ -197,6 +212,7 @@ def new_seeder(
     locale: str = "en_US",
     name_pools: NamePools | None = None,
     honeytoken: Middleware | None = None,
+    procedures: Procedures | None = None,
 ) -> Seeder:
     return Seeder(
         repo,
@@ -204,4 +220,5 @@ def new_seeder(
         locale=locale,
         name_pools=name_pools,
         honeytoken=honeytoken,
+        procedures=procedures,
     )

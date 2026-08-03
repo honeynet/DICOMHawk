@@ -28,6 +28,36 @@ _REQUIRED_TEMPLATES = frozenset(
 )
 _BROWSE_TEMPLATES = frozenset({"console.html", "browse.html", "upload.html"})
 
+# Row keys the worklist builder emits; a column may only name one of these.
+_WORKLIST_ROW_KEYS = frozenset(
+    {
+        "patient_name",
+        "patient_id",
+        "patient_sex",
+        "patient_birth_date",
+        "description",
+        "modality",
+        "images",
+        "body_part",
+        "series_description",
+        "institution_name",
+        "station_name",
+        "referring_physician",
+        "study_date",
+        "study_time",
+        "study_datetime",
+        "accession_number",
+        "study_id",
+        "study_instance_uid",
+        "status",
+        "age",
+    }
+)
+# Sidebar folders may narrow the study list only on these identifier keywords.
+_WORKLIST_FILTER_KEYS = frozenset({"modality"})
+# What a context-menu entry does: show the study we already loaded, or refuse plausibly.
+_WORKLIST_RESULTS = frozenset({"detail", "error"})
+
 # (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
 
@@ -100,6 +130,9 @@ class WebConfig:
     upload_max_request_bytes: int = 50 * 1024 * 1024
     upload_max_files: int = 10
     browse_page_size: int = 100
+    # Post-login worklist shell: title, sidebar, columns, context menu — all profile data.
+    worklist: dict = field(default_factory=dict)
+    worklist_page_size: int = 100
     assets_dir: str | None = None
     # Deployment topology comes from CLI/env, never profile YAML.
     public_base_url: str | None = None
@@ -245,6 +278,28 @@ def default_profile() -> ProfileConfig:
                 "text2": "Unable to log in using Windows Authentication.",
                 "text3": "Log in directly",
             },
+            # Empty section lists mean a profile renders no worklist chrome at all.
+            worklist={
+                "title": "Worklist",
+                "header_links": [],
+                "columns": [
+                    {"key": "patient_name", "label": "Patient Name"},
+                    {"key": "description", "label": "Description"},
+                    {"key": "study_datetime", "label": "Study Date Time"},
+                    {"key": "modality", "label": "Modality"},
+                    {"key": "images", "label": "Images"},
+                ],
+                "sidebar": [],
+                "context_menu": [],
+                "footer": {"item_label": "items", "refresh_label": "Last refreshed"},
+                "messages": {"action_failed": "This action is currently unavailable."},
+                # Defaults reproduce the placeholders the worklist has always rendered.
+                "placeholders": {
+                    "description": "—",
+                    "status": "Unread",
+                    "empty": "—",
+                },
+            },
             # Off unless a profile opts in; opting in with no `signals` key gets every category.
             fingerprint=FingerprintConfig(
                 enabled=False, signals=sorted(_FINGERPRINT_SIGNALS)
@@ -303,6 +358,93 @@ def _parse_sop_class(entry: dict, where: str) -> SopClass:
     ):
         raise ValueError(f"Profile entry '{where}' contains an invalid DICOM UID")
     return (uid_text, transfer_syntaxes)
+
+
+def _worklist_count(value, where: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"Profile '{where}' must be a non-negative integer")
+
+
+def _validate_worklist_columns(columns) -> None:
+    if not isinstance(columns, list) or not columns:
+        raise ValueError("Profile 'web.worklist.columns' must be a non-empty list")
+    for i, column in enumerate(columns):
+        where = f"web.worklist.columns[{i}]"
+        entry = _mapping(column, where)
+        key = _require(entry, "key", where)
+        # An allowlist stops a column naming an attribute the builder never emits.
+        if key not in _WORKLIST_ROW_KEYS:
+            raise ValueError(
+                f"Unknown {where}.key '{key}' "
+                f"(known: {', '.join(sorted(_WORKLIST_ROW_KEYS))})"
+            )
+        if not isinstance(_require(entry, "label", where), str):
+            raise ValueError(f"Profile '{where}.label' must be a string")
+
+
+def _validate_worklist_sidebar(sidebar) -> None:
+    if not isinstance(sidebar, list):
+        raise ValueError("Profile 'web.worklist.sidebar' must be a list")
+    for i, section in enumerate(sidebar):
+        where = f"web.worklist.sidebar[{i}]"
+        entry = _mapping(section, where)
+        if not isinstance(_require(entry, "label", where), str):
+            raise ValueError(f"Profile '{where}.label' must be a string")
+        items = entry.get("items") or []
+        if not isinstance(items, list):
+            raise ValueError(f"Profile '{where}.items' must be a list")
+        for j, item in enumerate(items):
+            item_where = f"{where}.items[{j}]"
+            folder = _mapping(item, item_where)
+            if not isinstance(_require(folder, "label", item_where), str):
+                raise ValueError(f"Profile '{item_where}.label' must be a string")
+            for count_key in ("count", "urgent_count"):
+                if count_key in folder:
+                    _worklist_count(folder[count_key], f"{item_where}.{count_key}")
+            unknown = set(_mapping(folder.get("filter"), f"{item_where}.filter"))
+            unknown -= _WORKLIST_FILTER_KEYS
+            if unknown:
+                raise ValueError(
+                    f"Unknown {item_where}.filter keys: {', '.join(sorted(unknown))} "
+                    f"(known: {', '.join(sorted(_WORKLIST_FILTER_KEYS))})"
+                )
+
+
+def _validate_worklist_menu(context_menu) -> None:
+    if not isinstance(context_menu, list):
+        raise ValueError("Profile 'web.worklist.context_menu' must be a list")
+    for i, item in enumerate(context_menu):
+        where = f"web.worklist.context_menu[{i}]"
+        entry = _mapping(item, where)
+        if not isinstance(_require(entry, "label", where), str):
+            raise ValueError(f"Profile '{where}.label' must be a string")
+        result = entry.get("result", "error")
+        if result not in _WORKLIST_RESULTS:
+            raise ValueError(
+                f"Unknown {where}.result '{result}' "
+                f"(known: {', '.join(sorted(_WORKLIST_RESULTS))})"
+            )
+
+
+def _validate_worklist(worklist: dict) -> None:
+    """Reject a malformed worklist block at load time, like every other web section."""
+    if not isinstance(worklist.get("title"), str):
+        raise ValueError("Profile 'web.worklist.title' must be a string")
+    links = worklist.get("header_links")
+    if not isinstance(links, list) or any(not isinstance(v, str) for v in links):
+        raise ValueError(
+            "Profile 'web.worklist.header_links' must be a list of strings"
+        )
+    _validate_worklist_columns(worklist.get("columns"))
+    _validate_worklist_sidebar(worklist.get("sidebar"))
+    _validate_worklist_menu(worklist.get("context_menu"))
+    for key in ("footer", "messages", "placeholders"):
+        section = _mapping(worklist.get(key), f"web.worklist.{key}")
+        for name, value in section.items():
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"Profile 'web.worklist.{key}.{name}' must be a string"
+                )
 
 
 def _resolve_web_assets(
@@ -555,6 +697,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             "routes",
             "cookies",
             "winauth_messages",
+            "worklist",
         ):
             if key not in web_raw:
                 fell_back.append(f"web.{key}")
@@ -761,6 +904,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     routes = web_dict("routes", d.web.routes)
     cookies = web_dict("cookies", d.web.cookies)
     winauth_messages = web_dict("winauth_messages", d.web.winauth_messages)
+    worklist = web_dict("worklist", d.web.worklist)
+    _validate_worklist(worklist)
     if any(
         not isinstance(path, str)
         or not path.startswith("/")
@@ -824,6 +969,11 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         "web.browse_page_size",
         int,
     )
+    worklist_page_size = _number(
+        web_raw.get("worklist_page_size", d.web.worklist_page_size),
+        "web.worklist_page_size",
+        int,
+    )
     upload_max_files = _number(
         web_raw.get("upload_max_files", d.web.upload_max_files),
         "web.upload_max_files",
@@ -835,6 +985,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         raise ValueError("Profile 'web.upload_max_files' must be 1-100")
     if not 1 <= browse_page_size <= 500:
         raise ValueError("Profile 'web.browse_page_size' must be 1-500")
+    if not 1 <= worklist_page_size <= 500:
+        raise ValueError("Profile 'web.worklist_page_size' must be 1-500")
     browse = bool(web_raw.get("browse", False))
     assets_dir = (
         _resolve_web_assets(
@@ -908,6 +1060,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             upload_max_request_bytes=upload_max_request_bytes,
             upload_max_files=upload_max_files,
             browse_page_size=browse_page_size,
+            worklist=worklist,
+            worklist_page_size=worklist_page_size,
             assets_dir=assets_dir,
         ),
         dicomweb=DicomWebConfig(

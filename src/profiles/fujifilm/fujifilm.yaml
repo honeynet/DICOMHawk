@@ -302,10 +302,81 @@ web:
       ThinkLogService ViewerService WorkflowEngine SubscriptionService
       ExtApiService XDSConsumerApi FHIRCastHub
 
-  # No honey hint: it would fingerprint the Synapse login capture.
+  # Bait accounts. No honey hint: the sign-on page is a verbatim capture, so it discloses nothing.
+  honey_credentials:
+    - username: svc_dicom
+      password: svc_dicom
+    - username: pacsadmin
+      password: Password1
 
   fingerprint:
     enabled: true
+
+  worklist_page_size: 100
+
+  # Post-login worklist shell; every visible string is profile data, the engine ships none of it.
+  worklist:
+    title: All Studies with Images
+    header_links: ["Messages", "Help", "Settings", "Text Size"]
+    columns:
+      - {key: patient_name, label: Patient Name}
+      - {key: description, label: Proc Description}
+      - {key: modality, label: Modality}
+      - {key: images, label: Images}
+      - {key: patient_id, label: Patient ID}
+      - {key: patient_sex, label: Sex}
+      - {key: patient_birth_date, label: DOB}
+      - {key: age, label: Age}
+      - {key: body_part, label: Body Part}
+      - {key: study_datetime, label: Study Date Time}
+      - {key: accession_number, label: Accession}
+      - {key: institution_name, label: Institution}
+      - {key: referring_physician, label: Referring}
+    # Folder names observed in a deployment; counts are omitted so no badge contradicts real data.
+    sidebar:
+      - label: My History
+      - label: My Favorites
+      - label: Global Worklists
+        items:
+          - {label: All Patients Global}
+          - {label: All Recent Studies Global}
+          - {label: All Studies Global}
+          - {label: Unread Studies Global}
+      - label: Worklists
+        items:
+          - {label: All Patients}
+          - {label: All Studies}
+          - {label: All Studies with Images}
+          - {label: All Reservations}
+          - {label: CT, filter: {modality: CT}}
+          - {label: CR, filter: {modality: CR}}
+      - label: Collections
+        items:
+          - {label: My Collection}
+          - {label: Mammo Samples}
+      - label: Public Collections
+        items:
+          - {label: Matt test}
+          - {label: Mammo - Additional Samples}
+    context_menu:
+      - {label: Open Viewer, result: error}
+      - {label: Open PowerJacket, result: error}
+      - {label: Open Series Picker, result: error}
+      - {label: Study Information, result: detail}
+      - {label: Reports, result: error}
+      - {label: Notes, result: error}
+      - {label: Documents, result: error}
+      - {label: Reserve for Me, result: error}
+      - {label: DICOM Transfer, result: error}
+    footer:
+      item_label: items
+      refresh_label: Last refreshed
+    messages:
+      action_failed: The imaging service did not respond. Contact your system administrator.
+    placeholders:
+      description: UNKNOWN
+      status: ""
+      empty: ""
 
   # Synapse paths and cookie names sourced from public passive recon.
   routes:

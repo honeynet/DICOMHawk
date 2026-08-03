@@ -129,7 +129,9 @@ Compose file explicitly opts in and maps it only to host `127.0.0.1`.
 
 Both are built by the shared engine — you don't touch that code, only supply your
 profile's assets. It reuses the same DICOM database your profile's DIMSE side sees, so a
-study seeded via `dicomhawk seed` shows up in both the worklist and a C-FIND response.
+study seeded via `dicomhawk seed` shows up in both the worklist and a C-FIND response,
+with the same values on both surfaces — a viewer querying over DICOM sees the patient sex,
+birth date, procedure description and institution the worklist shows, not blanks.
 
 ### Required templates
 
@@ -141,7 +143,7 @@ All five must exist under `web/templates/`; the profile fails at startup if one 
 | `forgot_password.html` | Forgot-password flow | `submitted` (bool) |
 | `error.html` | STS error page, 500 handler | `request_id`, `error_message` |
 | `winauth_unable.html` | Windows-auth 401 body | `sts_authorize_url` — use it, not a hardcoded path, for the "Log in directly" link |
-| `worklist.html` | Post-login study list | `studies` — list of dicts with `patient_name`, `description`, `study_datetime`, `modality`, `status`, `age` |
+| `worklist.html` | Post-login study list | `studies` (row dicts, keys below), `worklist` (shell config), `username`, `total_studies`, `folder`, `detail`, `filters`, `action_message`, `refresh_url` |
 
 If you use the `unauthorized_page` honeytrap response (below), also add
 `web/templates/unauthorized.html`; it receives `entry_url` — use it for any
@@ -179,6 +181,7 @@ web:
   upload_max_request_bytes: 52428800 # browse upload route only
   upload_max_files: 10
   browse_page_size: 100              # 1-500; bounded in the database
+  worklist_page_size: 100            # 1-500; studies listed on the worklist page
   identity: {version: "1.0", copyright: "..."}
   license: {issued: "...", lines: [...]}
   oidc: {client_id: "...", client_name: "...", redirect_path: "...", scopes: "..."}
@@ -279,11 +282,93 @@ is a high-confidence signal rather than a guess:
 set (empty otherwise) — put it somewhere discoverable, like an HTML comment near the
 login form, so an attacker can actually find it.
 
-**Only do this if your login page isn't a verbatim capture of a real product's page.**
-If it is, an invented hint comment is itself a diff-able tell against the real page —
-`fujifilm.yaml` deliberately leaves this commented out for exactly that reason. Plant
-it on a profile where there's no real page to stay faithful to, or find a different
-disclosure channel (a decoy config file, a leaked note) instead of the login page.
+**Only render the hint if your login page isn't a verbatim capture of a real product's
+page.** If it is, an invented hint comment is itself a diff-able tell against the real
+page. The two mechanisms are independent: `fujifilm.yaml` does set honey credentials, but
+its captured sign-on template never renders `honey_hint`, so the page stays byte-faithful
+and the credentials are disclosed out of band instead (a decoy config file, a leaked
+note). Render the hint only on a profile where there's no real page to stay faithful to.
+
+Credentials are the only way an attacker reaches the post-login worklist on a profile
+with `grant_access: false`. Setting `grant_access: true` instead accepts *any* password,
+which is quicker to engage but tells an attacker it's a decoy the first time a
+deliberately wrong password works.
+
+### Worklist page
+
+Every profile serves a post-login worklist at `web.routes.worklist`, listing the same
+seeded studies the DICOM side serves. `web.worklist` supplies every visible string —
+the engine ships none of them, so one profile's folder names can never appear on
+another's page.
+
+```yaml
+web:
+  worklist_page_size: 100
+  worklist:
+    title: All Studies
+    header_links: [Messages, Help, Settings]
+    columns:
+      - {key: patient_name, label: Patient Name}
+      - {key: description,  label: Proc Description}
+      - {key: modality,     label: Modality}
+      - {key: images,       label: Images}
+    sidebar:
+      - label: Worklists
+        items:
+          - {label: All Studies}
+          - {label: CT, filter: {modality: CT}}   # folders may narrow by modality
+          - {label: Unread, count: 128}           # optional badge; see the caution below
+    context_menu:
+      - {label: Study Information, result: detail}
+      - {label: Open Viewer,       result: error}
+    footer:   {item_label: items, refresh_label: Last refreshed}
+    messages: {action_failed: The imaging service did not respond.}
+    placeholders: {description: UNKNOWN, status: "", empty: ""}
+```
+
+`columns[].key` must be one of: `patient_name`, `patient_id`, `patient_sex`,
+`patient_birth_date`, `description`, `modality`, `images`, `body_part`,
+`series_description`, `institution_name`, `station_name`, `referring_physician`,
+`study_date`, `study_time`, `study_datetime`, `accession_number`, `study_id`,
+`study_instance_uid`, `status`, `age`. An unknown key fails at startup rather than
+rendering a silently blank column.
+
+An empty `sidebar`, `context_menu`, or `header_links` renders no chrome at all, which is
+the default — a sparse profile gets a plain table, not somebody else's shell.
+
+**Interaction.** The page is driven entirely by query parameters on its own route, so
+there is no extra endpoint to fingerprint:
+
+| Parameter | Effect |
+|---|---|
+| `?path=<folder>` | Selects a sidebar folder and applies its `filter` |
+| `?study=<uid>` | Opens the detail panel for a study **already listed on that page** |
+| `?action=<label>` | Renders `messages.action_failed` for a `result: error` entry |
+| `?filter_<column>=<text>` | Column filter box; logged, and echoed back into its own input |
+
+Values are resolved against the profile's own labels, never trusted directly: an
+unrecognised folder or action falls back to the default view and is not echoed into the
+page. A `?study=` UID that isn't on the current page opens nothing, so the parameter
+can't be used to probe for studies. Each view logs a `WEB_WORKLIST_VIEW` event naming the
+folder, action, study, and filter terms the attacker reached for.
+
+**Placeholders.** `placeholders.description` fills the procedure column when a study
+carries no `StudyDescription` — real products show their own marker there (Synapse shows
+`UNKNOWN`), so match whatever the product you're mimicking does. Seeded studies get a
+generated description, so this placeholder should only appear for studies an attacker
+uploaded or for studies indexed before seeding started writing one.
+
+**Sidebar counts are static decoration.** `count` and `urgent_count` render badges but are
+never computed. A folder reading `Unread 128` beside a table listing four studies is an
+obvious tell, so set them only if they'll stay plausible against your seeded volume — the
+shipped profiles set none.
+
+**Detail columns need a re-seed.** Sex, date of birth, body part, institution, station,
+and referring physician are not part of the DICOM Query/Retrieve index; they are recorded
+in a separate per-study table as objects are stored, and answered from there on both the
+worklist and in C-FIND responses. Studies indexed before this table existed have no row,
+so on an existing database those columns render blank on the page and come back empty over
+DICOM. Re-seed, or start from a clean database, to populate them.
 
 ### Browse console
 

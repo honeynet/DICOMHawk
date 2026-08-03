@@ -1,3 +1,4 @@
+import errno
 import logging
 import re
 import threading
@@ -64,9 +65,20 @@ def _install_waitress_queue_filter() -> None:
         queue_logger.addFilter(_queue_depth_filter)
 
 
+def _serve(name: str, server, stopping: threading.Event) -> None:
+    """stop() closes the socket asyncore is polling, so EBADF while stopping is expected."""
+    try:
+        server.run()
+    except OSError as exc:
+        if not (stopping.is_set() and exc.errno == errno.EBADF):
+            raise
+        logger.debug(f"Listener {name} closed during shutdown")
+
+
 def _build_servers(specs, trusted_proxy=None):
     _install_waitress_queue_filter()
     servers, threads = [], []
+    stopping = threading.Event()
     try:
         for name, app, host, port, max_body, proxied in specs:
             proxy_options = {}
@@ -92,22 +104,27 @@ def _build_servers(specs, trusted_proxy=None):
             servers.append(server)
             threads.append(
                 threading.Thread(
-                    target=server.run, daemon=True, name=f"dicomhawk-{name}"
+                    target=_serve,
+                    args=(name, server, stopping),
+                    daemon=True,
+                    name=f"dicomhawk-{name}",
                 )
             )
     except Exception:
-        _stop_servers(servers, threads)
+        _stop_servers(servers, threads, stopping)
         raise
     try:
         for thread in threads:
             thread.start()
     except Exception:
-        _stop_servers(servers, threads)
+        _stop_servers(servers, threads, stopping)
         raise
-    return servers, threads
+    return servers, threads, stopping
 
 
-def _stop_servers(servers, threads):
+def _stop_servers(servers, threads, stopping=None):
+    if stopping is not None:
+        stopping.set()
     for server in servers:
         try:
             server.close()
@@ -155,6 +172,7 @@ class WebComponent(Component):
         self.fingerprint_store = fingerprint_store
         self._servers = []
         self._threads: list[threading.Thread] = []
+        self._stopping: threading.Event | None = None
 
     def start(self) -> None:
         if self._servers:
@@ -187,13 +205,15 @@ class WebComponent(Component):
                 False,
             ),
         )
-        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
+        self._servers, self._threads, self._stopping = _build_servers(
+            specs, self.trusted_proxy
+        )
         logger.info(
             f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}"
         )
 
     def stop(self) -> None:
-        _stop_servers(self._servers, self._threads)
+        _stop_servers(self._servers, self._threads, self._stopping)
 
 
 class DicomWebComponent(Component):
@@ -216,6 +236,7 @@ class DicomWebComponent(Component):
         self.sink = sink
         self._servers = []
         self._threads: list[threading.Thread] = []
+        self._stopping: threading.Event | None = None
 
     def start(self) -> None:
         if self._servers:
@@ -232,13 +253,15 @@ class DicomWebComponent(Component):
             )
             for port, app in apps.items()
         ]
-        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
+        self._servers, self._threads, self._stopping = _build_servers(
+            specs, self.trusted_proxy
+        )
         logger.info(
             "DICOMweb: " + ", ".join(f"{self.host}:{port}" for port in sorted(apps))
         )
 
     def stop(self) -> None:
-        _stop_servers(self._servers, self._threads)
+        _stop_servers(self._servers, self._threads, self._stopping)
 
 
 def new_web_component(

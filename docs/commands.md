@@ -58,6 +58,13 @@ that is normally seen over HTTPS; protocol and port mismatches are easy fingerpr
 full internet-facing checklist — TLS, egress lockdown, storage quotas, resource limits, and the
 container hardening the shipped Compose file applies — see [Deployment](./deployment.md).
 
+C-FIND answers with more than the Query/Retrieve index itself stores. Patient sex and
+birth date, study and series description, body part, institution, station, referring
+physician, modalities in study, and the study's instance count are all recorded per study
+as objects are stored, and returned when a client asks for them — so a DICOM viewer and the
+web worklist never disagree about the same study. Requesting one of these as a match key
+filters on it rather than being ignored.
+
 Incoming, untrusted C-STORE objects are deliberately quarantined. Their metadata may be
 indexed for C-FIND realism, but C-GET will not send the quarantined bytes back. This is a
 safety boundary and therefore a known round-trip difference from a production PACS—not a
@@ -148,6 +155,20 @@ dicomhawk seed --names ./my-names.json
 `--names` overrides `--locale`; use `--locale` alone (e.g. `--locale de_DE`) when you just
 want locale-appropriate generated names and don't need a fixed list. The `male`/`female`
 split is what keeps `PatientSex` consistent with the assigned name, so both are required.
+
+**Procedure descriptions**
+
+Public research collections carry `StudyDescription` only sometimes, and it is the column
+a PACS worklist shows as the procedure name. Where a study already has one it is kept
+verbatim; where it is missing, seeding fills it in from a built-in pool keyed by modality
+and body part, so a chest CT never gets labelled as a head study. The chosen
+description is stable for a given study and rotates with `--rotate`, exactly like the
+patient identities — a description that changed on every page reload would give the
+worklist away. A study that already carries a real `StudyDescription` is never overwritten.
+
+Seeding also recomputes `PatientAge` from the birth date and study date it assigns, so
+the three fields agree; a stale age carried over from the source data would contradict
+them.
 
 ### Keeping data fresh (weekly rotation)
 

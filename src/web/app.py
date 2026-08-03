@@ -42,6 +42,10 @@ _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOG_FIELD_LIMIT = 4096
 _WEB_SESSION_TTL_SECONDS = 8 * 60 * 60
 _WEB_MAX_SESSIONS = 10_000
+# A rendered name, not a log field, so the 4096-char log bound would be far too generous.
+_WEB_USERNAME_LIMIT = 64
+# Worklist query parameters are attacker-chosen; keep the rendered/logged forms short.
+_WORKLIST_PARAM_LIMIT = 120
 _BROWSE_MAX_OFFSET = 20_000
 
 
@@ -299,34 +303,52 @@ def _submit_artifact(
         logger.exception("Artifact sink failed for %s", capture.artifact_id)
 
 
-def _issue_session() -> str:
+def _display_name(value) -> str:
+    """Bounded, control-character-free rendering of a name the peer chose themselves."""
+    text = "".join(ch for ch in str(value or "") if ord(ch) >= 32)
+    return text[:_WEB_USERNAME_LIMIT]
+
+
+def _issue_session(username: str = "") -> str:
     token = _protected_blob(32)
     now = time.monotonic()
-    sessions: dict[str, float] = current_app.config["WEB_SESSIONS"]
+    sessions: dict[str, tuple[float, str]] = current_app.config["WEB_SESSIONS"]
     lock: threading.Lock = current_app.config["WEB_SESSIONS_LOCK"]
     with lock:
-        for expired in [key for key, deadline in sessions.items() if deadline <= now]:
+        for expired in [
+            key for key, (deadline, _name) in sessions.items() if deadline <= now
+        ]:
             sessions.pop(expired, None)
         while len(sessions) >= _WEB_MAX_SESSIONS:
             sessions.pop(next(iter(sessions)))
-        sessions[token] = now + _WEB_SESSION_TTL_SECONDS
+        sessions[token] = (now + _WEB_SESSION_TTL_SECONDS, _display_name(username))
     return token
 
 
-def _session_ok() -> bool:
+def _session_entry() -> tuple[float, str] | None:
     token = request.cookies.get(_web().cookies["session"])
     if not token:
-        return False
-    sessions: dict[str, float] = current_app.config["WEB_SESSIONS"]
+        return None
+    sessions: dict[str, tuple[float, str]] = current_app.config["WEB_SESSIONS"]
     lock: threading.Lock = current_app.config["WEB_SESSIONS_LOCK"]
     with lock:
-        deadline = sessions.get(token)
-        if deadline is None:
-            return False
-        if deadline <= time.monotonic():
+        entry = sessions.get(token)
+        if entry is None:
+            return None
+        if entry[0] <= time.monotonic():
             sessions.pop(token, None)
-            return False
-    return True
+            return None
+    return entry
+
+
+def _session_ok() -> bool:
+    return _session_entry() is not None
+
+
+def _session_user() -> str:
+    """The name the peer signed in with; the page echoes it, so it is never trusted input."""
+    entry = _session_entry()
+    return entry[1] if entry else ""
 
 
 def _revoke_session() -> None:
@@ -337,7 +359,7 @@ def _revoke_session() -> None:
         current_app.config["WEB_SESSIONS"].pop(token, None)
 
 
-def _grant():
+def _grant(username: str = ""):
     """Grant response: redirect into the decoy landing (browse console if enabled) with the session cookie set."""
     web = _web()
     landing = web.routes["console"] if web.browse else web.routes["worklist"]
@@ -345,7 +367,7 @@ def _grant():
     secure = web.secure_cookies or request.is_secure
     resp.set_cookie(
         web.cookies["session"],
-        _issue_session(),
+        _issue_session(username),
         secure=secure,
         httponly=True,
         samesite="None" if secure else "Lax",
@@ -353,47 +375,108 @@ def _grant():
     return resp
 
 
-def _worklist_studies():
-    """Real seeded studies via repo.find(), collapsed to one row per study (as handle_find does)."""
+def _display_age(birth_date: str, study_date: str) -> str:
+    """Age the patient was on the study date; a PACS shows this, not a raw birth date."""
+    born, studied = str(birth_date or ""), str(study_date or "")
+    if len(born) < 8 or len(studied) < 8 or not (born.isdigit() and studied.isdigit()):
+        return ""
+    years = int(studied[:4]) - int(born[:4]) - (studied[4:8] < born[4:8])
+    return f"{years}Y" if 0 <= years <= 150 else ""
+
+
+def _format_person_name(value) -> str:
+    """DICOM PN is Family^Given^...; no PACS shows the caret, they show 'Family, Given'."""
+    parts = [part.strip() for part in str(value or "").split("^")]
+    named = [part for part in parts[:2] if part]
+    return ", ".join(named)
+
+
+# STUDY-level keywords the worklist queries; Modality and the rest come from rollups.
+_WORKLIST_KEYWORDS = (
+    "StudyInstanceUID",
+    "StudyDate",
+    "StudyTime",
+    "AccessionNumber",
+    "StudyID",
+    "PatientID",
+    "PatientName",
+)
+
+
+def _worklist_rows(modality: str = "") -> list[dict]:
+    """One bounded page of studies; four queries total, whatever the study count."""
+    web = _web()
     repo: Repository = current_app.config["REPO"]
     model = StudyRootQueryRetrieveInformationModelFind
-    ds = Dataset()
-    ds.QueryRetrieveLevel = "SERIES"
-    for kw in (
-        "StudyInstanceUID",
-        "StudyDate",
-        "StudyTime",
-        "PatientID",
-        "PatientName",
-        "SeriesInstanceUID",
-        "Modality",
-    ):
-        setattr(ds, kw, "")
+    placeholders = web.worklist.get("placeholders", {})
+    empty = placeholders.get("empty", "")
 
-    result = repo.find(ds, model)
+    ds = Dataset()
+    ds.QueryRetrieveLevel = "STUDY"
+    for kw in _WORKLIST_KEYWORDS:
+        setattr(ds, kw, "")
+    if modality:
+        # A SERIES attribute, so it narrows via the join build_query already performs.
+        ds.QueryRetrieveLevel = "SERIES"
+        ds.SeriesInstanceUID = ""
+        ds.Modality = modality
+
+    result = repo.find_page(
+        ds,
+        model,
+        dedup_col="study_instance_uid",
+        offset=0,
+        limit=web.worklist_page_size,
+        order_col="study_date",
+        descending=True,
+    )
     if result.error is not None:
         return []
 
-    seen, studies = set(), []
-    for m in result.matches:
-        uid = getattr(m, _FIND_LEVEL_UID["STUDY"], None)
-        if uid in seen:
-            continue
-        seen.add(uid)
-        idt = m.as_identifier(ds, model)
+    uids = [str(m.study_instance_uid) for m in result.matches]
+    counts = repo.count_instances(uids)
+    modalities = repo.study_modalities(uids)
+    details = repo.study_details(uids)
+
+    rows = []
+    for match in result.matches:
+        uid = str(match.study_instance_uid)
+        idt = match.as_identifier(ds, model)
+        detail = details.get(uid, {})
         date = str(getattr(idt, "StudyDate", "") or "")
-        time = str(getattr(idt, "StudyTime", "") or "")
-        studies.append(
+        clock = str(getattr(idt, "StudyTime", "") or "")
+        rows.append(
             {
-                "patient_name": str(getattr(idt, "PatientName", "") or "—"),
-                "description": "—",
-                "study_datetime": f"{date} {time}".strip() or "—",
-                "modality": str(getattr(idt, "Modality", "") or "—"),
-                "status": "Unread",
-                "age": "—",
+                "patient_name": _format_person_name(getattr(idt, "PatientName", ""))
+                or empty,
+                "patient_id": str(getattr(idt, "PatientID", "") or "") or empty,
+                "description": detail.get("study_description")
+                or placeholders.get("description", ""),
+                "modality": ", ".join(modalities.get(uid, [])) or empty,
+                "images": counts.get(uid, 0),
+                "study_date": date,
+                "study_time": clock,
+                "study_datetime": f"{date} {clock}".strip() or empty,
+                "accession_number": str(getattr(idt, "AccessionNumber", "") or "")
+                or empty,
+                "study_id": str(getattr(idt, "StudyID", "") or "") or empty,
+                "study_instance_uid": uid,
+                "patient_sex": detail.get("patient_sex") or empty,
+                "patient_birth_date": detail.get("patient_birth_date") or empty,
+                "body_part": detail.get("body_part") or empty,
+                "series_description": detail.get("series_description") or empty,
+                "institution_name": detail.get("institution_name") or empty,
+                "station_name": detail.get("station_name") or empty,
+                "referring_physician": _format_person_name(
+                    detail.get("referring_physician")
+                )
+                or empty,
+                "status": placeholders.get("status", ""),
+                "age": _display_age(detail.get("patient_birth_date", ""), date)
+                or empty,
             }
         )
-    return studies
+    return rows
 
 
 def _make_nonce():
@@ -541,14 +624,87 @@ def entry():
     return redirect(f"{web.routes['login']}?signin={signin}", code=302)
 
 
+def _worklist_folders(worklist: dict) -> list[dict]:
+    return [
+        item
+        for section in worklist.get("sidebar", [])
+        for item in section.get("items") or []
+    ]
+
+
+def _selected_folder(worklist: dict, requested: str) -> dict | None:
+    """Resolve against the profile's own labels; an unknown folder falls back, never reflects."""
+    for item in _worklist_folders(worklist):
+        if item["label"] == requested:
+            return item
+    return None
+
+
+def _selected_action(worklist: dict, requested: str) -> dict | None:
+    for item in worklist.get("context_menu", []):
+        if item["label"] == requested:
+            return item
+    return None
+
+
+def _worklist_filters(worklist: dict) -> dict[str, str]:
+    """Column filter boxes; keyed by column so an unknown parameter is simply ignored."""
+    filters = {}
+    for column in worklist.get("columns", []):
+        value = request.args.get(f"filter_{column['key']}", "")
+        if value:
+            filters[column["key"]] = value[:_WORKLIST_PARAM_LIMIT]
+    return filters
+
+
 def worklist(subpath=None):
     web = _web()
     if not _session_ok():
         return redirect(web.routes["entry"], code=302)
-    _log_probe("WEB_WORKLIST_VIEW")
+
+    config = web.worklist
+    folder = _selected_folder(config, request.args.get("path", ""))
+    action = _selected_action(config, request.args.get("action", ""))
+    filters = _worklist_filters(config)
+    rows = _worklist_rows((folder or {}).get("filter", {}).get("modality", ""))
+
+    # Only a study already on this page opens, so the parameter cannot probe for others.
+    wanted = request.args.get("study", "")[:_WORKLIST_PARAM_LIMIT]
+    detail = next((r for r in rows if r["study_instance_uid"] == wanted), None)
+    if action is not None and action.get("result") != "detail":
+        detail = None
+
+    # Rebuilt from resolved values only, so no raw query parameter is ever echoed back.
+    query = {"path": folder["label"]} if folder else {}
+    query.update({f"filter_{key}": value for key, value in filters.items()})
+
+    params = [f"Studies: {len(rows)}"]
+    if folder is not None:
+        params.append(f"Folder: {folder['label']}")
+    if action is not None:
+        params.append(f"Action: {action['label']}")
+    if detail is not None:
+        params.append(f"Study: {detail['study_instance_uid']}")
+    for key, value in filters.items():
+        params.append(f"Filter {key}: {value}")
+    _log_probe("WEB_WORKLIST_VIEW", params=params)
+
     return render_template(
         "worklist.html",
-        studies=_worklist_studies(),
+        studies=rows,
+        worklist=config,
+        username=_session_user(),
+        total_studies=current_app.config["REPO"].count_studies(),
+        folder=folder,
+        detail=detail,
+        filters=filters,
+        refresh_url="?" + urlencode(query),
+        # Never the raw parameter: an unknown action still renders the configured message.
+        action_message=(
+            config.get("messages", {}).get("action_failed", "")
+            if request.args.get("action") and detail is None
+            else ""
+        ),
         routes=web.routes,
         browse=web.browse,
     )
@@ -938,12 +1094,12 @@ def login_post():
     if (username, password) in _web().honey_credentials:
         # Bait, not a real account: grants unconditionally (unlike grant_access) and logs distinctly.
         _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
-        return _grant()
+        return _grant(username)
 
     _capture(username, password)
     signin = request.args.get("signin") or secrets.token_hex(16)
     if _web().grant_access:
-        return _grant()
+        return _grant(username)
     # Deny: re-render the sign-on page with the real error banner.
     return render_template(
         "login.html", **_login_context(signin, "Username or password is incorrect")
@@ -1048,11 +1204,11 @@ def winauth_login():
 
     if (username, password) in _web().honey_credentials:
         _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
-        return _grant()
+        return _grant(username)
 
     _capture(username, password, request_type="WEB_WINAUTH_ATTEMPT")
     if _web().grant_access:
-        return _grant()
+        return _grant(username)
     return (
         _winauth_challenge()
     )  # deny -> dialog reappears, as if credentials were wrong
