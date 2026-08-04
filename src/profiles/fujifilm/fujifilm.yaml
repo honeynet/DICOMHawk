@@ -249,8 +249,7 @@ web:
   templates_dir: fujifilm
   favicon: synapse/favicon.ico
   grant_access: bait                             # none | bait | any; only the honey_credentials below get in
-  secure_cookies: true                           # matches the real HTTPS product; browsers drop it on plain
-                                                 # HTTP, so set DICOMHAWK_SECURE_COOKIES=false without TLS
+  secure_cookies: true                           # real product is HTTPS; without TLS set DICOMHAWK_SECURE_COOKIES=false
 
   # Real Synapse paths, sourced from public passive recon; response kinds are defined in web/app.py::_HONEYTRAP_RESPONSES.
   honeytraps:

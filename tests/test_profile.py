@@ -332,3 +332,10 @@ def test_profile_rejects_an_out_of_range_worklist_page_size(size):
                 "web": {"enabled": False, "worklist_page_size": size},
             }
         )
+
+
+def test_only_the_vendor_profile_declares_the_web_tier_header():
+    # serve.py overrides X-Backendserver only where a profile ships it; an unconditional set leaked Synapse into generic-pacs.
+    assert "X-Backendserver" in load_profile("fujifilm").web.headers
+    assert "X-Backendserver" not in load_profile("generic-pacs").web.headers
+    assert "X-Backendserver" not in default_profile().web.headers

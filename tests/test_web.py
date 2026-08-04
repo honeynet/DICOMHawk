@@ -1259,3 +1259,43 @@ def test_a_boolean_grant_access_is_refused_with_its_replacement_named(repo, bus)
 
     with pytest.raises(ValueError, match="no longer boolean"):
         load_profile(str(broken))
+
+
+def test_the_app_server_header_is_hidden_from_waitress():
+    # waitress answers an app-set Server header with "Via: waitress", naming the real stack.
+    from web.component import _hide_app_server_header
+
+    seen = []
+
+    def app(environ, start_response):
+        start_response("200 OK", [("Server", "Microsoft-IIS/10.0"), ("X-Keep", "1")])
+        return [b""]
+
+    _hide_app_server_header(app)({}, lambda status, headers, exc=None: seen.append(headers))
+
+    assert seen == [[("X-Keep", "1")]]
+
+
+def test_the_web_listener_hands_waitress_the_profile_server_header(repo, bus):
+    # Only waitress may emit Server, and it must emit the profile's spoofed value.
+    import web.component as component_module
+    from web.component import WebComponent
+
+    prof = load_profile("fujifilm")
+    component = WebComponent(prof, repo, bus, "127.0.0.1", 0, 0)
+    captured = []
+
+    def fake_build(specs, trusted_proxy=None):
+        captured.extend(specs)
+        return [], [], None
+
+    original = component_module._build_servers
+    component_module._build_servers = fake_build
+    try:
+        component.start()
+    finally:
+        component_module._build_servers = original
+
+    idents = {name: spec[-1] for name, *spec in ((s[0], *s[1:]) for s in captured)}
+    assert idents["web"] == prof.web.headers["Server"]
+    assert idents["operator"] is None

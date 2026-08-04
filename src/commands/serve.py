@@ -267,7 +267,8 @@ def serve(
             ) from exc
     if secure_cookies is not None:
         prof.web.secure_cookies = secure_cookies
-    if backend_server:
+    # Only override a header the profile already ships; injecting it elsewhere leaks one vendor into another.
+    if backend_server and "X-Backendserver" in prof.web.headers:
         prof.web.headers["X-Backendserver"] = backend_server
     if public_base_url:
         from urllib.parse import urlsplit

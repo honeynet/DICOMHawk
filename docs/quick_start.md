@@ -5,6 +5,8 @@ This guide assumes [installation](./installation.md) is complete. Two run modes 
 If you just want a working honeypot, `./setup.sh` does everything below for the Docker path:
 prerequisites, configuration, build, start, and the first seed. Read on to drive it by hand.
 
+Once it is running, [Verification](./verification.md) confirms each surface works.
+
 ## Run locally (venv)
 
 From the repository root, with the venv activated:

@@ -120,7 +120,9 @@ from a stall.
 
 **Honeytoken bait:** when `--honey-url`/`--canary-pdf` (or `seeding/config.yaml`) is set, exactly one instance stored by each `seed` run is tagged with the honey `RetrieveURL` or canary PDF, and everything else stays a real, untouched image. The tag surfaces when that specific instance is later retrieved via C-GET; it never appears in C-FIND results.
 
-**The tag is not durable across an untagged reseed.** A later `seed` run that reuses the same instance's SOP Instance UID (which happens routinely, because seeding is deterministic per collection and epoch) overwrites the file, and if that later run didn't itself have honeytoken bait configured, the tag is gone with it. For bait that survives a recurring `--interval` schedule, set `honey_url` or `canary_pdf` in `seeding/config.yaml` rather than passing them as a one-off CLI flag. The scheduler resolves the config once and reapplies it on every tick, so each reseed replants fresh bait instead of relying on you remembering the flag.
+**How long the bait lasts depends on which flag you use.** `--canary-pdf` stores the bait as its own Encapsulated PDF instance, under a UID derived from the source instance and the PDF itself. Ordinary seeding never produces that UID, so the canary is not overwritten and stays in the archive until you clear the volume. `--honey-url` on its own instead adds a `RetrieveURL` to a real image, which keeps its original SOP Instance UID; because seeding is deterministic per collection and epoch, a later untagged run rewrites that same instance and the tag goes with it.
+
+For bait that is replanted automatically, set `honey_url` or `canary_pdf` in `seeding/config.yaml` rather than passing a one-off CLI flag. The `--interval` scheduler resolves that config once and reapplies it on every tick.
 
 ### Custom data files
 

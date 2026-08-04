@@ -58,8 +58,10 @@ def _age_at(birth_date: str, study_date: str) -> str | None:
     return f"{years:03d}Y"
 
 
-def faker_pools(locale: str = "en_US") -> NamePools:
+def faker_pools(locale: str = "en_US", epoch: str = "") -> NamePools:
     faker = Faker(locale)
+    # Unseeded Faker draws a fresh pool per call, so one PatientID would land on a new name every re-seed.
+    faker.seed_instance(f"{locale}{epoch}")
     # Some locales lack sex-specific first-name providers.
     try:
         male = tuple(

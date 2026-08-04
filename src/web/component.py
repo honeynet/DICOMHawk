@@ -75,12 +75,25 @@ def _serve(name: str, server, stopping: threading.Event) -> None:
         logger.debug(f"Listener {name} closed during shutdown")
 
 
+def _hide_app_server_header(app):
+    """waitress adds 'Via: <ident>' whenever the app sets Server itself, naming the real stack."""
+
+    def wrapped(environ, start_response):
+        def start(status, headers, exc_info=None):
+            kept = [(k, v) for k, v in headers if k.lower() != "server"]
+            return start_response(status, kept, exc_info)
+
+        return app(environ, start)
+
+    return wrapped
+
+
 def _build_servers(specs, trusted_proxy=None):
     _install_waitress_queue_filter()
     servers, threads = [], []
     stopping = threading.Event()
     try:
-        for name, app, host, port, max_body, proxied in specs:
+        for name, app, host, port, max_body, proxied, ident in specs:
             proxy_options = {}
             if proxied and trusted_proxy:
                 proxy_options = {
@@ -95,10 +108,11 @@ def _build_servers(specs, trusted_proxy=None):
                     "clear_untrusted_proxy_headers": True,
                 }
             server = waitress.create_server(
-                app,
+                _hide_app_server_header(app),
                 host=host,
                 port=port,
                 max_request_body_size=max_body,
+                ident=ident,
                 **proxy_options,
             )
             servers.append(server)
@@ -195,6 +209,7 @@ class WebComponent(Component):
                 self.web_port,
                 self.profile.web.max_request_bytes,
                 True,
+                self.profile.web.headers.get("Server"),
             ),
             (
                 "operator",
@@ -203,6 +218,7 @@ class WebComponent(Component):
                 self.operator_port,
                 1_048_576,
                 False,
+                None,
             ),
         )
         self._servers, self._threads, self._stopping = _build_servers(
@@ -250,6 +266,7 @@ class DicomWebComponent(Component):
                 port,
                 app.config["MAX_CONTENT_LENGTH"],
                 True,
+                self.profile.web.headers.get("Server"),
             )
             for port, app in apps.items()
         ]

@@ -10,7 +10,7 @@ from dicomhawk.storage import new_store
 from honeytoken.injector import new_honeytoken_injector
 from seeding.fallback import load_fallback_datasets
 from seeding.locations import load_locations
-from seeding.names import _age_at, _patch_location
+from seeding.names import _age_at, _patch_location, faker_pools
 from seeding.osm import OsmClient
 from seeding.procedures import load_procedures, procedure_pool
 from seeding.seeder import new_seeder
@@ -293,3 +293,32 @@ def test_seed_without_a_progress_callback_still_works(repo):
     seeder = new_seeder(repo)
     seeder._client = _StubClient(2)
     assert seeder.seed("COLL", 1, 1, "CT", "epoch") > 0
+
+
+def test_name_pools_are_stable_for_one_locale_and_epoch():
+    # Unseeded Faker gave a fresh pool per call, so one PatientID drifted to a new name each re-seed.
+    assert faker_pools("en_US", "2026W31") == faker_pools("en_US", "2026W31")
+
+
+def test_name_pools_rotate_with_the_epoch():
+    assert faker_pools("en_US", "2026W31") != faker_pools("en_US", "2026W32")
+
+
+def _stored_identities(repo):
+    return sorted(
+        (str(ds.PatientID), str(ds.PatientName))
+        for ds in (
+            dcmread(f, force=True) for f in repo.storage.storage_dir.iterdir()
+        )
+    )
+
+
+def test_reseeding_keeps_one_patient_id_on_one_name(repo):
+    seeder = new_seeder(repo)
+    loc = seeder._locations[0]
+    seeder._seed_fallback(loc, "CT", "2026W31")
+    first = _stored_identities(repo)
+
+    seeder._seed_fallback(loc, "CT", "2026W31")
+    assert _stored_identities(repo) == first
+    assert len({pid for pid, _name in first}) == len(set(first))
