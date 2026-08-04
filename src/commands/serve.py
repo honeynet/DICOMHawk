@@ -368,7 +368,9 @@ def serve(
         components.append(analysis_component)
         sink = analysis_component.sink
         analysis_store = analysis_component.store
-        logger.info("Analysis: enabled, rules=%s", analysis_rules or "shipped starters only")
+        logger.info(
+            "Analysis: enabled, rules=%s", analysis_rules or "shipped starters only"
+        )
     else:
         logger.info("Analysis: disabled (--no-analysis)")
 
@@ -378,7 +380,12 @@ def serve(
         # The flag overrides the profile, so no collector is served and no route is registered.
         prof.web.fingerprint.enabled = False
     # Only build the store when a profile actually serves a collector, so nothing is created unused.
-    if fingerprint and prof.kind == "pacs" and prof.web.enabled and prof.web.fingerprint.enabled:
+    if (
+        fingerprint
+        and prof.kind == "pacs"
+        and prof.web.enabled
+        and prof.web.fingerprint.enabled
+    ):
         fingerprint_component = new_fingerprint_component(
             new_fingerprint_config(
                 db_path=fingerprint_db,

@@ -32,7 +32,9 @@ def compile_rules(
 
     for path in _yar_files(Path(operator_dir) if operator_dir else None):
         try:
-            yara.compile(filepath=str(path), includes=False)  # validate in isolation first
+            yara.compile(
+                filepath=str(path), includes=False
+            )  # validate in isolation first
         except yara.Error as exc:
             problems.append(f"{path.name}: {exc}")
             continue

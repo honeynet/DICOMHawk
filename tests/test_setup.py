@@ -30,11 +30,7 @@ FAKE_SUDO = (
 )
 
 # --defaults must never reach the interface; failing loudly beats a screen nobody can answer.
-FAKE_WHIPTAIL = (
-    "#!/bin/sh\n"
-    'echo "WHIPTAIL $*" >> "$DICOMHAWK_TEST_LOG"\n'
-    "exit 1\n"
-)
+FAKE_WHIPTAIL = "#!/bin/sh\n" 'echo "WHIPTAIL $*" >> "$DICOMHAWK_TEST_LOG"\n' "exit 1\n"
 
 # Cleared per case: a value exported in the developer's shell would silently change assertions.
 SEEDED_ANSWERS = (
@@ -185,7 +181,9 @@ def test_an_unanswered_optional_variable_stays_commented(tmp_path):
 
 
 def test_an_answered_optional_variable_is_uncommented(tmp_path):
-    root, env, _log = _harness(tmp_path, DICOMHAWK_PUBLIC_BASE_URL="https://pacs.example.org")
+    root, env, _log = _harness(
+        tmp_path, DICOMHAWK_PUBLIC_BASE_URL="https://pacs.example.org"
+    )
     _run(root, env, "--defaults", "--no-start")
     written = _env_values(root / ".env")
     assert written["DICOMHAWK_PUBLIC_BASE_URL"] == "https://pacs.example.org"
@@ -295,7 +293,19 @@ def _isolate_path(env, *extra):
     bindir = Path(env["PATH"].split(os.pathsep)[0])
     # Cases that isolate PATH are the ones testing an absent whiptail, so drop the fake.
     (bindir / "whiptail").unlink(missing_ok=True)
-    tools = ("bash", "sort", "head", "sed", "grep", "mktemp", "cat", "rm", "mv", "chmod", *extra)
+    tools = (
+        "bash",
+        "sort",
+        "head",
+        "sed",
+        "grep",
+        "mktemp",
+        "cat",
+        "rm",
+        "mv",
+        "chmod",
+        *extra,
+    )
     for tool in tools:
         target = bindir / tool
         if not target.exists():
@@ -495,7 +505,9 @@ def test_every_variable_written_is_actually_consumed(tmp_path):
         assert key in haystack, f"{key} is written to .env but nothing reads it"
 
 
-def test_the_analysis_and_fingerprint_switches_are_readable_from_the_environment(tmp_path):
+def test_the_analysis_and_fingerprint_switches_are_readable_from_the_environment(
+    tmp_path,
+):
     # Without these, disabling either under Docker means editing the tracked compose command list.
     import click
     import typer
@@ -573,7 +585,9 @@ def test_a_failed_build_reports_the_step_and_dumps_logs(tmp_path):
     (bindir / "docker").write_text(
         FAKE_DOCKER.replace('exit 0\n"""', 'exit 0\n"""')
         .rstrip()
-        .replace("esac\nexit 0", 'esac\ncase "$*" in "compose build") exit 1 ;; esac\nexit 0')
+        .replace(
+            "esac\nexit 0", 'esac\ncase "$*" in "compose build") exit 1 ;; esac\nexit 0'
+        )
     )
     (bindir / "docker").chmod(0o755)
 
@@ -587,8 +601,9 @@ def test_a_failed_start_reports_the_step(tmp_path):
     root, env, log = _harness(tmp_path)
     bindir = Path(env["PATH"].split(os.pathsep)[0])
     (bindir / "docker").write_text(
-        FAKE_DOCKER.rstrip()
-        .replace("esac\nexit 0", 'esac\ncase "$*" in "compose up -d") exit 1 ;; esac\nexit 0')
+        FAKE_DOCKER.rstrip().replace(
+            "esac\nexit 0", 'esac\ncase "$*" in "compose up -d") exit 1 ;; esac\nexit 0'
+        )
     )
     (bindir / "docker").chmod(0o755)
 
@@ -632,7 +647,9 @@ def test_a_plaintext_deployment_relaxes_the_secure_cookie(tmp_path):
 
 
 def test_a_declared_tls_frontend_keeps_the_profiles_own_behaviour(tmp_path):
-    root, env, _log = _harness(tmp_path, DICOMHAWK_PUBLIC_BASE_URL="https://pacs.example.org")
+    root, env, _log = _harness(
+        tmp_path, DICOMHAWK_PUBLIC_BASE_URL="https://pacs.example.org"
+    )
     _run(root, env, "--defaults", "--no-start")
     assert _env_values(root / ".env")["DICOMHAWK_SECURE_COOKIES"] == ""
 

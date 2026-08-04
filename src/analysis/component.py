@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 _STOP_GRACE_SECONDS = 15.0
 _RESTART_BACKOFF_CAP_SECONDS = 60.0
-_RESTART_HEALTHY_SECONDS = 60.0  # a worker that lasted this long counts as a one-off, not a crash loop
+_RESTART_HEALTHY_SECONDS = 60.0  # lasting this long is a one-off, not a crash loop
 
 
 class AnalysisComponent(Component):
@@ -41,7 +41,9 @@ class AnalysisComponent(Component):
             recovered = self.store.recover_stale()
         except Exception:
             # An optional analysis feature must never take the honeypot down with it.
-            logger.exception("Analysis disabled: could not open %s", self.config.DB_PATH)
+            logger.exception(
+                "Analysis disabled: could not open %s", self.config.DB_PATH
+            )
             return
         self._queue = multiprocessing.Queue(maxsize=self.config.QUEUE_SIZE)
         self._stopping.clear()
@@ -85,7 +87,7 @@ class AnalysisComponent(Component):
                 failures = 0
             failures += 1
             # Back off, or a worker that dies on startup becomes an unbounded fork loop.
-            delay = min(_RESTART_BACKOFF_CAP_SECONDS, 2.0**min(failures, 6))
+            delay = min(_RESTART_BACKOFF_CAP_SECONDS, 2.0 ** min(failures, 6))
             logger.warning(
                 "Analysis worker exited (code=%s); restarting in %.0fs",
                 process.exitcode,
@@ -143,10 +145,14 @@ class AnalysisComponent(Component):
                     "ANALYSIS_BACKLOG",
                     session_id=artifact.session_id,
                     artifact_id=artifact_id,
-                    session_parameters=["Queue full; job stays pending for the recovery sweep"],
+                    session_parameters=[
+                        "Queue full; job stays pending for the recovery sweep"
+                    ],
                 )
             )
 
 
-def new_analysis_component(config: AnalysisConfig, bus: logging.Logger) -> AnalysisComponent:
+def new_analysis_component(
+    config: AnalysisConfig, bus: logging.Logger
+) -> AnalysisComponent:
     return AnalysisComponent(config, bus)

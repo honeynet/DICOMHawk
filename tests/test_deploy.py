@@ -57,7 +57,7 @@ exit 0
 
 FAKE_DOCKER = (
     "#!/bin/sh\n"
-    "case \"$*\" in\n"
+    'case "$*" in\n'
     "  *Id*) echo 1234567890abcdef ;;\n"
     f"  *) echo {SUBNET} ;;\n"
     "esac\n"
@@ -89,9 +89,7 @@ def _harness(tmp_path, seed_rules=()):
 
 
 def _run(env, action):
-    return subprocess.run(
-        [SCRIPT, action], env=env, capture_output=True, text=True
-    )
+    return subprocess.run([SCRIPT, action], env=env, capture_output=True, text=True)
 
 
 def test_apply_inserts_rules_in_kernel_canonical_order(tmp_path):
@@ -100,7 +98,10 @@ def test_apply_inserts_rules_in_kernel_canonical_order(tmp_path):
 
     rules = log.read_text()
     # Inserted in the kernel's stored order (comment before -j) so check/remove match it later.
-    assert f"-I DOCKER-USER -s {SUBNET} -m comment --comment dicomhawk-egress -j DROP" in rules
+    assert (
+        f"-I DOCKER-USER -s {SUBNET} -m comment --comment dicomhawk-egress -j DROP"
+        in rules
+    )
     assert (
         f"-I DOCKER-USER -s {SUBNET} -m conntrack --ctstate RELATED,ESTABLISHED "
         "-m comment --comment dicomhawk-egress -j RETURN"
@@ -137,6 +138,8 @@ def test_remove_deletes_the_installed_rules(tmp_path):
 
 def test_remove_purges_duplicate_rules(tmp_path):
     # A host left in the old duplicated state must come back fully clean.
-    env, state, _log = _harness(tmp_path, seed_rules=list(KERNEL_RULES) + list(KERNEL_RULES))
+    env, state, _log = _harness(
+        tmp_path, seed_rules=list(KERNEL_RULES) + list(KERNEL_RULES)
+    )
     assert _run(env, "remove").returncode == 0
     assert state.read_text().strip() == ""

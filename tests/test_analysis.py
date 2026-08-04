@@ -106,7 +106,9 @@ def test_extract_dicom_metadata_dimse_dataset_best_effort():
 
 
 def test_extract_dicom_metadata_returns_none_for_non_dicom():
-    assert analyzers.extract_dicom_metadata(b"not a dicom file at all", "part10") is None
+    assert (
+        analyzers.extract_dicom_metadata(b"not a dicom file at all", "part10") is None
+    )
 
 
 def test_read_capture_truncates_at_max_bytes(tmp_path):
@@ -138,14 +140,18 @@ def test_yara_compile_shipped_rules_succeeds():
 
 def test_yara_scan_detects_eicar_string():
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
-    matches, state = yara_engine.scan(rules, b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*")
+    matches, state = yara_engine.scan(
+        rules, b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+    )
     assert state is None
     assert any(m["rule"] == "EICAR_Test_String" for m in matches)
 
 
 def test_yara_scan_clean_data_no_matches():
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
-    matches, state = yara_engine.scan(rules, b"ordinary dicom-ish bytes with nothing suspicious")
+    matches, state = yara_engine.scan(
+        rules, b"ordinary dicom-ish bytes with nothing suspicious"
+    )
     assert matches == []
     assert state is None
 
@@ -175,19 +181,26 @@ def test_yara_detects_orthanc_config_preamble_polyglot():
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
     matches, state = yara_engine.scan(rules, data)
     assert state is None
-    assert any(m["rule"] == "DICOM_Orthanc_Config_Preamble_CVE_2023_33466" for m in matches)
+    assert any(
+        m["rule"] == "DICOM_Orthanc_Config_Preamble_CVE_2023_33466" for m in matches
+    )
 
 
 def test_yara_detects_orthanc_cve_2026_5442_exact_dimensions():
-    rows = bytes([0x28, 0x00, 0x10, 0x00, 0x55, 0x4C, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00])
-    columns = bytes([0x28, 0x00, 0x11, 0x00, 0x55, 0x4C, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00])
+    rows = bytes(
+        [0x28, 0x00, 0x10, 0x00, 0x55, 0x4C, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00]
+    )
+    columns = bytes(
+        [0x28, 0x00, 0x11, 0x00, 0x55, 0x4C, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00]
+    )
     uid = b"1.2.840.10008.1.2.1"  # Explicit VR Little Endian, required by the generic VR-anomaly rule
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
     matches, state = yara_engine.scan(rules, _bare_part10(uid + rows + columns))
     assert state is None
-    assert {"DICOM_Orthanc_CVE_2026_5442_Known_Test", "DICOM_Rows_Columns_Encoded_As_UL"} <= {
-        m["rule"] for m in matches
-    }
+    assert {
+        "DICOM_Orthanc_CVE_2026_5442_Known_Test",
+        "DICOM_Rows_Columns_Encoded_As_UL",
+    } <= {m["rule"] for m in matches}
 
 
 def test_yara_detects_zip_declared_size_exhaustion():
@@ -198,7 +211,10 @@ def test_yara_detects_zip_declared_size_exhaustion():
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
     matches, state = yara_engine.scan(rules, bytes(header))
     assert state is None
-    assert any(m["rule"] == "Orthanc_ZIP_Declared_Size_Exhaustion_CVE_2026_5439" for m in matches)
+    assert any(
+        m["rule"] == "Orthanc_ZIP_Declared_Size_Exhaustion_CVE_2026_5439"
+        for m in matches
+    )
 
 
 def test_yara_dicom_uid_text_alone_does_not_trip_structural_rules():
@@ -214,7 +230,9 @@ def test_yara_dicom_uid_text_alone_does_not_trip_structural_rules():
 def test_yara_invalid_operator_rule_is_skipped_not_fatal(tmp_path):
     bad = tmp_path / "bad.yar"
     bad.write_text("this is not valid yara syntax {{{")
-    rules, ruleset_hash, problems = yara_engine.compile_rules(worker.RULES_DIR, str(tmp_path))
+    rules, ruleset_hash, problems = yara_engine.compile_rules(
+        worker.RULES_DIR, str(tmp_path)
+    )
     assert rules is not None  # shipped rules still compiled
     assert any("bad.yar" in p for p in problems)
 
@@ -386,7 +404,9 @@ def test_never_analyzes_safe_seeded_objects(tmp_path):
 # --- regression guards for the 2026-07-31 hardening pass ---
 
 
-def test_recover_stale_gives_up_on_a_payload_that_keeps_killing_the_worker(store, tmp_path):
+def test_recover_stale_gives_up_on_a_payload_that_keeps_killing_the_worker(
+    store, tmp_path
+):
     """Without a cap, a payload that crashes the worker is fed back to every fresh one forever."""
     artifact_id = store.enqueue_pending(_artifact(tmp_path))
     for _ in range(MAX_ATTEMPTS - 1):
@@ -412,8 +432,12 @@ def test_rule_filter_treats_like_metacharacters_literally(store, tmp_path):
 
     assert store.list_artifacts(rule="EICAR_Test_String")[1] == 1
     assert store.list_artifacts(rule="EICAR")[1] == 1
-    assert store.list_artifacts(rule="%")[1] == 0  # would match everything as a raw LIKE
-    assert store.list_artifacts(rule="E_C_R_Test_String")[1] == 0  # '_' is not a wildcard
+    assert (
+        store.list_artifacts(rule="%")[1] == 0
+    )  # would match everything as a raw LIKE
+    assert (
+        store.list_artifacts(rule="E_C_R_Test_String")[1] == 0
+    )  # '_' is not a wildcard
 
 
 def test_failed_commit_does_not_poison_the_session(store, tmp_path):
@@ -435,7 +459,9 @@ def test_extract_dicom_metadata_bounds_attacker_controlled_values():
 
     assert len(metadata["modality"]) < 300
     assert metadata["modality"].endswith("...[truncated]")
-    assert metadata["sop_class_uid"] == str(CTImageStorage)  # normal-length values untouched
+    assert metadata["sop_class_uid"] == str(
+        CTImageStorage
+    )  # normal-length values untouched
 
 
 # --- encapsulated document extraction ---
@@ -465,14 +491,18 @@ def _encapsulated(document: bytes, mime: str, declare_length: bool = True) -> by
 
 def test_extract_encapsulated_document_returns_none_without_one():
     assert (
-        analyzers.extract_encapsulated_document(_part10_bytes(_ct_dataset()), "part10", 1000)
+        analyzers.extract_encapsulated_document(
+            _part10_bytes(_ct_dataset()), "part10", 1000
+        )
         is None
     )
 
 
 def test_extract_encapsulated_document_identifies_real_type_not_declared_type():
     raw = _encapsulated(b"%PDF-1.4\ntrailer<</Root 1 0 R>>\n", "application/pdf")
-    metadata, document = analyzers.extract_encapsulated_document(raw, "part10", 1_000_000)
+    metadata, document = analyzers.extract_encapsulated_document(
+        raw, "part10", 1_000_000
+    )
     assert document.startswith(b"%PDF-")
     assert metadata["file_type"]["mime"] == "application/pdf"
     assert metadata["content_conflicts_with_declared_mime"] is False
@@ -480,21 +510,27 @@ def test_extract_encapsulated_document_identifies_real_type_not_declared_type():
 
 def test_extract_encapsulated_document_flags_pdf_declaration_over_other_content():
     raw = _encapsulated(b"MZ\x90\x00" + b"\x00" * 40, "application/pdf")
-    metadata, _document = analyzers.extract_encapsulated_document(raw, "part10", 1_000_000)
+    metadata, _document = analyzers.extract_encapsulated_document(
+        raw, "part10", 1_000_000
+    )
     assert metadata["content_conflicts_with_declared_mime"] is True
 
 
 def test_extract_encapsulated_document_does_not_judge_non_pdf_declarations():
     """STL/CDA legitimately identify as something generic; only a PDF claim is unambiguous."""
     raw = _encapsulated(b"solid mesh\nendsolid mesh\n", "model/stl")
-    metadata, _document = analyzers.extract_encapsulated_document(raw, "part10", 1_000_000)
+    metadata, _document = analyzers.extract_encapsulated_document(
+        raw, "part10", 1_000_000
+    )
     assert metadata["content_conflicts_with_declared_mime"] is None
 
 
 def test_extract_encapsulated_document_strips_the_part10_pad_byte():
     body = b"%PDF-1.4 od"  # odd length, so Part 10 appends one pad byte
     raw = _encapsulated(body, "application/pdf", declare_length=False)
-    metadata, document = analyzers.extract_encapsulated_document(raw, "part10", 1_000_000)
+    metadata, document = analyzers.extract_encapsulated_document(
+        raw, "part10", 1_000_000
+    )
     assert document == body
     assert metadata["padding_bytes_removed"] == 1
 
@@ -515,7 +551,9 @@ def test_inner_document_scan_catches_what_the_wrapper_scan_cannot():
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
 
     outer, _state = yara_engine.scan(rules, raw)
-    _metadata, document = analyzers.extract_encapsulated_document(raw, "part10", 1_000_000)
+    _metadata, document = analyzers.extract_encapsulated_document(
+        raw, "part10", 1_000_000
+    )
     inner, _state = yara_engine.scan(rules, document)
 
     assert outer == []
@@ -536,8 +574,12 @@ def test_matched_rule_names_merges_inner_document_hits_for_api_filtering():
 
 
 def test_yara_detects_orthanc_cve_2026_5442_exact_dimensions_big_endian():
-    rows_be = bytes([0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
-    columns_be = bytes([0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
+    rows_be = bytes(
+        [0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00]
+    )
+    columns_be = bytes(
+        [0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00]
+    )
     uid = b"1.2.840.10008.1.2.2"  # Explicit VR Big Endian
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
     matches, state = yara_engine.scan(rules, _bare_part10(uid + rows_be + columns_be))
@@ -550,12 +592,20 @@ def test_yara_detects_orthanc_cve_2026_5442_exact_dimensions_big_endian():
 
 def test_yara_detects_orthanc_cve_2026_5443_exact_dimensions_big_endian():
     palette = b"PALETTE COLOR"
-    rows_3_be = bytes([0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03])
-    columns_wrap_be = bytes([0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x55, 0x55, 0x55, 0x56])
+    rows_3_be = bytes(
+        [0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03]
+    )
+    columns_wrap_be = bytes(
+        [0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x55, 0x55, 0x55, 0x56]
+    )
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
-    matches, state = yara_engine.scan(rules, _bare_part10(palette + rows_3_be + columns_wrap_be))
+    matches, state = yara_engine.scan(
+        rules, _bare_part10(palette + rows_3_be + columns_wrap_be)
+    )
     assert state is None
-    assert any(m["rule"] == "DICOM_Orthanc_CVE_2026_5443_Known_Test_BigEndian" for m in matches)
+    assert any(
+        m["rule"] == "DICOM_Orthanc_CVE_2026_5443_Known_Test_BigEndian" for m in matches
+    )
 
 
 def test_yara_detects_pmsct_rle1_big_endian():
@@ -576,12 +626,19 @@ def test_yara_detects_pmsct_rle1_big_endian():
 
 def test_yara_little_endian_only_rules_do_not_fire_on_big_endian_encoding():
     """Regression guard: LE-specific rules must not already cover BE, or this fix was unnecessary."""
-    rows_be = bytes([0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
-    columns_be = bytes([0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00])
+    rows_be = bytes(
+        [0x00, 0x28, 0x00, 0x10, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00]
+    )
+    columns_be = bytes(
+        [0x00, 0x28, 0x00, 0x11, 0x55, 0x4C, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00]
+    )
     uid = b"1.2.840.10008.1.2.2"
     rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
     matches, _state = yara_engine.scan(rules, _bare_part10(uid + rows_be + columns_be))
-    le_only = {"DICOM_Orthanc_CVE_2026_5442_Known_Test", "DICOM_Rows_Columns_Encoded_As_UL"}
+    le_only = {
+        "DICOM_Orthanc_CVE_2026_5442_Known_Test",
+        "DICOM_Rows_Columns_Encoded_As_UL",
+    }
     assert not (le_only & {m["rule"] for m in matches})
 
 
@@ -667,7 +724,9 @@ def _dead_component(tmp_path):
 
 
 def test_unopenable_store_disables_analysis_without_killing_the_process(tmp_path):
-    comp = _dead_component(tmp_path)  # must not raise: an optional feature can't take the honeypot down
+    comp = _dead_component(
+        tmp_path
+    )  # must not raise: an optional feature can't take the honeypot down
     assert comp.store.ready() is False
     assert comp._process is None and comp._supervisor is None
     assert comp.store.list_artifacts() == ([], 0)

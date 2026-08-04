@@ -232,7 +232,9 @@ def test_new_bus_silences_pynetdicoms_own_exception_tracebacks(tmp_path, capsys)
     assert "boom" not in capsys.readouterr().err
 
 
-def test_new_dev_log_reinstates_pynetdicom_detail_over_new_bus_default(tmp_path, capsys):
+def test_new_dev_log_reinstates_pynetdicom_detail_over_new_bus_default(
+    tmp_path, capsys
+):
     new_bus(str(tmp_path / "bus.log"), verbose=False)
     new_dev_log(str(tmp_path / "dev.log"))
     logging.getLogger("pynetdicom.association").exception(ValueError("boom"))

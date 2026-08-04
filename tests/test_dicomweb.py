@@ -469,6 +469,7 @@ def test_stow_submits_accepted_part_to_sink(repo, bus):
 
 def test_stow_succeeds_even_when_the_artifact_sink_raises(repo, bus):
     """Analysis failures must never change what the peer sees; the payload is already captured."""
+
     def exploding_sink(_artifact):
         raise RuntimeError("analysis store unavailable")
 

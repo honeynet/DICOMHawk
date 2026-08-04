@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 ANALYZER_VERSION = "1"
 RULES_DIR = Path(__file__).parent / "rules"
 
-_RECOVERY_INTERVAL_SECONDS = 5.0  # backlog/crash-recovery sweep for jobs the queue missed
+_RECOVERY_INTERVAL_SECONDS = 5.0  # crash-recovery sweep for jobs the queue missed
 
 # RLIMIT_CPU is cumulative for the process's whole life, not per job, so this is a generous backstop only.
 _WORKER_CPU_BACKSTOP_SECONDS = 3600
@@ -36,7 +36,10 @@ def _set_resource_limits() -> None:
     import resource
 
     for res, value in (
-        (resource.RLIMIT_CPU, (_WORKER_CPU_BACKSTOP_SECONDS, _WORKER_CPU_BACKSTOP_SECONDS)),
+        (
+            resource.RLIMIT_CPU,
+            (_WORKER_CPU_BACKSTOP_SECONDS, _WORKER_CPU_BACKSTOP_SECONDS),
+        ),
         (resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024)),
         (resource.RLIMIT_NOFILE, (256, 256)),
     ):
@@ -47,7 +50,9 @@ def _set_resource_limits() -> None:
 
 
 def _analyze(record, config: AnalysisConfig, rules) -> dict:
-    data, truncated = analyzers.read_capture(Path(record.capture_path), config.MAX_BYTES)
+    data, truncated = analyzers.read_capture(
+        Path(record.capture_path), config.MAX_BYTES
+    )
     # Keep YARA's own deadline inside the job deadline it runs under.
     timeout = max(1, int(config.TIMEOUT))
     matches, scan_state = yara_engine.scan(rules, data, timeout=timeout)
@@ -66,7 +71,12 @@ def _analyze(record, config: AnalysisConfig, rules) -> dict:
     }
     if dicom and dicom["has_encapsulated_document"]:
         result["encapsulated_document"] = _analyze_encapsulated_document(
-            data, record.source_encoding, record.transfer_syntax_uid, config, rules, timeout
+            data,
+            record.source_encoding,
+            record.transfer_syntax_uid,
+            config,
+            rules,
+            timeout,
         )
     return result
 
@@ -101,7 +111,12 @@ def _matched_rule_names(result: dict) -> list[str]:
 
 
 def _run_job(
-    store: AnalysisStore, bus, config: AnalysisConfig, rules, ruleset_hash, artifact_id: str
+    store: AnalysisStore,
+    bus,
+    config: AnalysisConfig,
+    rules,
+    ruleset_hash,
+    artifact_id: str,
 ) -> None:
     record = store.claim(artifact_id)
     if record is None:
@@ -174,7 +189,11 @@ def _run_job(
             artifact_id=artifact_id,
             analysis=result,
             session_parameters=[
-                f"Matched: {', '.join(matched_rules)}" if matched_rules else "No YARA matches",
+                (
+                    f"Matched: {', '.join(matched_rules)}"
+                    if matched_rules
+                    else "No YARA matches"
+                ),
                 f"Entropy: {result['entropy']:.2f}",
             ],
         )
@@ -191,7 +210,9 @@ def run_worker(config: AnalysisConfig, job_queue) -> None:
     store = new_analysis_store(config.DB_PATH).start()
     # This is the only worker, so any `running` row is from a previous worker that died mid-job.
     requeued = store.recover_stale()
-    rules, ruleset_hash, problems = yara_engine.compile_rules(RULES_DIR, config.RULES_DIR)
+    rules, ruleset_hash, problems = yara_engine.compile_rules(
+        RULES_DIR, config.RULES_DIR
+    )
     for problem in problems:
         logger.warning("YARA rule skipped: %s", problem)
     logger.info(

@@ -3,7 +3,16 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, create_engine, update
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    update,
+)
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -51,7 +60,9 @@ class ArtifactRecord(Base):
     attempts = Column(Integer, nullable=False, default=0)
     analyzer_version = Column(String, nullable=True)
     ruleset_version = Column(String, nullable=True)
-    matched_rules = Column(Text, nullable=True)  # comma-joined rule names, for cheap API filtering
+    matched_rules = Column(
+        Text, nullable=True
+    )  # comma-joined rule names, for cheap API filtering
     result = Column(JSON, nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, index=True)
@@ -208,7 +219,11 @@ class AnalysisStore:
         self._commit()
 
     def fail(
-        self, artifact_id: str, error: str, *, state: AnalysisState = AnalysisState.FAILED
+        self,
+        artifact_id: str,
+        error: str,
+        *,
+        state: AnalysisState = AnalysisState.FAILED,
     ) -> None:
         self.session.execute(
             update(ArtifactRecord)
@@ -219,7 +234,9 @@ class AnalysisStore:
 
     def mark_missing(self, artifact_id: str) -> None:
         self.fail(
-            artifact_id, "Capture file missing or unreadable", state=AnalysisState.MISSING
+            artifact_id,
+            "Capture file missing or unreadable",
+            state=AnalysisState.MISSING,
         )
 
     def get(self, artifact_id: str) -> ArtifactRecord | None:

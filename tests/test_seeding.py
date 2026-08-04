@@ -272,7 +272,9 @@ def test_seed_reports_progress_once_per_series(repo):
     seeder._client = _StubClient(5)
     seen = []
 
-    seeder.seed("COLL", 3, 2, "CT", "epoch", on_progress=lambda *args: seen.append(args))
+    seeder.seed(
+        "COLL", 3, 2, "CT", "epoch", on_progress=lambda *args: seen.append(args)
+    )
 
     assert [index for index, _total, _stored in seen] == [1, 2, 3]
     assert {total for _index, total, _stored in seen} == {3}
@@ -284,7 +286,9 @@ def test_seed_progress_totals_never_exceed_the_available_series(repo):
     seeder._client = _StubClient(2)
     seen = []
 
-    seeder.seed("COLL", 3, 2, "CT", "epoch", on_progress=lambda *args: seen.append(args))
+    seeder.seed(
+        "COLL", 3, 2, "CT", "epoch", on_progress=lambda *args: seen.append(args)
+    )
 
     assert {total for _index, total, _stored in seen} == {2}
 
@@ -307,9 +311,7 @@ def test_name_pools_rotate_with_the_epoch():
 def _stored_identities(repo):
     return sorted(
         (str(ds.PatientID), str(ds.PatientName))
-        for ds in (
-            dcmread(f, force=True) for f in repo.storage.storage_dir.iterdir()
-        )
+        for ds in (dcmread(f, force=True) for f in repo.storage.storage_dir.iterdir())
     )
 
 

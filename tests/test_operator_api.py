@@ -410,7 +410,9 @@ def test_credential_cap_still_truncates_once_every_slot_is_a_honey_hit(monkeypat
     )
 
     assert len(creds) == 1
-    assert creds[0]["username"] == "test"  # first-seen honey hit kept; no non-honey slot to evict
+    assert (
+        creds[0]["username"] == "test"
+    )  # first-seen honey hit kept; no non-honey slot to evict
 
 
 def test_operator_security_headers_auth_and_redaction(bus):

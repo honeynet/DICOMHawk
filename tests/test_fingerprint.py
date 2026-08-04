@@ -47,7 +47,9 @@ def component(tmp_path):
 
 
 def _payload(**signals):
-    return json.dumps({"v": 1, "signals": {k: {"value": v} for k, v in signals.items()}})
+    return json.dumps(
+        {"v": 1, "signals": {k: {"value": v} for k, v in signals.items()}}
+    )
 
 
 def _event(caplog, request_type):
@@ -114,7 +116,9 @@ def test_generic_profile_never_serves_synapse_fingerprint_paths(repo, bus):
     generic = load_profile("generic-pacs")
     client = _client(generic, repo, bus)
 
-    body = client.get(generic.web.routes["login"] + "?signin=abc").get_data(as_text=True)
+    body = client.get(generic.web.routes["login"] + "?signin=abc").get_data(
+        as_text=True
+    )
     assert fujifilm.web.routes["fingerprint_script"] not in body
     assert fujifilm.web.routes["fingerprint_ingest"] not in body
     assert client.get(fujifilm.web.routes["fingerprint_script"]).status_code == 404
@@ -142,16 +146,22 @@ def test_seam_supplies_every_attribute_the_collector_reads(repo, bus):
             .get(profile.web.routes["login"] + "?signin=abc")
             .get_data(as_text=True)
         )
-        tag = re.search(r"<script[^>]*collector[^>]*>|<script[^>]*data-signals[^>]*>", body)
+        tag = re.search(
+            r"<script[^>]*collector[^>]*>|<script[^>]*data-signals[^>]*>", body
+        )
         assert tag, f"{name} rendered no collector script tag"
         for attribute in required:
-            assert f'{attribute}="' in tag.group(0), f"{name} seam is missing {attribute}"
+            assert f'{attribute}="' in tag.group(
+                0
+            ), f"{name} seam is missing {attribute}"
 
 
 def test_seam_ingest_attribute_points_at_the_registered_route(repo, bus):
     profile = load_profile("fujifilm")
     client = _client(profile, repo, bus)
-    body = client.get(profile.web.routes["login"] + "?signin=abc").get_data(as_text=True)
+    body = client.get(profile.web.routes["login"] + "?signin=abc").get_data(
+        as_text=True
+    )
 
     ingest = re.search(r'data-ingest="([^"]+)"', body).group(1)
     assert ingest == profile.web.routes["fingerprint_ingest"]
@@ -164,7 +174,9 @@ def test_seam_lists_only_enabled_categories(repo, bus):
     profile.web.fingerprint.signals = ["math", "bot"]
     client = _client(profile, repo, bus)
 
-    body = client.get(profile.web.routes["login"] + "?signin=abc").get_data(as_text=True)
+    body = client.get(profile.web.routes["login"] + "?signin=abc").get_data(
+        as_text=True
+    )
     assert 'data-signals="math,bot"' in body
 
 
@@ -187,8 +199,13 @@ def test_cli_override_removes_the_collector_and_the_route(repo, bus):
     client = _client(profile, repo, bus)
 
     assert client.get(profile.web.routes["fingerprint_script"]).status_code == 404
-    assert client.post(profile.web.routes["fingerprint_ingest"], data="{}").status_code == 404
-    body = client.get(profile.web.routes["login"] + "?signin=abc").get_data(as_text=True)
+    assert (
+        client.post(profile.web.routes["fingerprint_ingest"], data="{}").status_code
+        == 404
+    )
+    body = client.get(profile.web.routes["login"] + "?signin=abc").get_data(
+        as_text=True
+    )
     assert "data-signals" not in body
 
 
@@ -198,8 +215,17 @@ def test_unopenable_store_disables_the_feature_without_killing_the_process(tmp_p
     )
     comp.start()  # must not raise: an optional feature cannot take the honeypot down
     assert comp.store.ready() is False
-    assert comp.sink(b'{"signals":{"platform":{"value":"L"}}}', session_id="s", ip=None,
-                     local_port=None, path=None, user_agent=None) is None
+    assert (
+        comp.sink(
+            b'{"signals":{"platform":{"value":"L"}}}',
+            session_id="s",
+            ip=None,
+            local_port=None,
+            path=None,
+            user_agent=None,
+        )
+        is None
+    )
     assert comp.store.list_fingerprints() == ([], 0)
     comp.stop()
 
@@ -382,7 +408,8 @@ def test_nesting_is_bounded():
 
 def test_failed_sources_are_counted_but_excluded_from_the_hash():
     with_error, errors = sanitize(
-        {"signals": {"platform": {"value": "Linux"}, "canvas": {"error": "blocked"}}}, 512
+        {"signals": {"platform": {"value": "Linux"}, "canvas": {"error": "blocked"}}},
+        512,
     )
     without, _ = sanitize({"signals": {"platform": {"value": "Linux"}}}, 512)
     assert errors == 1
@@ -542,8 +569,14 @@ def test_operator_api_lists_and_filters_fingerprints(repo, bus, component):
     assert record["bot_verdict"] == "WebDriver"
     assert record["signals"]["userAgent"]["value"] == CHROME
 
-    assert operator.get("/api/fingerprints?verdict=WebDriver").headers["X-Total-Count"] == "1"
-    assert operator.get("/api/fingerprints?verdict=Electron").headers["X-Total-Count"] == "0"
+    assert (
+        operator.get("/api/fingerprints?verdict=WebDriver").headers["X-Total-Count"]
+        == "1"
+    )
+    assert (
+        operator.get("/api/fingerprints?verdict=Electron").headers["X-Total-Count"]
+        == "0"
+    )
     by_hash = operator.get(f"/api/fingerprints?hash={record['fingerprint_hash']}")
     assert by_hash.headers["X-Total-Count"] == "1"
 

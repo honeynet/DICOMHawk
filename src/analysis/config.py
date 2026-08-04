@@ -4,10 +4,10 @@ from dataclasses import dataclass
 @dataclass
 class AnalysisConfig:
     DB_PATH: str = "analysis.db"
-    RULES_DIR: str | None = None  # operator .yar files, in addition to the shipped starters
+    RULES_DIR: str | None = None  # operator .yar files, added to the shipped ones
     TIMEOUT: float = 10.0  # hard wall-clock deadline per job, seconds
     MAX_BYTES: int = 64 * 1024 * 1024  # bounded read/extraction cap per capture
-    QUEUE_SIZE: int = 256  # in-memory wake-up queue bound; durable state is the DB, not this
+    QUEUE_SIZE: int = 256  # in-memory wake-up bound; durable state is the DB
 
 
 def new_analysis_config(

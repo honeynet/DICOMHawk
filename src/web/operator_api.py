@@ -24,7 +24,9 @@ from flask import (
 from dicomhawk.bus import recent_events
 from profiles.profile import ProfileConfig
 
-if TYPE_CHECKING:  # annotation only; the operator API must not hard-depend on the analysis package
+if (
+    TYPE_CHECKING
+):  # annotation only; the operator API must not hard-depend on the analysis package
     from analysis.store import AnalysisStore
 
 bp = Blueprint("operator", __name__)
@@ -744,11 +746,15 @@ def _artifact_record(record) -> dict:
         "attempts": record.attempts,
         "analyzer_version": record.analyzer_version,
         "ruleset_version": record.ruleset_version,
-        "matched_rules": record.matched_rules.split(",") if record.matched_rules else [],
+        "matched_rules": (
+            record.matched_rules.split(",") if record.matched_rules else []
+        ),
         "result": record.result,
         "error": record.error,
         "created_at": record.created_at.isoformat() if record.created_at else None,
-        "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+        "completed_at": (
+            record.completed_at.isoformat() if record.completed_at else None
+        ),
     }
 
 

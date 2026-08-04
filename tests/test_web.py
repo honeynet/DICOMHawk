@@ -1271,7 +1271,9 @@ def test_the_app_server_header_is_hidden_from_waitress():
         start_response("200 OK", [("Server", "Microsoft-IIS/10.0"), ("X-Keep", "1")])
         return [b""]
 
-    _hide_app_server_header(app)({}, lambda status, headers, exc=None: seen.append(headers))
+    _hide_app_server_header(app)(
+        {}, lambda status, headers, exc=None: seen.append(headers)
+    )
 
     assert seen == [[("X-Keep", "1")]]
 

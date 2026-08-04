@@ -21,7 +21,9 @@ _URL_RE = re.compile(rb"https?://[\w\-.:/%?=&#~+]{4,2048}")
 _IPV4_RE = re.compile(
     rb"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"
 )
-_EMAIL_RE = re.compile(rb"[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z]{2,24}")
+_EMAIL_RE = re.compile(
+    rb"[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z]{2,24}"
+)
 
 _IOC_MAX_COUNT = 50
 _IOC_MAX_LEN = 253
@@ -51,9 +53,7 @@ def shannon_entropy(data: bytes) -> float:
     if not data:
         return 0.0
     length = len(data)
-    return -sum(
-        (n / length) * math.log2(n / length) for n in Counter(data).values()
-    )
+    return -sum((n / length) * math.log2(n / length) for n in Counter(data).values())
 
 
 def identify_type(data: bytes) -> dict:
@@ -88,7 +88,9 @@ def extract_iocs(data: bytes) -> dict:
             for match in pattern.finditer(blob):
                 if len(bucket) >= _IOC_MAX_COUNT:
                     break
-                bucket.add(match.group().decode("ascii", errors="ignore")[:_IOC_MAX_LEN])
+                bucket.add(
+                    match.group().decode("ascii", errors="ignore")[:_IOC_MAX_LEN]
+                )
     return {"urls": sorted(urls), "ips": sorted(ips), "emails": sorted(emails)}
 
 
@@ -111,7 +113,9 @@ def _declared_length(ds, keyword: str) -> int | None:
         return None
 
 
-def _read_dataset(data: bytes, source_encoding: str, transfer_syntax_uid: str | None = None):
+def _read_dataset(
+    data: bytes, source_encoding: str, transfer_syntax_uid: str | None = None
+):
     """part10 is self-describing; a raw DIMSE dataset uses the negotiated transfer syntax if known, else dcmread's own heuristic."""
     try:
         if source_encoding == "part10":
@@ -134,7 +138,10 @@ def _content_conflicts_with_declared_mime(declared: str | None, detected: str | 
 
 
 def extract_encapsulated_document(
-    data: bytes, source_encoding: str, max_bytes: int, transfer_syntax_uid: str | None = None
+    data: bytes,
+    source_encoding: str,
+    max_bytes: int,
+    transfer_syntax_uid: str | None = None,
 ) -> tuple[dict, bytes] | None:
     """Unwrap (0042,0011) so offset/filesize-anchored rules see the real file, not the DICOM wrapper."""
     ds = _read_dataset(data, source_encoding, transfer_syntax_uid)
@@ -152,7 +159,9 @@ def extract_encapsulated_document(
     if isinstance(declared, int) and 0 < declared <= stored_bytes:
         document = document[:declared]
     elif document.endswith(b"\x00"):
-        document = document[:-1]  # the single pad byte Part 10 allows for an odd-length value
+        document = document[
+            :-1
+        ]  # the single pad byte Part 10 allows for an odd-length value
 
     truncated = len(document) > max_bytes
     if truncated:
@@ -174,7 +183,9 @@ def extract_encapsulated_document(
     return metadata, document
 
 
-def _parse_assumption(source_encoding: str, transfer_syntax_uid: str | None) -> str | None:
+def _parse_assumption(
+    source_encoding: str, transfer_syntax_uid: str | None
+) -> str | None:
     if source_encoding == "part10":
         return None
     if transfer_syntax_uid:

@@ -4,9 +4,9 @@ from dataclasses import dataclass
 @dataclass
 class FingerprintConfig:
     DB_PATH: str = "fingerprint.db"
-    MAX_BODY_BYTES: int = 64 * 1024  # a collector payload is a few KB; this is the hard cap
-    MAX_PER_SESSION: int = 20  # submissions kept per session before further ones are dropped
-    MAX_VALUE_CHARS: int = 512  # per-signal string cap, applied before anything is stored
+    MAX_BODY_BYTES: int = 64 * 1024  # a collector payload is a few KB; hard cap
+    MAX_PER_SESSION: int = 20  # kept per session before further ones are dropped
+    MAX_VALUE_CHARS: int = 512  # per-signal string cap, applied before storing
 
 
 def new_fingerprint_config(

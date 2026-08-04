@@ -182,7 +182,9 @@ class _CaptureWriter:
         self._output.write(chunk)
 
     def result(self) -> Capture:
-        return Capture(self._artifact_id, self._path, self._size, self._digest.hexdigest())
+        return Capture(
+            self._artifact_id, self._path, self._size, self._digest.hexdigest()
+        )
 
 
 def new_store(traces: str) -> Storage:
