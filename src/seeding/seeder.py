@@ -2,6 +2,7 @@ import io
 import logging
 import random
 import threading
+from collections.abc import Callable
 from datetime import date
 
 from pydicom import dcmread
@@ -62,7 +63,7 @@ class SeedScheduler(threading.Thread):
 
     def run(self) -> None:
         logger.info(
-            f"Seed scheduler started — interval: {self._interval // 60}m, "
+            f"Seed scheduler started, interval: {self._interval // 60}m, "
             f"collections: {self._collections}, modalities: {self._modalities}, "
             f"rotate: {self._rotate}"
         )
@@ -112,6 +113,7 @@ class Seeder:
         max_images: int = 30,
         modality: str = "CT",
         epoch: str = "",
+        on_progress: Callable[[int, int, int], None] | None = None,
     ) -> int:
         # Seeded sampling compensates for getSeries lacking instance counts.
         rng = random.Random(epoch or collection)
@@ -125,7 +127,11 @@ class Seeder:
         if series_list and download_requested:
             uids = [uid for s in series_list if (uid := s.get("SeriesInstanceUID"))]
             rng.shuffle(uids)
-            for uid in uids[:max_series]:
+            selected = uids[:max_series]
+            for index, uid in enumerate(selected, 1):
+                # Reported before the download so a caller can show movement, not just results.
+                if on_progress is not None:
+                    on_progress(index, len(selected), stored)
                 stored += self._ingest_series(uid, loc, max_images, epoch)
 
         if stored == 0 and download_requested:

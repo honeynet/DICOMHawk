@@ -146,6 +146,9 @@ def seed(
             cache_path=osm_cache,
             max_results=osm_max,
         )
+        typer.echo(
+            f"Querying OpenStreetMap for institutions in {osm_city or osm_country}..."
+        )
         osm_locs = osm.get_locations()
         if osm_locs:
             typer.echo(f"Fetched {len(osm_locs)} institutions from OpenStreetMap")
@@ -194,7 +197,7 @@ def seed(
             )
             scheduler.start()
             typer.echo(
-                f"Scheduler running — seeding every {interval}m "
+                f"Scheduler running, seeding every {interval}m "
                 f"(rotate={rotate}). Press Ctrl+C to stop."
             )
 
@@ -209,7 +212,16 @@ def seed(
                 scheduler.join(timeout=5)
         else:
             coll, mod, ep = resolve_rotation(collections, modalities, rotate, epoch)
-            n = seeder.seed(coll, max_series, max_images, mod, ep)
+            typer.echo(
+                f"Downloading up to {max_series} series x {max_images} images "
+                f"from '{coll}' ({mod}); this can take several minutes."
+            )
+
+            # Each series is a long silent download, so report before starting one, not after.
+            def progress(index: int, total: int, stored: int) -> None:
+                typer.echo(f"  series {index}/{total} ({stored} instances stored)")
+
+            n = seeder.seed(coll, max_series, max_images, mod, ep, on_progress=progress)
             typer.echo(f"Seeded {n} instances from '{coll}' ({mod})")
     finally:
         repo.stop()

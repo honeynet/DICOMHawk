@@ -248,3 +248,48 @@ def test_osm_explicit_cache_path_overrides_env(monkeypatch, tmp_path):
         OsmClient(cache_path=str(tmp_path / "explicit.json"))._cache
         == tmp_path / "explicit.json"
     )
+
+
+class _StubClient:
+    """Stands in for TCIA so the progress contract can be checked without downloading."""
+
+    def __init__(self, series_count):
+        self.series = [{"SeriesInstanceUID": f"1.2.{n}"} for n in range(series_count)]
+
+    def get_series(self, collection, modality):
+        return self.series
+
+    def get_sop_uids(self, series_uid):
+        return []
+
+    def download_image(self, series_uid, sop_uid):
+        return None
+
+
+def test_seed_reports_progress_once_per_series(repo):
+    # A series is minutes of silent downloading; without this the CLI looks hung.
+    seeder = new_seeder(repo)
+    seeder._client = _StubClient(5)
+    seen = []
+
+    seeder.seed("COLL", 3, 2, "CT", "epoch", on_progress=lambda *args: seen.append(args))
+
+    assert [index for index, _total, _stored in seen] == [1, 2, 3]
+    assert {total for _index, total, _stored in seen} == {3}
+
+
+def test_seed_progress_totals_never_exceed_the_available_series(repo):
+    # max_series is an upper bound, so a shorter collection must not report "1/3".
+    seeder = new_seeder(repo)
+    seeder._client = _StubClient(2)
+    seen = []
+
+    seeder.seed("COLL", 3, 2, "CT", "epoch", on_progress=lambda *args: seen.append(args))
+
+    assert {total for _index, total, _stored in seen} == {2}
+
+
+def test_seed_without_a_progress_callback_still_works(repo):
+    seeder = new_seeder(repo)
+    seeder._client = _StubClient(2)
+    assert seeder.seed("COLL", 1, 1, "CT", "epoch") > 0
