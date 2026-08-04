@@ -773,6 +773,7 @@ from profiles.profile import load_profile
 
 profile = load_profile(os.environ.get("DICOMHAWK_PROFILE") or None)
 print(f"name\t{profile.name}")
+print(f"ae_title\t{profile.ae_title}")
 web = getattr(profile, "web", None)
 if web is not None and getattr(web, "enabled", False):
     for key in ("entry", "login", "worklist", "console"):
@@ -787,16 +788,18 @@ if dicomweb is not None and getattr(dicomweb, "enabled", False):
 }
 
 summary() {
-    local port kind key path name endpoints
+    local port kind key path name ae endpoints
     endpoints=$(profile_endpoints)
     name=$(printf '%s\n' "$endpoints" | awk -F'\t' '$1=="name"{print $2; exit}')
+    # The container knows its own AE title; only fall back if it could not be asked.
+    ae=${AE_TITLE:-$(printf '%s\n' "$endpoints" | awk -F'\t' '$1=="ae_title"{print $2; exit}')}
 
     green ""
     green "DICOMHawk is running."
     echo
     echo "  Profile          ${PROFILE:-<none, plain DICOM>}${name:+  ($name)}"
     for port in ${PORTS//,/ }; do
-        echo "  DIMSE            $port          AE title: ${AE_TITLE:-<the profile default>}"
+        echo "  DIMSE            $port          AE title: ${ae:-<the profile default>}"
     done
 
     if [[ -n $endpoints ]]; then

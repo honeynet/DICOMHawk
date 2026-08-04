@@ -770,6 +770,14 @@ def _page_url(page: int) -> str:
     return f"{request.path}?{urlencode(args)}"
 
 
+def _browse_value(identifier, keyword: str) -> str:
+    # The worklist already renders PN as "Family, Given"; a raw caret here would contradict it.
+    value = str(getattr(identifier, keyword, "") or "")
+    if keyword in identifier and identifier[keyword].VR == "PN":
+        return _format_person_name(value)
+    return value
+
+
 def _browse_rows(level, keys, dedup_col, page, match=None):
     """Rows for a browse level via repo.find(), deduped by the level's UID (as handle_find does)."""
     repo: Repository = current_app.config["REPO"]
@@ -797,7 +805,7 @@ def _browse_rows(level, keys, dedup_col, page, match=None):
             continue
         seen.add(uid)
         idt = m.as_identifier(ds, model)
-        rows.append({kw: str(getattr(idt, kw, "") or "") for kw in keys})
+        rows.append({kw: _browse_value(idt, kw) for kw in keys})
     return rows, len(result.matches) > page_size, None
 
 
