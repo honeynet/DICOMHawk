@@ -17,3 +17,11 @@
 
 </div>
 
+```bash
+./setup.sh
+```
+
+Guided first-run install: checks prerequisites, asks what the deployment needs, then builds,
+starts, and seeds. See [Installation](docs/installation.md) for the manual path and
+[Deployment](docs/deployment.md) before exposing it to the internet.
+

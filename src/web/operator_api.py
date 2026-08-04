@@ -24,7 +24,7 @@ from flask import (
 from dicomhawk.bus import recent_events
 from profiles.profile import ProfileConfig
 
-if TYPE_CHECKING:  # annotation only — the operator API must not hard-depend on the analysis package
+if TYPE_CHECKING:  # annotation only; the operator API must not hard-depend on the analysis package
     from analysis.store import AnalysisStore
 
 bp = Blueprint("operator", __name__)
@@ -725,7 +725,7 @@ def sessions():
 
 
 def _artifact_record(record) -> dict:
-    # Never includes capture_path — the operator API exposes findings, not a download endpoint.
+    # Never includes capture_path; the operator API exposes findings, not a download endpoint.
     return {
         "artifact_id": record.artifact_id,
         "size": record.size,

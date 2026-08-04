@@ -12,6 +12,7 @@ web:
     - path: /admin/
       response: unauthorized_page
   # Safe to disclose in login.html's source since there's no real vendor page to stay faithful to.
+  grant_access: bait           # none | bait | any; only the honey_credentials below get in
   honey_credentials:
     - username: test
       password: test

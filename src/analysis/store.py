@@ -64,7 +64,7 @@ def _now() -> datetime:
 
 
 class AnalysisStore:
-    """The durable artifact/job table. Own engine — must work from a separate worker process."""
+    """The durable artifact/job table. Own engine, so it works from a separate worker process."""
 
     def __init__(self, db_path: str):
         self.db_path = db_path

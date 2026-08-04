@@ -79,9 +79,8 @@ def test_fingerprint_seam_injects_collector_with_enabled_signals(repo, bus):
 
 def test_honey_credential_grants_unconditionally_and_logs_distinctly(repo, bus, caplog):
     profile = load_profile("generic-pacs")
-    assert (
-        profile.web.grant_access is False
-    )  # the point: bait works even though real logins don't
+    # The point: bait works while arbitrary credentials do not.
+    assert profile.web.grant_access == "bait"
     client = new_web(profile, repo, bus).test_client()
 
     with caplog.at_level(logging.WARNING, logger="bus"):
@@ -113,7 +112,7 @@ def test_honey_hint_visible_on_generic_pacs_not_fujifilm(repo, bus):
     assert "test / test" not in fuji_body
 
 
-def test_random_guess_still_denied_when_grant_access_false(repo, bus):
+def test_random_guess_still_denied_at_the_bait_level(repo, bus):
     client = new_web(load_profile("generic-pacs"), repo, bus).test_client()
     resp = client.post(
         "/portal/login?signin=x", data={"username": "attacker", "password": "guess"}
@@ -404,7 +403,7 @@ def test_worklist_reads_seeded_studies(repo, bus, caplog):
     assert seeder._seed_fallback(loc, "CT", "test-epoch") > 0
 
     profile = load_profile("fujifilm")
-    profile.web.grant_access = True
+    profile.web.grant_access = "any"
     app = new_web(profile, repo, bus)
     client = app.test_client()
 
@@ -984,7 +983,7 @@ def test_worklist_username_is_escaped_and_bounded(repo, bus):
     from web.app import _WEB_USERNAME_LIMIT
 
     profile = load_profile("fujifilm")
-    profile.web.grant_access = True
+    profile.web.grant_access = "any"
     client = new_web(profile, repo, bus).test_client()
     hostile = "<script>alert(1)</script>" + "A" * 5000
     client.post(
@@ -1209,3 +1208,54 @@ def test_worklist_shows_the_patient_age_on_the_study_date(repo, bus):
 
     # Derived from the seeded DOB and study date, not carried over from the source data.
     assert ages
+
+
+def test_grant_access_none_denies_even_a_declared_honey_credential(repo, bus):
+    # 'none' is the whole-surface off switch: the bait list stays declared but nothing gets in.
+    profile = load_profile("generic-pacs")
+    profile.web.grant_access = "none"
+    client = new_web(profile, repo, bus).test_client()
+
+    resp = client.post(
+        "/portal/login?signin=x", data={"username": "test", "password": "test"}
+    )
+    assert resp.status_code == 200
+    assert b"incorrect" in resp.data
+    assert not resp.headers.getlist("Set-Cookie")
+
+
+def test_grant_access_any_admits_a_password_that_is_not_bait(repo, bus):
+    profile = load_profile("generic-pacs")
+    profile.web.grant_access = "any"
+    client = new_web(profile, repo, bus).test_client()
+
+    resp = client.post(
+        "/portal/login?signin=x", data={"username": "attacker", "password": "guess"}
+    )
+    assert resp.status_code == 302
+
+
+def test_winauth_honours_the_same_gate_as_the_form_login(repo, bus):
+    # Two ways in; a gate that only covered one of them would be a hole.
+    profile = load_profile("fujifilm")
+    profile.web.grant_access = "none"
+    client = new_web(profile, repo, bus).test_client()
+
+    header = base64.b64encode(b"svc_dicom:svc_dicom").decode()
+    resp = client.get(
+        profile.web.routes["winauth"], headers={"Authorization": f"Basic {header}"}
+    )
+    assert resp.status_code == 401
+
+
+def test_a_boolean_grant_access_is_refused_with_its_replacement_named(repo, bus):
+    import yaml
+
+    source = Path(__file__).parents[1] / "src/profiles/generic-pacs/generic-pacs.yaml"
+    raw = yaml.safe_load(source.read_text())
+    raw["web"]["grant_access"] = False
+    broken = Path(repo.storage.storage_dir).parent / "boolean-grant.yaml"
+    broken.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="no longer boolean"):
+        load_profile(str(broken))

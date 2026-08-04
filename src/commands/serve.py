@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 serve_app = typer.Typer(help="dicomhawk runner")
 
-# ACSE/connection lifecycle handlers are always on — `operations` only gates DIMSE ops.
+# ACSE/connection lifecycle handlers are always on; `operations` only gates DIMSE ops.
 _ALWAYS_ON_HANDLERS: tuple[str, ...] = (
     "associate",
     "reject",
@@ -30,6 +30,23 @@ _ALWAYS_ON_HANDLERS: tuple[str, ...] = (
     "abort",
     "connect",
 )
+
+
+# Over plain HTTP a browser discards the Secure session cookie, so the decoy login silently resets.
+def _warn_unusable_login(prof, trusted_proxy: str | None) -> None:
+    web = prof.web
+    if not web.secure_cookies:
+        return
+    if web.grant_access == "none":
+        return
+    # Only a trusted proxy forwarding the scheme makes the arriving request itself https.
+    if trusted_proxy:
+        return
+    logger.warning(
+        "web.secure_cookies is on without TLS in front: browsers will drop the session cookie "
+        "over plain HTTP and the decoy login will silently fail. Set DICOMHAWK_SECURE_COOKIES=false "
+        "for a plaintext deployment, or terminate TLS and set --trusted-proxy/--public-base-url."
+    )
 
 
 @serve_app.command()
@@ -122,6 +139,12 @@ def serve(
         envvar="DICOMHAWK_BACKEND_SERVER",
         help="Per-deployment X-Backendserver value for web profiles that expose it",
     ),
+    secure_cookies: bool | None = typer.Option(
+        None,
+        "--secure-cookies/--no-secure-cookies",
+        envvar="DICOMHAWK_SECURE_COOKIES",
+        help="Override the profile's Secure cookie flag; browsers drop Secure cookies over plain HTTP",
+    ),
     public_base_url: str | None = typer.Option(
         None,
         "--public-base-url",
@@ -137,6 +160,7 @@ def serve(
     analysis: bool = typer.Option(
         True,
         "--analysis/--no-analysis",
+        envvar="DICOMHAWK_ANALYSIS",
         help="Run captured payloads through the static analysis pipeline",
     ),
     analysis_db: str = typer.Option(
@@ -172,6 +196,7 @@ def serve(
     fingerprint: bool = typer.Option(
         True,
         "--fingerprint/--no-fingerprint",
+        envvar="DICOMHAWK_FINGERPRINT",
         help="Serve the browser fingerprint collector on profiles whose web.fingerprint is enabled",
     ),
     fingerprint_db: str = typer.Option(
@@ -240,6 +265,8 @@ def serve(
             raise typer.BadParameter(
                 "trusted-proxy must be one exact IP address"
             ) from exc
+    if secure_cookies is not None:
+        prof.web.secure_cookies = secure_cookies
     if backend_server:
         prof.web.headers["X-Backendserver"] = backend_server
     if public_base_url:
@@ -378,6 +405,7 @@ def serve(
             handlers.append(h)
 
     if prof.kind == "pacs" and prof.web.enabled:
+        _warn_unusable_login(prof, trusted_proxy)
         components.append(
             new_web_component(
                 prof,

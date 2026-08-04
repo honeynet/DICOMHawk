@@ -2,7 +2,7 @@
 
 A profile is a YAML file that tells DICOMHawk what device to impersonate: its DICOM
 identity (AE title, implementation UID, supported SOP classes) and, optionally, a web
-login/worklist surface. Two are bundled — `fujifilm` (high-fidelity Fujifilm Synapse
+login/worklist surface. Two are bundled: `fujifilm` (high-fidelity Fujifilm Synapse
 PACS) and `generic-pacs` (vendor-neutral, minimal). This guide covers building your own.
 
 ## Before you write any YAML: research
@@ -13,21 +13,21 @@ new profile:
 1. **Get the vendor's DICOM conformance statement.** Most PACS vendors publish one as a
    public PDF. It gives you the AE title, Implementation Class UID and Version Name,
    the supported Storage/Query-Retrieve SOP classes, and the transfer syntaxes for
-   each — all fingerprint-locked values (see [the schema](#dicom-identity) below).
+   each. These are all fingerprint-locked values (see [the schema](#dicom-identity) below).
 2. **Never invent an Implementation Class UID.** A real vendor UID with a placeholder
-   or default `pynetdicom` version name is an instant giveaway — either source both
+   or default `pynetdicom` version name is an instant giveaway. Either source both
    from the conformance statement or leave both unset.
-3. **For the web surface, use passive reconnaissance only** — Shodan/Censys cached
+3. **For the web surface, use passive reconnaissance only.** Shodan and Censys cached
    banners, public screenshots, Wayback Machine archives. Don't actively probe a real
    deployment. Mark anything you couldn't verify with `# inferred` in the YAML so the
    next person maintaining the profile knows which values are guesses.
 4. **If you can't verify something, don't fabricate it.** A generic, honest fallback
    (see [`default_profile()`'s values](#what-you-can-leave-out)) is safer than an
-   invented detail that doesn't match the real product — an attacker who's used the
+   invented detail that doesn't match the real product. An attacker who has used the
    real device will notice a wrong header or a login form field name that's off.
 
 If you're not mimicking one specific real product, base your profile on
-`src/profiles/generic-pacs/` instead — it's built for exactly that case.
+`src/profiles/generic-pacs/` instead, which is built for exactly that case.
 
 ## File layout
 
@@ -35,7 +35,7 @@ If you're not mimicking one specific real product, base your profile on
 src/profiles/<name>/
 ├── <name>.yaml              # required
 └── web/                     # only if your profile has kind: pacs
-    ├── templates/           # required if web.enabled: true — see below
+    ├── templates/           # required if web.enabled: true, see below
     │   ├── login.html
     │   ├── forgot_password.html
     │   ├── error.html
@@ -58,7 +58,7 @@ meta:
   kind: pacs          # or "dicom" for a DICOM-only profile with no web surface
 identity:
   ae_title: MYVENDORSCP
-  implementation_class_uid: 1.2.3.4.5.6   # from the conformance statement — real or omit
+  implementation_class_uid: 1.2.3.4.5.6   # from the conformance statement, real or omit
   implementation_version_name: "MyApp 3.2.1"
   manufacturer: My Vendor Inc.
   model_name: MyPACS
@@ -81,19 +81,21 @@ dicom:
 
 ## What you can leave out
 
-Any key you omit falls back to a generic, working default (from `default_profile()`) —
-plain `ORTHANC` AE title, a broad storage/QR class set, generic Apache-style web
-headers, empty license/identity/oidc, **generic `/portal/*` routes with
-`portal.xsrf`-style cookie names** — never another profile's identity — and
-`acse_timeout: 10` / `network_timeout: 15` / `dimse_timeout: 20`, tighter than
-pynetdicom's own 30s/60s/30s defaults (a raw TCP connection that never sends a valid
-PDU — or a peer that stalls mid-operation — still occupies one of
-`max_associations` slots until these expire, so the fallback is deliberately tight
-rather than just carried over from the library). A `WARNING` at
-startup lists exactly which keys fell back, so nothing is silently wrong. **The only
-field with no fallback** is `web.templates_dir` when `web.enabled: true` — there's no
-generic template directory to serve, so a profile missing it fails fast at load time
-with a clear error instead of crashing on the first request.
+Any key you omit falls back to a generic, working default: a plain `ORTHANC` AE title, a broad
+storage and Query/Retrieve class set, Apache-style web headers, empty license, identity, and
+OIDC blocks, and **generic `/portal/*` routes with `portal.xsrf`-style cookie names**. A
+fallback never borrows another profile's identity.
+
+Timeouts fall back to `acse_timeout: 10`, `network_timeout: 15`, and `dimse_timeout: 20`,
+deliberately tighter than pynetdicom's own 30s/60s/30s. A raw TCP connection that never sends a
+valid PDU, or a peer that stalls mid-operation, still holds one of the `max_associations` slots
+until these expire.
+
+A `WARNING` at startup lists exactly which keys fell back, so nothing is silently wrong.
+
+**The only field with no fallback** is `web.templates_dir` when `web.enabled: true`. There is no
+generic template directory to serve, so a profile missing it fails at load time with a clear
+error instead of crashing on the first request.
 
 This is genuinely how `generic-pacs` is built: its YAML sets almost nothing beyond
 `kind`, `web.enabled`, and `web.templates_dir`. Start from an empty profile, run it, and
@@ -102,10 +104,10 @@ add YAML keys only for the things your specific vendor actually needs to differ.
 ## The web surface
 
 If `kind: pacs` and `web.enabled: true`, `dicomhawk serve` starts two Flask apps for
-your profile automatically — you write templates and config, not routes:
+your profile automatically. You write templates and config, not routes:
 
-- **Attacker-facing** (`--web-port`, default 8080) — your profile's login/worklist.
-- **Operator surface** (`--operator-port`, default 8081, loopback-only) — the dashboard at `/`
+- **Attacker-facing** (`--web-port`, default 8080): your profile's login and worklist.
+- **Operator surface** (`--operator-port`, default 8081, loopback-only): the dashboard at `/`
   and its read-only API. `/api/overview` feeds the dashboard in one request; `/api/stats` is the
   activity summary; `/api/attackers` rolls up sources and tactics; `/api/credentials` deduplicates
   captured username/password pairs; `/api/uploads` reports terminal WEB/STOW/C-STORE payload
@@ -116,8 +118,8 @@ being disabled), validates malformed JSONL records, and streams aggregation with
 parsed event. Every list endpoint accepts `?limit=` and `?offset=` and reports `X-Total-Count`;
 offset is capped at 10,000. Attacker, credential, and session rollups are capped at 10,000 keys and
 report truncation in `X-Aggregation-Truncated` (and `/api/overview`'s `truncated` object). Events
-additionally accept exact `?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters. Captured
-attacker credentials are shown in full — the plaintext an attacker submitted is the intelligence
+also accept exact `?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters. Captured
+attacker credentials are shown in full, because the plaintext an attacker submitted is the intelligence
 this loopback-only surface exists to expose. Responses are non-cacheable and carry a strict
 operator CSP.
 
@@ -127,10 +129,10 @@ anything beyond the local host can reach the listener; it accepts Basic auth (an
 password) or a Bearer token. Docker needs a container-internal `0.0.0.0` bind, but the supplied
 Compose file explicitly opts in and maps it only to host `127.0.0.1`.
 
-Both are built by the shared engine — you don't touch that code, only supply your
+Both are built by the shared engine. You don't touch that code, only supply your
 profile's assets. It reuses the same DICOM database your profile's DIMSE side sees, so a
 study seeded via `dicomhawk seed` shows up in both the worklist and a C-FIND response,
-with the same values on both surfaces — a viewer querying over DICOM sees the patient sex,
+with the same values on both surfaces, so a viewer querying over DICOM sees the patient sex,
 birth date, procedure description and institution the worklist shows, not blanks.
 
 ### Required templates
@@ -142,11 +144,11 @@ All five must exist under `web/templates/`; the profile fails at startup if one 
 | `login.html` | GET/POST sign-on | `login_url`, `error_message`, `honey_hint`, `copyright` |
 | `forgot_password.html` | Forgot-password flow | `submitted` (bool) |
 | `error.html` | STS error page, 500 handler | `request_id`, `error_message` |
-| `winauth_unable.html` | Windows-auth 401 body | `sts_authorize_url` — use it, not a hardcoded path, for the "Log in directly" link |
+| `winauth_unable.html` | Windows-auth 401 body | `sts_authorize_url`. Use it, not a hardcoded path, for the "Log in directly" link |
 | `worklist.html` | Post-login study list | `studies` (row dicts, keys below), `worklist` (shell config), `username`, `total_studies`, `folder`, `detail`, `filters`, `action_message`, `refresh_url` |
 
 If you use the `unauthorized_page` honeytrap response (below), also add
-`web/templates/unauthorized.html`; it receives `entry_url` — use it for any
+`web/templates/unauthorized.html`; it receives `entry_url`, which you should use for any
 "redirecting you back to login" link/script, never a hardcoded path.
 
 If `web.browse: true`, three more templates are required and validated at startup:
@@ -157,10 +159,10 @@ If `web.browse: true`, three more templates are required and validated at startu
 | `browse.html` | Patient/study/series/instance pages | `columns`, `rows`, `page`, `prev_url`, `next_url` |
 | `upload.html` | GET/POST upload | `routes`, `message`, `max_files` |
 
-Every template also receives `csp_nonce` (put it on any inline `<script>` tag — the CSP
+Every template also receives `csp_nonce` (put it on any inline `<script>` tag, since the CSP
 is nonce-based) and `fingerprint_seam` (put `{{ fingerprint_seam|safe }}` before
 `</head>`; it renders the browser fingerprint collector when the profile enables
-`web.fingerprint`, and is empty otherwise — see
+`web.fingerprint`, and is empty otherwise. See
 [Browser fingerprinting](./fingerprinting.md)).
 
 ### `web:` config reference
@@ -169,7 +171,7 @@ is nonce-based) and `fingerprint_seam` (put `{{ fingerprint_seam|safe }}` before
 web:
   enabled: true
   templates_dir: my-vendor
-  grant_access: false        # false = every login attempt is logged and denied
+  grant_access: bait         # none | bait | any (see Honey credentials below)
   favicon: myvendor/favicon.ico
   headers:                   # emitted on every response
     Server: MyWebServer/1.0
@@ -190,20 +192,20 @@ web:
 Dict fields (`headers`, `oidc`, etc.) overlay per-key onto the generic default, so you
 can override just one header and keep the rest.
 
-### Routes and cookies — profile isolation
+### Routes and cookies: profile isolation
 
 This is a hard project invariant, not just a suggestion: no profile may ever leak into
 another, even though every profile shares the same engine code.
 
 **Every URL path and cookie name is per-profile data, never a fixed engine value.**
 If you don't set `web.routes`/`web.cookies`, your profile gets generic, non-branded
-defaults (`/portal`, `/portal/login`, a `portal.xsrf` cookie, etc.) — never another
+defaults (`/portal`, `/portal/login`, a `portal.xsrf` cookie, and so on), never another
 profile's paths or cookie names, even though they share the same engine code. This is
 what stops a `my-vendor` page from ever showing `/SynapseSignOn/...` in the address
 bar or an `idsrv.xsrf` cookie just because the code happens to be shared.
 
 Only override these if you're mimicking a *real* product's actual observed paths and
-cookie names (research these the same way as the DICOM identity — passive recon, mark
+cookie names (research these the same way as the DICOM identity: passive recon, mark
 guesses as inferred):
 
 ```yaml
@@ -233,15 +235,15 @@ web:
 ```
 
 **In your templates, always use the passed-in URL variables** (`login_url`,
-`forgot_url`, `sts_authorize_url`, `entry_url` — see the templates table above) instead
+`forgot_url`, `sts_authorize_url`, `entry_url`, listed in the templates table above) instead
 of hardcoding a path. A hardcoded `href="/Synapse"` or `href="/SynapseSignOn/..."` in your
-own profile's template defeats the point of `web.routes`/`.cookies` — it silently breaks
+own profile's template defeats the point of `web.routes` and `web.cookies`, and silently breaks
 if the operator overrides that route, and on a shared profile it becomes a literal
 cross-profile leak (another vendor's branded path showing up on your page).
 
 ### Honeytraps
 
-Bait paths are declared as data, not code — the engine registers routes only for what
+Bait paths are declared as data, not code. The engine registers routes only for what
 your profile lists, and picks one of a small set of reusable response behaviors:
 
 ```yaml
@@ -254,23 +256,23 @@ your profile lists, and picks one of a small set of reusable response behaviors:
       response: api_404             # mimics a stock ASP.NET Web API "no matching action" 404
 ```
 
-A profile that declares no `honeytraps` gets none — it won't inherit another profile's
+A profile that declares no `honeytraps` gets none, and will not inherit another profile's
 bait paths just because they share the same engine. `/robots.txt` publishes the same
 list as `Disallow:` entries. `unauthorized_page` needs your own `web/templates/
 unauthorized.html`; the other two kinds don't need a template.
 
 **Coherence matters here as much as with DICOM identity.** If you're mimicking a real
 vendor, only add a bait path if you've actually seen evidence it exists on the real
-product (a public admin panel path, an API route mentioned in vendor docs, etc.) — an
+product (a public admin panel path, an API route mentioned in vendor docs). An
 invented path on a high-fidelity profile is as much a tell as a wrong AE title. If
 you're not mimicking a specific real vendor (like `generic-pacs`), a plausible
 fabricated bait path is fine.
 
 ### Honey credentials
 
-A credential pair that isn't a real account — using it always grants access (bypassing
-`grant_access`) and logs a distinct `WEB_HONEY_CREDENTIAL_USED` event, so any use of it
-is a high-confidence signal rather than a guess:
+A credential pair that isn't a real account. Using it logs a distinct
+`WEB_HONEY_CREDENTIAL_USED` event, so any use of it is a high-confidence signal rather
+than a guess:
 
 ```yaml
   honey_credentials:
@@ -279,7 +281,7 @@ is a high-confidence signal rather than a guess:
 ```
 
 `login.html`'s `honey_hint` context variable renders to `"test / test"` when this is
-set (empty otherwise) — put it somewhere discoverable, like an HTML comment near the
+set (empty otherwise). Put it somewhere discoverable, like an HTML comment near the
 login form, so an attacker can actually find it.
 
 **Only render the hint if your login page isn't a verbatim capture of a real product's
@@ -289,15 +291,31 @@ its captured sign-on template never renders `honey_hint`, so the page stays byte
 and the credentials are disclosed out of band instead (a decoy config file, a leaked
 note). Render the hint only on a profile where there's no real page to stay faithful to.
 
-Credentials are the only way an attacker reaches the post-login worklist on a profile
-with `grant_access: false`. Setting `grant_access: true` instead accepts *any* password,
-which is quicker to engage but tells an attacker it's a decoy the first time a
-deliberately wrong password works.
+### Who gets in
+
+`grant_access` is the single gate in front of every login route, the sign-on form and the
+WinAuth challenge alike:
+
+| Value | Effect |
+|---|---|
+| `none` | Every attempt is logged and denied, including a declared honey credential. The post-login pages are unreachable; the surface is a pure credential collector. |
+| `bait` | Only the pairs in `honey_credentials` get in. Anything else gets the product's real error. Both shipped profiles use this. |
+| `any` | Every password works. Quicker to engage, but it tells an attacker it is a decoy the first time a deliberately wrong password succeeds. |
+
+It is a string, not a boolean; a `true`/`false` value is rejected at load time with the
+replacement named in the error.
+
+**A session cookie the browser refuses makes every level above `none` useless.** A profile
+modelling an HTTPS product sets `secure_cookies: true`, and browsers discard `Secure`
+cookies received over plain HTTP, so the login grants a session the browser immediately
+throws away, showing neither a worklist nor an error. Set `DICOMHAWK_SECURE_COOKIES=false`
+for a plaintext deployment, or terminate TLS in front and set `--trusted-proxy`. The server
+logs a warning at startup when the combination cannot work.
 
 ### Worklist page
 
 Every profile serves a post-login worklist at `web.routes.worklist`, listing the same
-seeded studies the DICOM side serves. `web.worklist` supplies every visible string —
+seeded studies the DICOM side serves. `web.worklist` supplies every visible string:
 the engine ships none of them, so one profile's folder names can never appear on
 another's page.
 
@@ -334,7 +352,7 @@ web:
 rendering a silently blank column.
 
 An empty `sidebar`, `context_menu`, or `header_links` renders no chrome at all, which is
-the default — a sparse profile gets a plain table, not somebody else's shell.
+the default, so a sparse profile gets a plain table, not somebody else's shell.
 
 **Interaction.** The page is driven entirely by query parameters on its own route, so
 there is no extra endpoint to fingerprint:
@@ -353,14 +371,14 @@ can't be used to probe for studies. Each view logs a `WEB_WORKLIST_VIEW` event n
 folder, action, study, and filter terms the attacker reached for.
 
 **Placeholders.** `placeholders.description` fills the procedure column when a study
-carries no `StudyDescription` — real products show their own marker there (Synapse shows
+carries no `StudyDescription`. Real products show their own marker there (Synapse shows
 `UNKNOWN`), so match whatever the product you're mimicking does. Seeded studies get a
 generated description, so this placeholder should only appear for studies an attacker
 uploaded or for studies indexed before seeding started writing one.
 
 **Sidebar counts are static decoration.** `count` and `urgent_count` render badges but are
 never computed. A folder reading `Unread 128` beside a table listing four studies is an
-obvious tell, so set them only if they'll stay plausible against your seeded volume — the
+obvious tell, so set them only if they will stay plausible against your seeded volume. The
 shipped profiles set none.
 
 **Detail columns need a re-seed.** Sex, date of birth, body part, institution, station,
@@ -374,7 +392,7 @@ DICOM. Re-seed, or start from a clean database, to populate them.
 
 Setting `web.browse: true` adds a post-login DICOM browse console: a dashboard with a
 patient/study/series/instance browser, a search-by-patient box, and an upload page. Every
-page is session-gated (reachable only after a successful login — e.g. via a honey
+page is session-gated (reachable only after a successful login, for example via a honey
 credential), reads the same seeded studies the DICOM side serves, and logs each view.
 
 ```yaml
@@ -406,7 +424,7 @@ it off unless that product really has a matching browser.
 
 Modern PACS often expose HTTP DICOMweb services (QIDO-RS query, WADO-RS/WADO-URI
 retrieve, STOW-RS store) alongside DICOM. Add them **only if the product you're mimicking
-actually does** — serving DICOMweb on a device that wouldn't is itself a tell. Check the
+actually does.** Serving DICOMweb on a device that would not is itself a tell. Check the
 target's conformance statement for the real service ports and base paths.
 
 The `dicomweb:` block is a top-level key (a sibling of `dicom:` and `web:`), off unless you
@@ -436,7 +454,7 @@ dicomweb:
 ```
 
 **Port and path are profile data, the same isolation rule as `web.routes`.** Each service
-runs on its own port with its own base path, exactly as the real product does — some
+runs on its own port with its own base path, exactly as the real product does. Some
 vendors dedicate a port per service, others put everything under one base like
 `/dicom-web`. If you omit `services`, an enabled profile inherits a generic single-port
 `/dicom-web` layout, never another profile's ports or paths.
@@ -459,7 +477,7 @@ DICOMweb shares the same store and query as DICOM, so:
 
 ```bash
 dicomhawk serve --profile my-vendor
-curl -I http://localhost:8080/portal        # or your web.routes.entry — check headers/redirect
+curl -I http://localhost:8080/portal        # or your web.routes.entry: check headers and redirect
 curl http://localhost:8080/robots.txt       # check honeytrap Disallow entries
 curl http://localhost:8081/api/profiles     # confirm the loaded config, loopback-only
 curl http://localhost:8081/api/stats        # activity summary across all channels
@@ -472,6 +490,6 @@ curl http://localhost:10080/qido-rs/studies # Fujifilm QIDO-RS default -> applic
 ```
 
 See [`tests/test_profile.py`](../tests/test_profile.py) and
-[`tests/test_web.py`](../tests/test_web.py) for the kind of test coverage expected —
+[`tests/test_web.py`](../tests/test_web.py) for the kind of test coverage expected:
 profile-loader fallback behavior and Flask `test_client` checks against your new
 templates/routes.

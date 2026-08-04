@@ -1,6 +1,4 @@
-/*
- * Browser fingerprint collector.
- */
+/* Browser fingerprint collector. */
 (function () {
   'use strict';
 
@@ -13,8 +11,7 @@
   var M = Math;
   var fallbackFn = function () { return 0; };
 
-  // Engine is probed from feature availability, never the User-Agent: a bot can spoof the
-  // header but not the engine internals, and that disagreement is what the checks look for.
+  // Engine is probed from features, never the User-Agent, which a bot can spoof.
 
   function countTruthy(values) {
     var total = 0;
@@ -327,8 +324,7 @@
     return dimensions;
   }
 
-  // Upstream throws when an API is absent so a detector can tell "missing" from "false";
-  // a throw here is recorded as {error}, keeping that distinction intact.
+  // A throw is recorded as {error}, keeping "missing" distinct from "false".
   function required(condition, message) {
     if (!condition) throw new Error(message);
   }

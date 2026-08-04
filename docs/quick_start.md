@@ -2,6 +2,9 @@
 
 This guide assumes [installation](./installation.md) is complete. Two run modes are documented: venv and Docker.
 
+If you just want a working honeypot, `./setup.sh` does everything below for the Docker path:
+prerequisites, configuration, build, start, and the first seed. Read on to drive it by hand.
+
 ## Run locally (venv)
 
 From the repository root, with the venv activated:
@@ -16,14 +19,14 @@ dicomhawk serve \
 
 Flags used:
 
-- `-p 11112` — listen on a non-privileged port; using `-p 104` requires root or `CAP_NET_BIND_SERVICE`.
-- `-ae ORTHANC` — the AE title the honeypot advertises.
-- `-t ./traces` — directory where received DICOM files and quarantined uploads land.
-- `-l ./data/dicomhawk.log` — JSON event log path (one event per line).
+- `-p 11112` listens on a non-privileged port. Using `-p 104` requires root or `CAP_NET_BIND_SERVICE`.
+- `-ae ORTHANC` is the AE title the honeypot advertises.
+- `-t ./traces` is where received DICOM files and quarantined uploads land.
+- `-l ./data/dicomhawk.log` is the JSON event log, one event per line.
 
 The server logs `Listening on 0.0.0.0:11112` once the listener is ready.
 
-To impersonate a specific device, add `--profile fujifilm` (bundled Fujifilm Synapse PACS) or a path to a custom profile YAML — see [commands](./commands.md#dicomhawk-serve). Without it, a generic default is used. To build your own profile (identity + optional web login/worklist), see [Adding a profile](./profiles.md).
+To impersonate a specific device, add `--profile fujifilm` (bundled Fujifilm Synapse PACS) or a path to a custom profile YAML (see [commands](./commands.md#dicomhawk-serve)). Without it, a generic default is used. To build your own profile (identity + optional web login/worklist), see [Adding a profile](./profiles.md).
 
 ## Run via Docker
 

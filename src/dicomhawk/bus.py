@@ -211,7 +211,7 @@ class InteractionEvent:
         session_parameters: list[str] | None = None,
         log_level: str = "INFO",
     ) -> "InteractionEvent":
-        """Build a log line with no live request/association context — e.g. an async analysis result."""
+        """Build a log line with no live request/association context, such as an async analysis result."""
         self = cls.__new__(cls)
         self._populate(
             channel=channel,

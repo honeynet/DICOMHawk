@@ -20,7 +20,7 @@ _RESTART_HEALTHY_SECONDS = 60.0  # a worker that lasted this long counts as a on
 
 
 class AnalysisComponent(Component):
-    """Supervises a bounded worker PROCESS running static payload analysis — isolates crashes, not the filesystem."""
+    """Supervises a bounded worker PROCESS running static payload analysis; isolates crashes, not the filesystem."""
 
     def __init__(self, config: AnalysisConfig, bus: logging.Logger):
         self.config = config
@@ -143,7 +143,7 @@ class AnalysisComponent(Component):
                     "ANALYSIS_BACKLOG",
                     session_id=artifact.session_id,
                     artifact_id=artifact_id,
-                    session_parameters=["Queue full — job stays pending for the recovery sweep"],
+                    session_parameters=["Queue full; job stays pending for the recovery sweep"],
                 )
             )
 

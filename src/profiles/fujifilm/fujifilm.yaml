@@ -2,9 +2,9 @@
 _ts_verification: &ts_verification         # Table 1-5: Implicit + Explicit VR LE only
   - 1.2.840.10008.1.2           # Implicit VR Little Endian
   - 1.2.840.10008.1.2.1         # Explicit VR Little Endian
-_ts_qr_find: &ts_qr_find                   # "LEI" — Q/R FIND SCP: Implicit VR LE only
+_ts_qr_find: &ts_qr_find                   # "LEI": Q/R FIND SCP, Implicit VR LE only
   - 1.2.840.10008.1.2
-_ts_qr_move_get: &ts_qr_move_get           # "LEI, LEE" — Q/R MOVE/GET SCP
+_ts_qr_move_get: &ts_qr_move_get           # "LEI, LEE": Q/R MOVE/GET SCP
   - 1.2.840.10008.1.2
   - 1.2.840.10008.1.2.1
 _ts_storage_llu: &ts_storage_llu           # Table 1-1 group "LL, L, U"
@@ -57,30 +57,30 @@ dicom:
 
   qr_classes:
     find:
-      - uid: 1.2.840.10008.5.1.4.1.2.1.1     # Patient Root Q/R Information Model – FIND
+      - uid: 1.2.840.10008.5.1.4.1.2.1.1     # Patient Root Q/R Information Model - FIND
         transfer_syntaxes: *ts_qr_find
-      - uid: 1.2.840.10008.5.1.4.1.2.2.1     # Study Root Q/R Information Model – FIND
+      - uid: 1.2.840.10008.5.1.4.1.2.2.1     # Study Root Q/R Information Model - FIND
         transfer_syntaxes: *ts_qr_find
-      - uid: 1.2.840.10008.5.1.4.1.2.3.1     # Patient/Study Only Q/R Information Model – FIND, retired
+      - uid: 1.2.840.10008.5.1.4.1.2.3.1     # Patient/Study Only Q/R Information Model - FIND, retired
         transfer_syntaxes: *ts_qr_find
     move:
-      - uid: 1.2.840.10008.5.1.4.1.2.1.2     # Patient Root Q/R Information Model – MOVE
+      - uid: 1.2.840.10008.5.1.4.1.2.1.2     # Patient Root Q/R Information Model - MOVE
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.2.2     # Study Root Q/R Information Model – MOVE
+      - uid: 1.2.840.10008.5.1.4.1.2.2.2     # Study Root Q/R Information Model - MOVE
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.3.2     # Patient/Study Only Q/R Information Model – MOVE, retired
+      - uid: 1.2.840.10008.5.1.4.1.2.3.2     # Patient/Study Only Q/R Information Model - MOVE, retired
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.4.2     # Composite Instance Root Retrieve – MOVE
+      - uid: 1.2.840.10008.5.1.4.1.2.4.2     # Composite Instance Root Retrieve - MOVE
         transfer_syntaxes: *ts_qr_move_get
     get:
-      - uid: 1.2.840.10008.5.1.4.1.2.2.3     # Study Root Q/R Information Model – GET
+      - uid: 1.2.840.10008.5.1.4.1.2.2.3     # Study Root Q/R Information Model - GET
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.4.3     # Composite Instance Root Retrieve – GET
+      - uid: 1.2.840.10008.5.1.4.1.2.4.3     # Composite Instance Root Retrieve - GET
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.5.3     # Composite Instance Retrieve Without Bulk Data – GET
+      - uid: 1.2.840.10008.5.1.4.1.2.5.3     # Composite Instance Retrieve Without Bulk Data - GET
         transfer_syntaxes: *ts_qr_move_get
 
-  # Table 1-1 Storage SCP subset (~77 classes) — NOT AllStoragePresentationContexts.
+  # Table 1-1 Storage SCP subset (~77 classes), NOT AllStoragePresentationContexts.
   storage_classes:
     # --- accepted TS set "LL, L, U" ---
     - uid: 1.2.392.200036.9125.1.1.2                # Fuji Private CR Storage (FujiCR)
@@ -91,17 +91,17 @@ dicom:
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.1                 # Computed Radiography Image Storage
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.1               # Digital X-Ray Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.1.1               # Digital X-Ray Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.1.1             # Digital X-Ray Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.1.1.1             # Digital X-Ray Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.2               # Digital Mammography X-Ray Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.1.2               # Digital Mammography X-Ray Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.2.1             # Digital Mammography X-Ray Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.1.2.1             # Digital Mammography X-Ray Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.3               # Digital Intra-Oral X-Ray Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.1.3               # Digital Intra-Oral X-Ray Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.3.1             # Digital Intra-Oral X-Ray Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.1.3.1             # Digital Intra-Oral X-Ray Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.2                 # CT Image Storage
       transfer_syntaxes: *ts_storage_llu
@@ -131,9 +131,9 @@ dicom:
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.13.1.3            # Breast Tomosynthesis Image Storage
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.14.1              # Intravascular OCT Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.14.1              # Intravascular OCT Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.14.2              # Intravascular OCT Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.14.2              # Intravascular OCT Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.20                # Nuclear Medicine Image Storage
       transfer_syntaxes: *ts_storage_llu
@@ -248,8 +248,9 @@ web:
   enabled: true
   templates_dir: fujifilm
   favicon: synapse/favicon.ico
-  grant_access: false                            # false = log + deny; true = grant into the decoy worklist
-  secure_cookies: true                           # observed HTTPS deployment cookie behavior
+  grant_access: bait                             # none | bait | any; only the honey_credentials below get in
+  secure_cookies: true                           # matches the real HTTPS product; browsers drop it on plain
+                                                 # HTTP, so set DICOMHAWK_SECURE_COOKIES=false without TLS
 
   # Real Synapse paths, sourced from public passive recon; response kinds are defined in web/app.py::_HONEYTRAP_RESPONSES.
   honeytraps:
@@ -274,7 +275,7 @@ web:
 
   # The observed deployment emits both the modern and legacy CSP header.
   legacy_csp_header: true
-  # Keep the {nonce} placeholder — filled per request so inline scripts run.
+  # Keep the {nonce} placeholder; it is filled per request so inline scripts run.
   content_security_policy: >-
     default-src 'self'; script-src 'nonce-{nonce}' 'self'; style-src 'self' 'unsafe-inline';
     img-src *; report-uri /SynapseSignOn/sts/csp/report

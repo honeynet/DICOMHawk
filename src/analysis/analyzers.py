@@ -40,7 +40,7 @@ def read_capture(path: Path, max_bytes: int) -> tuple[bytes, bool]:
 
 
 def compute_hashes(data: bytes) -> dict:
-    """MD5/SHA-1 for IOC/threat-feed compatibility only — capture.sha256 is the integrity record."""
+    """MD5/SHA-1 for IOC/threat-feed compatibility only; capture.sha256 is the integrity record."""
     return {
         "md5": hashlib.md5(data).hexdigest(),
         "sha1": hashlib.sha1(data).hexdigest(),
@@ -125,7 +125,7 @@ def _read_dataset(data: bytes, source_encoding: str, transfer_syntax_uid: str | 
 
 
 def _content_conflicts_with_declared_mime(declared: str | None, detected: str | None):
-    """Only judges the unambiguous case — other types legitimately detect as a generic container."""
+    """Only judges the unambiguous case; other types legitimately detect as a generic container."""
     if not declared or not detected:
         return None
     if declared.strip().lower() != "application/pdf":

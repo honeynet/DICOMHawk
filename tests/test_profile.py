@@ -38,7 +38,7 @@ def test_load_profile_generic_pacs_reuses_default_fallbacks():
     assert prof.web.upload_max_request_bytes == 50 * 1024 * 1024
     assert (
         prof.web.routes == default_profile().web.routes
-    )  # /portal/*, not /Synapse — the actual isolation fix
+    )  # /portal/*, not /Synapse; the actual isolation fix
     assert prof.web.cookies == default_profile().web.cookies
 
 

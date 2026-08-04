@@ -1,4 +1,4 @@
-"""Compile + scan with YARA. Static matching only — never executes the scanned bytes."""
+"""Compile + scan with YARA. Static matching only; never executes the scanned bytes."""
 
 import hashlib
 import logging

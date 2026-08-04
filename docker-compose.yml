@@ -113,6 +113,5 @@ volumes:
 
 networks:
   dicomhawk_net:
-    # Externally routable (attackers need inbound); drop egress at the host firewall, not via
-    # `internal: true` which also breaks the published-port return path. See docs/deployment.md.
+    # Externally routable; drop egress at the host firewall, not via `internal: true`.
     driver: bridge

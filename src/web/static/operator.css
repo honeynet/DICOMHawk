@@ -27,7 +27,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-size: 13.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 
-/* Header — compact application bar rather than a marketing hero. */
+/* Header: compact application bar rather than a marketing hero. */
 .topbar { display: flex; justify-content: space-between; gap: 2rem; align-items: center; padding: 1rem max(4vw, 1.25rem); background: var(--surface); border-bottom: 1px solid var(--line-strong); }
 .brand { display: flex; align-items: center; gap: .85rem; }
 .mark { flex: none; width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border-radius: .4rem; background: var(--accent); color: #fff; font-family: var(--font-mono); font-weight: 700; font-size: .82rem; letter-spacing: .04em; }

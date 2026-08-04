@@ -371,7 +371,7 @@ def test_run_job_marks_missing_when_capture_file_gone(store, tmp_path):
 
 
 def test_never_analyzes_safe_seeded_objects(tmp_path):
-    """repo.store(safe=True) must never invoke on_captured — the sink contract's core guarantee."""
+    """repo.store(safe=True) must never invoke on_captured; the sink contract's core guarantee."""
     from dicomhawk.repository import new_repo
 
     storage = new_store(str(tmp_path / "traces"))

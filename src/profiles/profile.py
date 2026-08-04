@@ -58,7 +58,7 @@ _WORKLIST_FILTER_KEYS = frozenset({"modality"})
 # What a context-menu entry does: show the study we already loaded, or refuse plausibly.
 _WORKLIST_RESULTS = frozenset({"detail", "error"})
 
-# (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so core dicomhawk/ never imports this package.
+# (abstract_syntax_uid, [transfer_syntax_uids]); a plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
 
 # _QR_CLASSES class-name suffix -> operation name in `operations`/`qr_classes`.
@@ -95,11 +95,15 @@ class FingerprintConfig:
     signals: list[str] = field(default_factory=list)
 
 
+_GRANT_ACCESS_LEVELS = frozenset({"none", "bait", "any"})
+
+
 @dataclass
 class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
-    grant_access: bool = False
+    # none = deny every login; bait = only honey_credentials; any = accept anything.
+    grant_access: str = "none"
     # Post-login DICOM browse console (patients/studies/series/instances/upload).
     browse: bool = False
     headers: dict[str, str] = field(default_factory=dict)
@@ -130,7 +134,7 @@ class WebConfig:
     upload_max_request_bytes: int = 50 * 1024 * 1024
     upload_max_files: int = 10
     browse_page_size: int = 100
-    # Post-login worklist shell: title, sidebar, columns, context menu — all profile data.
+    # Post-login worklist shell: title, sidebar, columns, context menu: all profile data.
     worklist: dict = field(default_factory=dict)
     worklist_page_size: int = 100
     assets_dir: str | None = None
@@ -194,7 +198,7 @@ def default_profile() -> ProfileConfig:
             if name.endswith(suffix):
                 qr_classes[op].append((uid, DEFAULT_TRANSFER_SYNTAXES))
                 break
-        # else: RepositoryQuery has no Find/Move/Get suffix — deliberately excluded.
+        # else: RepositoryQuery has no Find/Move/Get suffix, deliberately excluded.
 
     return ProfileConfig(
         name="default",
@@ -213,11 +217,11 @@ def default_profile() -> ProfileConfig:
             storage_classes=storage_classes,
             qr_classes=qr_classes,
             max_associations=16,
-            max_pdu_size=65536,  # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
+            max_pdu_size=65536,  # not pynetdicom's DEFAULT_MAX_LENGTH=16382, avoids rejecting large-PDU clients
             ae_auth=AEAuthConfig(),
-            acse_timeout=10,  # tighter than pynetdicom's 30s default — shrinks a garbage connection's DoS window
+            acse_timeout=10,  # tighter than pynetdicom's 30s default, shrinks a garbage connection's DoS window
             network_timeout=15,  # tighter than pynetdicom's 60s default, same reason
-            dimse_timeout=20,  # tighter than pynetdicom's 30s default — bounds a peer stalling mid-operation
+            dimse_timeout=20,  # tighter than pynetdicom's 30s default, bounds a peer stalling mid-operation
             max_store_bytes=64 * 1024 * 1024,
         ),
         web=WebConfig(
@@ -669,8 +673,18 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
 
     if "enabled" in web_raw and not isinstance(web_raw["enabled"], bool):
         raise ValueError("Profile 'web.enabled' must be boolean")
-    if "grant_access" in web_raw and not isinstance(web_raw["grant_access"], bool):
-        raise ValueError("Profile 'web.grant_access' must be boolean")
+    if "grant_access" in web_raw:
+        value = web_raw["grant_access"]
+        if isinstance(value, bool):
+            replacement = "any" if value else "none"
+            raise ValueError(
+                f"Profile 'web.grant_access' is no longer boolean; use '{replacement}' "
+                "(or 'bait' to accept only the declared honey_credentials)"
+            )
+        if value not in _GRANT_ACCESS_LEVELS:
+            raise ValueError(
+                f"Profile 'web.grant_access' must be one of {sorted(_GRANT_ACCESS_LEVELS)}"
+            )
     if "browse" in web_raw and not isinstance(web_raw["browse"], bool):
         raise ValueError("Profile 'web.browse' must be boolean")
     if "legacy_csp_header" in web_raw and not isinstance(
@@ -1036,7 +1050,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         web=WebConfig(
             enabled=web_enabled,
             templates_dir=web_raw.get("templates_dir"),
-            grant_access=bool(web_raw.get("grant_access", False)),
+            grant_access=str(web_raw.get("grant_access", "none")),
             browse=browse,
             # Per-key overlay (a profile can override just one header/oidc key), like overlay_config().
             headers=headers,

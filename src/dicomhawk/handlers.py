@@ -34,7 +34,7 @@ type EventHandler = Callable[
 ]
 type QRResult = Generator[tuple[int, Dataset | None], None, None]
 
-# NOTE: private pynetdicom internals — AttributeError guard degrades to no-op rather than crash.
+# NOTE: private pynetdicom internals; the AttributeError guard degrades to no-op rather than crash.
 try:
     _QR_MODEL_ATTRS: dict = {**_qrdb._PATIENT_ROOT, **_qrdb._STUDY_ROOT}
 except AttributeError:
@@ -202,7 +202,7 @@ def handle_associate(
             if v:
                 cache.cache_version(event.assoc, v.strip())
             break
-    # Logged before AE-title auth can reject the association — only place these are seen.
+    # Logged before AE-title auth can reject the association; the only place these are seen.
     params = [
         f"Called: {event.primitive.called_ae_title}",
         f"Calling: {event.primitive.calling_ae_title}",
@@ -291,7 +291,7 @@ def _is_healthcheck(event: Event) -> bool:
 def handle_connect(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
-    # Fires on TCP accept — captures probes that never send a valid A-ASSOCIATE-RQ & skips loopback probes.
+    # Fires on TCP accept; captures probes that never send a valid A-ASSOCIATE-RQ & skips loopback probes.
     addr = getattr(event, "address", None)
     if addr and addr[0] in _LOOPBACK:
         return
@@ -529,7 +529,7 @@ def _submit_artifact(
                 local_port=getattr(assoc.acceptor, "port", None),
                 sop_class_uid=sop_class_uid,
                 sop_instance_uid=sop_instance_uid,
-                # The association already negotiated this — pass it through instead of guessing.
+                # The association already negotiated this, so pass it through instead of guessing.
                 transfer_syntax_uid=str(context.transfer_syntax) if context else None,
             )
         )
@@ -712,7 +712,7 @@ def handle_store(
         f"SHA256: {capture.sha256}",
         f"SOPInstanceUID: {ds.SOPInstanceUID}",
     ]
-    # Missing identity keys: quarantined but unindexed — surface it, it's a signal.
+    # Missing identity keys: quarantined but unindexed; surface it, it is a signal.
     missing = [kw for kw in INDEX_REQUIRED_KEYS if kw not in ds]
     if missing:
         params.append(f"Not indexed (missing {', '.join(missing)})")

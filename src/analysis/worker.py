@@ -19,7 +19,7 @@ RULES_DIR = Path(__file__).parent / "rules"
 
 _RECOVERY_INTERVAL_SECONDS = 5.0  # backlog/crash-recovery sweep for jobs the queue missed
 
-# RLIMIT_CPU is cumulative for the process's whole life, not per job — a generous backstop only.
+# RLIMIT_CPU is cumulative for the process's whole life, not per job, so this is a generous backstop only.
 _WORKER_CPU_BACKSTOP_SECONDS = 3600
 
 
@@ -32,7 +32,7 @@ def _alarm_handler(signum, frame):
 
 
 def _set_resource_limits() -> None:
-    """Best-effort — not every limit is settable under every container/cgroup configuration."""
+    """Best-effort; not every limit is settable under every container/cgroup configuration."""
     import resource
 
     for res, value in (
@@ -105,7 +105,7 @@ def _run_job(
 ) -> None:
     record = store.claim(artifact_id)
     if record is None:
-        return  # already handled — reachable via both the queue and a recovery sweep
+        return  # already handled; reachable via both the queue and a recovery sweep
 
     if not Path(record.capture_path).is_file():
         store.mark_missing(artifact_id)

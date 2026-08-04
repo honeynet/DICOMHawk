@@ -1091,14 +1091,15 @@ def login_post():
     username = request.form.get("username", "")
     password = request.form.get("password", "")
 
-    if (username, password) in _web().honey_credentials:
-        # Bait, not a real account: grants unconditionally (unlike grant_access) and logs distinctly.
+    access = _web().grant_access
+    if access != "none" and (username, password) in _web().honey_credentials:
+        # Bait, not a real account: works whenever any login does, and logs distinctly.
         _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
         return _grant(username)
 
     _capture(username, password)
     signin = request.args.get("signin") or secrets.token_hex(16)
-    if _web().grant_access:
+    if access == "any":
         return _grant(username)
     # Deny: re-render the sign-on page with the real error banner.
     return render_template(
@@ -1135,7 +1136,7 @@ def csp_report():
 
 
 def translated_items(item_id):
-    # translation.js reads data['Text1']/['Text2']/['Text3'] — real ASP.NET PascalCase wire format.
+    # translation.js reads data['Text1']/['Text2']/['Text3']: real ASP.NET PascalCase wire format.
     m = _web().winauth_messages
     return {
         "Text1": m.get("text1", ""),
@@ -1202,12 +1203,13 @@ def winauth_login():
         return _winauth_challenge()
     username, password = auth.username or "", auth.password or ""
 
-    if (username, password) in _web().honey_credentials:
+    access = _web().grant_access
+    if access != "none" and (username, password) in _web().honey_credentials:
         _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
         return _grant(username)
 
     _capture(username, password, request_type="WEB_WINAUTH_ATTEMPT")
-    if _web().grant_access:
+    if access == "any":
         return _grant(username)
     return (
         _winauth_challenge()
@@ -1229,7 +1231,7 @@ def new_web(
     sink: ArtifactSink | None = None,
     fingerprint_sink=None,
 ) -> Flask:
-    """Build the attacker-facing Flask app for `profile` — routes/cookies come from its own web config."""
+    """Build the attacker-facing Flask app for `profile`; routes and cookies come from its own web config."""
     profile_dir = profile.web.assets_dir or os.path.join(
         _SRC, "profiles", profile.web.templates_dir, "web"
     )
@@ -1318,7 +1320,7 @@ def new_web(
         app.add_url_rule(routes["upload"], "upload_post", upload_post, methods=["POST"])
         app.add_url_rule(routes["logout"], "logout", logout, methods=["POST"])
 
-    # Per-profile data, not engine code — a profile with none stays a plain 404 via _iis_404 above.
+    # Per-profile data, not engine code; a profile with none stays a plain 404 via _iis_404 above.
     for i, (path, kind) in enumerate(profile.web.honeytraps):
         prefix = path.rstrip("/")
         view = _honeytrap_view(kind)

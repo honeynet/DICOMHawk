@@ -11,25 +11,25 @@ For what the honeypot pretends to be, see [Profiles](./profiles.md).
 
 The shipped image and Compose file run the honeypot:
 
-- **as an unprivileged user** — a multi-stage build installs the package, and the runtime
+- **as an unprivileged user.** A multi-stage build installs the package, and the runtime
   stage drops to a system user with no login shell and no home directory.
-- **with a read-only root filesystem** — only the mounted volumes (traces, DB, logs) and a
+- **with a read-only root filesystem.** Only the mounted volumes (traces, DB, logs) and a
   `tmpfs` for `/tmp` are writable.
 - **with all Linux capabilities dropped** (`cap_drop: ALL`) and `no-new-privileges`. Binding
   the privileged DICOM port 104 as a non-root user is allowed via a namespaced
   `net.ipv4.ip_unprivileged_port_start=0` sysctl, not by handing back `CAP_NET_BIND_SERVICE`.
-- **under resource limits** — the 1 GiB memory/swap cap, 128 MiB `/tmp`, `pids_limit`, `cpus`,
+- **under resource limits.** The 1 GiB memory/swap cap, 128 MiB `/tmp`, `pids_limit`, `cpus`,
   and `nofile` limit bound a connection or PDU flood. The default C-STORE/STOW cap is 64 MiB,
   leaving headroom for parsing and concurrent requests.
-- **with a real liveness probe** — the healthcheck loads the active profile, honors its called
+- **with a real liveness probe.** The healthcheck loads the active profile, honors its called
   and calling AE-title policy, and opens an unlogged loopback C-ECHO. It needs `echo` enabled.
-- **with graceful shutdown** — `SIGTERM`/`SIGINT` drain listeners and close the database;
+- **with graceful shutdown.** `SIGTERM` and `SIGINT` drain listeners and close the database;
   Compose allows 45 seconds before escalating to `SIGKILL`.
 
 ## Egress lockdown
 
 A honeypot must accept inbound connections but never initiate outbound ones. `internal: true`
-on the Compose network is **not** the right tool — it also blocks the return path for the
+on the Compose network is **not** the right tool, because it also blocks the return path for the
 published ports, so attackers could not reach the service. Instead, drop egress at the host
 firewall while leaving inbound and its replies intact.
 
@@ -47,7 +47,7 @@ connections from the bridge to host services. Persist them with the host firewal
 Run `sudo deploy/lockdown-egress.sh remove` before deleting the Docker network.
 
 `dicomhawk serve` makes no outbound connections, so this does not affect the honeypot. Only
-`dicomhawk seed` reaches out (TCIA / OpenStreetMap) — run it from a management context with
+`dicomhawk seed` reaches out (TCIA and OpenStreetMap). Run it from a management context with
 egress allowed, or seed before locking egress down (its offline fallback still populates the
 DB if it cannot reach TCIA).
 
@@ -71,6 +71,15 @@ docker compose -f docker-compose.yml -f deploy/compose.production.yml create
 sudo --preserve-env=DICOMHAWK_TRACES_HOST_PATH,DICOMHAWK_STATE_HOST_PATH,DICOMHAWK_LOGS_HOST_PATH,DICOMHAWK_TRACE_FILESYSTEM_MAX_BYTES \
   deploy/check-production.sh
 docker compose -f docker-compose.yml -f deploy/compose.production.yml up -d
+```
+
+Naming files with `-f` turns off Compose's automatic pickup of `docker-compose.override.yml`. If
+the guided install generated one because you chose non-default ports, add it to the chain or the
+deployment reverts to the default published ports:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml \
+  -f deploy/compose.production.yml up -d
 ```
 
 The preflight rejects a trace path on the state/log filesystem and rejects a trace filesystem
@@ -101,20 +110,20 @@ Do not use `docker compose down -v` for migration; it deletes the evidence inste
 ## Payload analysis
 
 Static analysis of captured payloads (see [Payload analysis](./analysis.md) for what it does
-and what it records) runs by default and needs no network access — it stays inside the egress
+and what it records) runs by default and needs no network access, so it stays inside the egress
 lockdown. Its durable job table (`--analysis-db`, default `analysis.db`) is a second SQLite
 file; keep it on the same state volume as `--database`, not the traces volume, for the same
-reason the main database is kept off traces — a storage-flood on traces must not break the
+reason the main database is kept off traces: a storage flood on traces must not break the
 analysis job table.
 
 The analysis worker runs as its own supervised process inside the same container, under the
 same non-root user, capability drops, and `no-new-privileges` as the rest of the honeypot; a
 crashed or hung worker (bounded by `--analysis-timeout`) restarts automatically and resumes
 any `pending`/`running` work. If the in-memory hand-off queue ever fills up (very high
-sustained upload volume), the durable job table still has every job recorded — nothing is
+sustained upload volume), the durable job table still has every job recorded. Nothing is
 silently dropped, it is just picked up on the worker's next backlog sweep instead of
 immediately. `--analysis-rules` is a deployment setting like everything else on this page, not
-part of a profile — point it at a bind-mounted directory of your own `.yar` files if you want
+part of a profile. Point it at a bind-mounted directory of your own `.yar` files if you want
 detections beyond the shipped starters.
 
 ## Browser fingerprints
@@ -122,12 +131,12 @@ detections beyond the shipped starters.
 Profiles that enable `web.fingerprint` serve a small collector on the attacker-facing web
 surface (see [Browser fingerprinting](./fingerprinting.md)). Its data goes to a third SQLite
 file, `--fingerprint-db`, which belongs on the state volume for the same reason as the other
-two — the container's root filesystem is read-only, and a traces flood must not affect it.
+two: the container's root filesystem is read-only, and a traces flood must not affect it.
 
 Collection is bounded on purpose: one submission is capped by `--fingerprint-max-bytes`, and
 each web session may store at most `--fingerprint-max-per-session` of them, so a visitor
 submitting in a loop cannot grow the database without limit. Storage problems never reach the
-visitor — the endpoint answers identically whether the write succeeded or failed. Run with
+visitor, because the endpoint answers identically whether the write succeeded or failed. Run with
 `--no-fingerprint` to stop collecting entirely; nothing is served and no endpoint is
 registered, and the database file can then be deleted on its own.
 
@@ -135,13 +144,26 @@ registered, and the database file can then be deleted on its own.
 
 The built-in web listener is plain HTTP/1.1 and the DICOM listeners are plaintext. A
 high-fidelity public deployment terminates TLS at a reverse proxy on the product's observed
-ports — normally 443 for the web surface, and DICOM TLS on 2762 where the impersonated device
+ports, normally 443 for the web surface, and DICOM TLS on 2762 where the impersonated device
 advertises it (the Fujifilm conformance statement does). Terminating externally, rather than in
 process, keeps certificate handling out of the honeypot and matches how these products are
 actually fronted.
 
+### Session cookies
+
+Profiles that model an HTTPS product mark their session cookie `Secure`, and browsers discard a
+`Secure` cookie received over plain HTTP. On such a deployment the decoy login accepts the
+credential, the browser throws the session away, and the attacker sees neither the post-login
+pages nor an error, so the surface silently leads nowhere.
+
+Behind a proxy that forwards `X-Forwarded-Proto` with `DICOMHAWK_TRUSTED_PROXY` set, this
+resolves itself: the request is already `https`, so the cookie is marked correctly. Everywhere
+else, decide explicitly with `DICOMHAWK_SECURE_COOKIES`: `false` for a plaintext deployment so
+the decoy works, `true` behind a TLS terminator that does not forward the scheme. The server logs
+a warning at startup when the combination cannot work.
+
 Plaintext DICOM on 104/11112 with no 2762 listener is common in the wild and a defensible
-default — but it is a **deliberate choice on record**, not an omission: if your profile
+default, but it is a **deliberate choice on record**, not an omission. If your profile
 advertises 2762, front it with a TLS terminator so the open/closed port set matches the device.
 
 For HTTP/DICOMweb, assign the proxy a stable source IP and make it overwrite `X-Forwarded-For`,
@@ -167,12 +189,12 @@ anything beyond the local host can reach the listener.
 ## Keeping data fresh
 
 `serve` never seeds. Run `seed` on a schedule (cron / systemd timer) with rotation so the data
-does not go stale — see [Commands → seed](./commands.md#dicomhawk-seed). Give the seed run egress
+does not go stale. See [Commands](./commands.md#dicomhawk-seed). Give the seed run egress
 (see above) and point it at the same `--database`/`--traces` as `serve`.
 
 ## Logs
 
-The interaction log (`--log-path`) is one JSON record per line — ship it to your SIEM. It rotates
+The interaction log (`--log-path`) is one JSON record per line, ready to ship to your SIEM. It rotates
 by size (`--log-max-bytes` / `--log-backups`), and Docker's json-file driver caps the container
 stdout log separately. Keep the developer log (`--dev-log`, Python-level diagnostics) separate
 from the interaction log; only the latter is attacker intelligence.
@@ -185,11 +207,11 @@ without contaminating the honeypot event stream.
 
 These are deliberate and documented, not gaps to hide from an operator:
 
-- **Storage jail round-trip** — attacker-uploaded objects are indexed and visible in C-FIND but
+- **Storage jail round-trip.** Attacker-uploaded objects are indexed and visible in C-FIND but
   C-GET/WADO never return their bytes. A store→get round trip is therefore distinguishable from a
   real PACS. This is the point of the jail (the honeypot cannot be used to exfiltrate or relay
   files), not a bug.
-- **Capture-then-proceed auth** — the web and DICOMweb auth surfaces harvest submitted
+- **Capture-then-proceed auth.** The web and DICOMweb auth surfaces harvest submitted
   credentials and then continue; there is no real Active Directory domain behind them.
-- **Aggregate storage** — bounded by the filesystem quota you set, not by an in-process byte
+- **Aggregate storage.** Bounded by the filesystem quota you set, not by an in-process byte
   counter (see Storage above).

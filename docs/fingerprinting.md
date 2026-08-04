@@ -2,7 +2,7 @@
 
 When an attacker opens the honeypot's web surface in a real browser, DICOMHawk can serve a
 small JavaScript collector that reports what that browser looks like. The point is not to
-identify people — it is to tell automated scanners apart from hands-on operators, and to
+identify people. It is to tell automated scanners apart from hands-on operators, and to
 group visits that come from the same environment even when the IP address changes.
 
 Fingerprinting is **off unless the active profile asks for it**, and it only ever applies to
@@ -18,7 +18,7 @@ web:
     enabled: true
 ```
 
-That is the whole contract — a new profile needs no code and no extra files. The collector
+That is the whole contract: a new profile needs no code and no extra files. The collector
 ships with DICOMHawk, so every profile that opts in serves the same one.
 
 To restrict which categories run, list them:
@@ -31,7 +31,7 @@ web:
 ```
 
 Omitting `signals` runs all five categories. Setting it to an empty list turns collection
-off, exactly as if `enabled` were false — DICOMHawk will not serve a collector that collects
+off, exactly as if `enabled` were false. DICOMHawk will not serve a collector that collects
 nothing. An unrecognised category name is rejected when the profile loads.
 
 Both shipped profiles have it enabled. `fujifilm` also renames the two URLs so they sit
@@ -53,7 +53,7 @@ web:
 | `rendering` | canvas and WebGL output, including the GPU vendor/renderer strings |
 | `math` | results of transcendental functions, which differ between JavaScript engines |
 | `screen` | screen resolution, colour depth, pixel ratio, window dimensions |
-| `bot` | automation markers — `navigator.webdriver`, driver artefacts, headless indicators |
+| `bot` | automation markers: `navigator.webdriver`, driver artefacts, headless indicators |
 
 Nothing is collected that identifies a person: no cookies are read, no accounts are touched,
 no cross-site state is used, and no data leaves the honeypot.
@@ -72,7 +72,7 @@ GET /api/fingerprints?session_id=web-...
 
 Each record holds the raw signals, the derived hash, and every automation check that fired.
 The checks are evaluated on the server, so a visitor that tampers with the collector cannot
-choose its own verdict — and the underlying signals are always kept, never replaced by a
+choose its own verdict, and the underlying signals are always kept, never replaced by a
 bare label.
 
 `hash` is the useful pivot: two visits sharing a hash came from the same browser
@@ -80,7 +80,7 @@ environment, which is how repeat visits are recognised across addresses. Web eve
 interaction log carry the same `fingerprint_hash`, so a fingerprint can be tied back to the
 requests that session made. Events logged when fingerprinting is off carry `null` there.
 
-Correlating web activity with DICOM activity is done by address and time — the two protocols
+Correlating web activity with DICOM activity is done by address and time. The two protocols
 share no session identifier.
 
 ## Behaviour and limits
@@ -103,6 +103,6 @@ Fingerprints live in their own SQLite database, set with `--fingerprint-db`
 analysis database, so the feature can be removed without disturbing either.
 
 To stop collecting, start DICOMHawk with `--no-fingerprint`, or set `enabled: false` in the
-profile. No collector is served and no endpoint is registered — a request to the collector
+profile. No collector is served and no endpoint is registered, so a request to the collector
 path returns the same not-found page as any other unknown path. To discard the data as well,
 delete the fingerprint database file.

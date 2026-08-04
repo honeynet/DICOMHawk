@@ -422,7 +422,7 @@ def test_ordinary_browser_fires_nothing():
 
 
 def test_spoofed_user_agent_is_caught_by_probed_engine():
-    # Claims Chrome in the User-Agent, but the feature probe says Gecko — the UA is a lie.
+    # Claims Chrome in the User-Agent, but the feature probe says Gecko, so the UA is a lie.
     signals, _ = sanitize(
         {
             "signals": {

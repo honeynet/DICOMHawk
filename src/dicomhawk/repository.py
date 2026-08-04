@@ -393,7 +393,7 @@ class Repository:
         try:
             fpath = self.storage.path_for(safe, fname)
         except ValueError as exc:
-            logger.warning(f"Path traversal attempt blocked: {fname} — {exc}")
+            logger.warning(f"Path traversal attempt blocked: {fname}: {exc}")
             return QRError(
                 f"Dangerous SOPInstanceUID rejected: {fname}", QRStatus.STORE_ERROR
             )

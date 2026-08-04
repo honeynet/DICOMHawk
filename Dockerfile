@@ -15,8 +15,7 @@ FROM python:3.12-slim AS runtime
 RUN groupadd --system dicomhawk \
     && useradd --system --gid dicomhawk --no-create-home --shell /usr/sbin/nologin dicomhawk
 
-# libmagic1: python-magic links against the system library (yara-python statically
-# links its own bundled libyara, so it needs nothing extra here).
+# libmagic1: python-magic links against it; yara-python bundles its own libyara.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libmagic1 \
     && rm -rf /var/lib/apt/lists/*
