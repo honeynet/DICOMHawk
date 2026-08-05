@@ -259,20 +259,23 @@ def test_fujifilm_worklist_config_is_parsed():
     assert "Global Worklists" in sections
     assert "Public Collections" in sections
     assert "All Studies Global" in folders
-    assert {"label": "Study Information", "result": "detail"} in worklist[
-        "context_menu"
+    assert any(
+        item["label"] == "Study Information" and item["result"] == "detail"
+        for item in worklist["toolbar"]
+    )
+
+
+def test_fujifilm_worklist_uses_only_a_live_sidebar_count():
+    # Copied static counts drift; a repository-derived count remains coherent.
+    worklist = load_profile("fujifilm").web.worklist
+    items = [
+        item for section in worklist["sidebar"] for item in section.get("items", [])
     ]
 
-
-def test_fujifilm_worklist_ships_no_sidebar_counts():
-    # A static count beside a live study table is a cheap tell; operators opt in instead.
-    worklist = load_profile("fujifilm").web.worklist
-
-    assert not any(
-        "count" in item
-        for section in worklist["sidebar"]
-        for item in section.get("items", [])
-    )
+    assert not any("count" in item or "urgent_count" in item for item in items)
+    assert [
+        item["label"] for item in items if item.get("dynamic_count") == "studies"
+    ] == ["Unread Studies"]
 
 
 @pytest.mark.parametrize(
@@ -305,7 +308,26 @@ def test_fujifilm_worklist_ships_no_sidebar_counts():
             "context_menu\\[0\\].result",
         ),
         ({"title": 42}, "title' must be a string"),
-        ({"header_links": "Home"}, "header_links' must be a list of strings"),
+        ({"header_links": "Home"}, "header_links' must be a list"),
+        # The pre-icon format, rejected by name so a third-party profile is told what to write.
+        ({"header_links": ["Messages"]}, r"write \{label: Messages\} instead"),
+        (
+            {
+                "sidebar": [
+                    {
+                        "label": "S",
+                        "items": [
+                            {
+                                "label": "F",
+                                "dynamic_count": "studies",
+                                "filter": {"modality": "CT"},
+                            }
+                        ],
+                    }
+                ]
+            },
+            "cannot set both dynamic_count and filter",
+        ),
         ({"messages": {"action_failed": 7}}, "action_failed' must be a string"),
     ],
 )

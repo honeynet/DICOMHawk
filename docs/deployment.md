@@ -9,21 +9,22 @@ For what the honeypot pretends to be, see [Profiles](./profiles.md).
 
 ## What the container already does
 
-The shipped image and Compose file run the honeypot:
+The shipped image and Compose file provide the following controls:
 
-- **as an unprivileged user.** A multi-stage build installs the package, and the runtime
+- **Unprivileged runtime.** A multi-stage build installs the package, and the runtime
   stage drops to a system user with no login shell and no home directory.
-- **with a read-only root filesystem.** Only the mounted volumes (traces, DB, logs) and a
+- **Read-only root filesystem.** Only the mounted volumes (traces, DB, logs) and a
   `tmpfs` for `/tmp` are writable.
-- **with all Linux capabilities dropped** (`cap_drop: ALL`) and `no-new-privileges`. Binding
+- **Restricted privileges.** All Linux capabilities are dropped (`cap_drop: ALL`) and
+  `no-new-privileges` is enabled. Binding
   the privileged DICOM port 104 as a non-root user is allowed via a namespaced
   `net.ipv4.ip_unprivileged_port_start=0` sysctl, not by handing back `CAP_NET_BIND_SERVICE`.
-- **under resource limits.** The 1 GiB memory/swap cap, 128 MiB `/tmp`, `pids_limit`, `cpus`,
+- **Resource limits.** The 1 GiB memory/swap cap, 128 MiB `/tmp`, `pids_limit`, `cpus`,
   and `nofile` limit bound a connection or PDU flood. The default C-STORE/STOW cap is 64 MiB,
   leaving headroom for parsing and concurrent requests.
-- **with a real liveness probe.** The healthcheck loads the active profile, honors its called
+- **Protocol-level health check.** The healthcheck loads the active profile, honors its called
   and calling AE-title policy, and opens an unlogged loopback C-ECHO. It needs `echo` enabled.
-- **with graceful shutdown.** `SIGTERM` and `SIGINT` drain listeners and close the database;
+- **Graceful shutdown.** `SIGTERM` and `SIGINT` drain listeners and close the database;
   Compose allows 45 seconds before escalating to `SIGKILL`.
 
 ## Egress lockdown
@@ -134,9 +135,11 @@ file, `--fingerprint-db`, which belongs on the state volume for the same reason 
 two: the container's root filesystem is read-only, and a traces flood must not affect it.
 
 Collection is bounded on purpose: one submission is capped by `--fingerprint-max-bytes`, and
-each web session may store at most `--fingerprint-max-per-session` of them, so a visitor
-submitting in a loop cannot grow the database without limit. Storage problems never reach the
-visitor, because the endpoint answers identically whether the write succeeded or failed. Run with
+each web session may store at most `--fingerprint-max-per-session` of them. A second, much
+looser `--fingerprint-max-per-ip` bounds one source address, so rotating a query token does
+not bypass the per-session limit while a returning visitor stays collectable. Storage
+problems never reach the visitor, because the endpoint answers identically whether the write
+succeeded or failed. Run with
 `--no-fingerprint` to stop collecting entirely; nothing is served and no endpoint is
 registered, and the database file can then be deleted on its own.
 

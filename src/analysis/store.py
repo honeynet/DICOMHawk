@@ -25,7 +25,8 @@ Base = declarative_base()
 # A job whose worker died this many times is a poison pill; stop feeding it to fresh workers.
 MAX_ATTEMPTS = 3
 
-_BUSY_TIMEOUT_SECONDS = 5.0  # how long a writer waits for SQLite's single write lock
+# A dropped enqueue loses evidence, so wait out contention rather than fail fast.
+_BUSY_TIMEOUT_SECONDS = 5.0
 
 
 class AnalysisState(StrEnum):

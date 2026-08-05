@@ -217,6 +217,12 @@ def serve(
         envvar="DICOMHAWK_FINGERPRINT_MAX_PER_SESSION",
         help="Submissions stored per web session before further ones are dropped",
     ),
+    fingerprint_max_per_ip: int = typer.Option(
+        500,
+        "--fingerprint-max-per-ip",
+        envvar="DICOMHAWK_FINGERPRINT_MAX_PER_IP",
+        help="Submissions stored per source address, so rotating sessions cannot bypass the cap",
+    ),
 ):
 
     try:
@@ -247,6 +253,10 @@ def serve(
         raise typer.BadParameter("fingerprint-max-bytes must be positive")
     if fingerprint_max_per_session < 1:
         raise typer.BadParameter("fingerprint-max-per-session must be positive")
+    if fingerprint_max_per_ip < fingerprint_max_per_session:
+        raise typer.BadParameter(
+            "fingerprint-max-per-ip cannot be below fingerprint-max-per-session"
+        )
     try:
         operator_is_loopback = (
             operator_host == "localhost"
@@ -391,6 +401,7 @@ def serve(
                 db_path=fingerprint_db,
                 max_body_bytes=fingerprint_max_bytes,
                 max_per_session=fingerprint_max_per_session,
+                max_per_ip=fingerprint_max_per_ip,
             )
         )
         components.append(fingerprint_component)

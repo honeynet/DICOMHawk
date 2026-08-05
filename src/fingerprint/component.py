@@ -18,7 +18,7 @@ class FingerprintComponent(Component):
         self.config = config
         # Constructed (not started) so the web component can hold this reference before start().
         self.store: FingerprintStore = new_fingerprint_store(
-            config.DB_PATH, config.MAX_PER_SESSION
+            config.DB_PATH, config.MAX_PER_SESSION, config.MAX_PER_IP
         )
 
     def start(self) -> None:
@@ -31,10 +31,11 @@ class FingerprintComponent(Component):
             )
             return
         logger.info(
-            "Fingerprinting: enabled, db=%s max_body=%s max_per_session=%s",
+            "Fingerprinting: enabled, db=%s max_body=%s max_per_session=%s max_per_ip=%s",
             self.config.DB_PATH,
             self.config.MAX_BODY_BYTES,
             self.config.MAX_PER_SESSION,
+            self.config.MAX_PER_IP,
         )
 
     def stop(self) -> None:

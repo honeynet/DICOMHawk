@@ -1,5 +1,6 @@
 """Sanitizing, hashing and bot evaluation for collector submissions.
-They run server-side so a tampered client cannot forge the verdict.
+The client cannot submit a verdict field directly. Supplied signals remain
+attacker-controlled indicators, not trusted evidence.
 """
 
 import hashlib

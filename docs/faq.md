@@ -82,9 +82,10 @@ paths are in [Configuration](./configuration.md), and the operator API summarise
 
 ### Can I turn off analysis or fingerprinting?
 
-Yes. Set `DICOMHAWK_ANALYSIS=false` or `DICOMHAWK_FINGERPRINT=false`. Neither is visible to an
-attacker either way, so the usual reason to disable them is resource pressure rather than
-detection risk.
+Yes. Set `DICOMHAWK_ANALYSIS=false` or `DICOMHAWK_FINGERPRINT=false`. Analysis does not change
+response semantics, although its bounded handoff can affect timing under load. Fingerprinting is
+attacker-visible because it adds a collector asset and ingest route; disabling it removes both.
+Choose that feature based on fidelity, privacy, and resource requirements.
 
 ### Does it phone home?
 

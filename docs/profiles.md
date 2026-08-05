@@ -113,15 +113,16 @@ your profile automatically. You write templates and config, not routes:
   captured username/password pairs; `/api/uploads` reports terminal WEB/STOW/C-STORE payload
   outcomes; `/api/events`, `/api/sessions`, and `/api/profiles` expose the underlying views.
 
-The API reads the active interaction log plus retained rotated backups (and also supports rotation
-being disabled), validates malformed JSONL records, and streams aggregation without retaining every
-parsed event. Every list endpoint accepts `?limit=` and `?offset=` and reports `X-Total-Count`;
-offset is capped at 10,000. Attacker, credential, and session rollups are capped at 10,000 keys and
-report truncation in `X-Aggregation-Truncated` (and `/api/overview`'s `truncated` object). Events
-also accept exact `?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters. Captured
-attacker credentials are shown in full, because the plaintext an attacker submitted is the intelligence
-this loopback-only surface exists to expose. Responses are non-cacheable and carry a strict
-operator CSP.
+The API reads the active interaction log and retained backups, tolerates malformed JSONL records,
+and streams aggregation without retaining every parsed event. List endpoints accept `?limit=` and
+`?offset=`, report `X-Total-Count`, and cap offsets at 10,000. Attacker, credential, and session
+rollups are limited to 10,000 keys; truncation is reported through
+`X-Aggregation-Truncated` and `/api/overview`'s `truncated` object. Events also accept exact
+`?channel=`, `?ip=`, `?type=`, and ISO-8601 `?since=` filters.
+
+The credential view contains the submitted plaintext because it is intended for incident review.
+Keep this surface on loopback or behind authenticated administrative access. Responses are
+non-cacheable and use a restrictive operator CSP.
 
 Keep the default loopback bind on bare metal. Non-loopback binds fail closed unless
 `--allow-remote-operator` is supplied. Set `--operator-token`/`DICOMHAWK_OPERATOR_TOKEN` whenever
@@ -129,11 +130,9 @@ anything beyond the local host can reach the listener; it accepts Basic auth (an
 password) or a Bearer token. Docker needs a container-internal `0.0.0.0` bind, but the supplied
 Compose file explicitly opts in and maps it only to host `127.0.0.1`.
 
-Both are built by the shared engine. You don't touch that code, only supply your
-profile's assets. It reuses the same DICOM database your profile's DIMSE side sees, so a
-study seeded via `dicomhawk seed` shows up in both the worklist and a C-FIND response,
-with the same values on both surfaces, so a viewer querying over DICOM sees the patient sex,
-birth date, procedure description and institution the worklist shows, not blanks.
+Both surfaces use the shared engine; a profile supplies configuration, templates, and assets.
+The worklist and DIMSE services read the same DICOM database, so seeded studies and their
+attributes remain consistent between the web interface and C-FIND responses.
 
 ### Required templates
 
@@ -145,7 +144,7 @@ All five must exist under `web/templates/`; the profile fails at startup if one 
 | `forgot_password.html` | Forgot-password flow | `submitted` (bool) |
 | `error.html` | STS error page, 500 handler | `request_id`, `error_message` |
 | `winauth_unable.html` | Windows-auth 401 body | `sts_authorize_url`. Use it, not a hardcoded path, for the "Log in directly" link |
-| `worklist.html` | Post-login study list | `studies` (row dicts, keys below), `worklist` (shell config), `username`, `total_studies`, `folder`, `detail`, `filters`, `action_message`, `refresh_url` |
+| `worklist.html` | Post-login study list | `studies` (row dicts, keys below), `worklist` (shell config), `sidebar_counts`, `username`, `total_studies`, `folder`, `detail`, `filters`, `action_message`, `refresh_url` |
 
 If you use the `unauthorized_page` honeytrap response (below), also add
 `web/templates/unauthorized.html`; it receives `entry_url`, which you should use for any
@@ -324,7 +323,12 @@ web:
   worklist_page_size: 100
   worklist:
     title: All Studies
-    header_links: [Messages, Help, Settings]
+    header_links:
+      - {label: Messages, icon: comment}
+      - {label: Help, icon: question-sign}
+    toolbar:
+      - {label: Study Information, icon: file, result: detail}
+      - {label: Open Viewer, icon: camera, result: error}
     columns:
       - {key: patient_name, label: Patient Name}
       - {key: description,  label: Proc Description}
@@ -332,13 +336,17 @@ web:
       - {key: images,       label: Images}
     sidebar:
       - label: Worklists
+        open: true
         items:
-          - {label: All Studies}
+          - {label: All Studies, dynamic_count: studies}
           - {label: CT, filter: {modality: CT}}   # folders may narrow by modality
-          - {label: Unread, count: 128}           # optional badge; see the caution below
     context_menu:
-      - {label: Study Information, result: detail}
-      - {label: Open Viewer,       result: error}
+      - {label: Open Viewer, result: error}
+      - label: Change Priority
+        result: submenu
+        items:
+          - {label: STAT, result: error}
+      - {label: Unreserve, result: disabled}
     footer:   {item_label: items, refresh_label: Last refreshed}
     messages: {action_failed: The imaging service did not respond.}
     placeholders: {description: UNKNOWN, status: "", empty: ""}
@@ -351,7 +359,7 @@ web:
 `study_instance_uid`, `status`, `age`. An unknown key fails at startup rather than
 rendering a silently blank column.
 
-An empty `sidebar`, `context_menu`, or `header_links` renders no chrome at all, which is
+An empty `sidebar`, `toolbar`, `context_menu`, or `header_links` renders no chrome at all, which is
 the default, so a sparse profile gets a plain table, not somebody else's shell.
 
 **Interaction.** The page is driven entirely by query parameters on its own route, so
@@ -362,7 +370,7 @@ there is no extra endpoint to fingerprint:
 | `?path=<folder>` | Selects a sidebar folder and applies its `filter` |
 | `?study=<uid>` | Opens the detail panel for a study **already listed on that page** |
 | `?action=<label>` | Renders `messages.action_failed` for a `result: error` entry |
-| `?filter_<column>=<text>` | Column filter box; logged, and echoed back into its own input |
+| `?filter_<column>=<text>` | Case-insensitively narrows the listed rows; logged and echoed back into its own input |
 
 Values are resolved against the profile's own labels, never trusted directly: an
 unrecognised folder or action falls back to the default view and is not echoed into the
@@ -376,10 +384,16 @@ carries no `StudyDescription`. Real products show their own marker there (Synaps
 generated description, so this placeholder should only appear for studies an attacker
 uploaded or for studies indexed before seeding started writing one.
 
-**Sidebar counts are static decoration.** `count` and `urgent_count` render badges but are
-never computed. A folder reading `Unread 128` beside a table listing four studies is an
-obvious tell, so set them only if they will stay plausible against your seeded volume. The
-shipped profiles set none.
+**Sidebar state and counts.** `sidebar[].open: true` expands a section on first load; the
+browser remembers later toggles for that profile. `count` and `urgent_count` are static
+decoration, so use them only when they remain plausible. `dynamic_count: studies` renders the
+current repository-wide study total and cannot be combined with a folder `filter`, because a
+global badge beside a narrowed list would contradict the page. Fujifilm uses the dynamic count
+and deliberately ships no copied site-specific static counts.
+
+Actions may return `detail`, `error`, `submenu`, or `disabled`. Submenus can nest; only a
+selectable leaf becomes an `?action=` value. Header and toolbar entries also require an `icon`
+class so a profile cannot silently render blank controls.
 
 **Detail columns need a re-seed.** Sex, date of birth, body part, institution, station,
 and referring physician are not part of the DICOM Query/Retrieve index; they are recorded
@@ -463,7 +477,8 @@ DICOMweb shares the same store and query as DICOM, so:
 
 - **STOW uploads are quarantined** exactly like a C-STORE. The exact multipart request and each
   exact Part-10 item are retained as uniquely named gzip traces, including malformed/rejected
-  items. Uploaded objects are **never served back** by WADO.
+  items. Uploaded objects are **never served back** by WADO. Request size and the Waitress
+  thread pool bound resource use; STOW does not expose a separate concurrency rejection oracle.
 - **QIDO** returns metadata built from the same repository as DIMSE. Its default media type is
   profile-specific (`application/json` for Fujifilm; `application/dicom+json` for generic PACS),
   and clients may request DICOM JSON or multipart DICOM XML.

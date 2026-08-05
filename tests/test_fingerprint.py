@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -66,6 +67,87 @@ def _client(profile, repo, bus, sink=None):
     app = new_web(profile, repo, bus, None, sink)
     app.config["TESTING"] = True
     return app.test_client()
+
+
+def test_source_address_cap_cannot_be_bypassed_by_rotating_sessions(tmp_path):
+    comp = new_fingerprint_component(
+        new_fingerprint_config(
+            db_path=str(tmp_path / "fingerprint.db"), max_per_session=2, max_per_ip=3
+        )
+    )
+    comp.start()
+    try:
+        stored = [
+            comp.sink(
+                _payload(platform="Linux").encode(),
+                session_id=f"web-signin-{index}",
+                ip="203.0.113.10",
+                local_port=8080,
+                path="/portal/telemetry",
+                user_agent=CHROME,
+            )
+            for index in range(8)
+        ]
+        # One submission per session, so only the source-address cap can stop this.
+        assert sum(value is not None for value in stored) == 3
+    finally:
+        comp.stop()
+
+
+def test_source_address_cap_is_looser_than_the_session_cap(tmp_path):
+    comp = new_fingerprint_component(
+        new_fingerprint_config(
+            db_path=str(tmp_path / "fingerprint.db"), max_per_session=2, max_per_ip=6
+        )
+    )
+    comp.start()
+    try:
+        # A returning visitor on one address is the traffic worth keeping, so rotating
+        # sessions must stay collectable well past a single session's cap.
+        stored = [
+            comp.sink(
+                _payload(platform="Linux").encode(),
+                session_id=f"web-signin-{index}",
+                ip="203.0.113.11",
+                local_port=8080,
+                path="/portal/telemetry",
+                user_agent=CHROME,
+            )
+            for index in range(5)
+        ]
+        assert sum(value is not None for value in stored) == 5
+    finally:
+        comp.stop()
+
+
+def test_concurrent_submissions_cannot_overrun_the_source_address_cap(tmp_path):
+    comp = new_fingerprint_component(
+        new_fingerprint_config(
+            db_path=str(tmp_path / "fingerprint.db"),
+            max_per_session=100,
+            max_per_ip=3,
+        )
+    )
+    comp.start()
+    try:
+
+        def submit(index):
+            return comp.sink(
+                _payload(platform="Linux").encode(),
+                session_id=f"web-{index}",
+                ip="203.0.113.12",
+                local_port=8080,
+                path="/portal/telemetry",
+                user_agent=CHROME,
+            )
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            stored = list(executor.map(submit, range(20)))
+
+        assert sum(value is not None for value in stored) == 3
+        assert comp.store.ip_count("203.0.113.12") == 3
+    finally:
+        comp.stop()
 
 
 # --- profile schema and fallbacks ---

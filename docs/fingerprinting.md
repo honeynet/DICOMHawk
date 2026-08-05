@@ -55,8 +55,10 @@ web:
 | `screen` | screen resolution, colour depth, pixel ratio, window dimensions |
 | `bot` | automation markers: `navigator.webdriver`, driver artefacts, headless indicators |
 
-Nothing is collected that identifies a person: no cookies are read, no accounts are touched,
-no cross-site state is used, and no data leaves the honeypot.
+The collector does not request direct identifiers, read cookies, access accounts, or use
+cross-site state, and it sends no data outside the honeypot. Browser characteristics can still
+correlate visits and may constitute personal data under applicable privacy law; set retention
+and access controls accordingly.
 
 ## What the operator sees
 
@@ -71,9 +73,9 @@ GET /api/fingerprints?session_id=web-...
 ```
 
 Each record holds the raw signals, the derived hash, and every automation check that fired.
-The checks are evaluated on the server, so a visitor that tampers with the collector cannot
-choose its own verdict, and the underlying signals are always kept, never replaced by a
-bare label.
+The checks are evaluated on the server, so the client cannot submit a verdict field directly,
+and the underlying signals are retained. All inputs still come from the visitor and can be
+fabricated; treat the verdict as an indicator, not proof of a particular browser or bot.
 
 `hash` is the useful pivot: two visits sharing a hash came from the same browser
 environment, which is how repeat visits are recognised across addresses. Web events in the
@@ -88,9 +90,10 @@ share no session identifier.
 - Collection never affects what a visitor sees. If the store is unavailable, full, or
   failing, the response is byte-for-byte the same.
 - A submission larger than `--fingerprint-max-bytes` (64 KiB by default) is discarded.
-- At most `--fingerprint-max-per-session` submissions (20 by default) are kept per web
-  session, so a visitor cannot fill the database by submitting in a loop. Before a visitor
-  signs in there is no session cookie to key on, so the limit applies per source address.
+- At most `--fingerprint-max-per-session` submissions (20 by default) are kept for one web
+  session. A separate, looser `--fingerprint-max-per-ip` limit (500 by default) bounds one
+  source address across rotating sessions without permanently cutting off an active visitor
+  after 20 submissions.
 - Only known signal names are stored, strings are truncated, and nested structures are
   bounded, because the whole submission is attacker-controlled input.
 - A visitor that blocks JavaScript simply produces no fingerprint. Scanners that never

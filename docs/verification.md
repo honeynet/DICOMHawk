@@ -138,7 +138,7 @@ curl -si -X POST 'http://localhost:8080/SynapseSignOn/sts/login?signin=x' \
 
 ```
 HTTP/1.1 302 FOUND
-Location: /WorkflowUI/
+Location: /WorkflowUI/?path=
 ```
 
 Both attempts are written to the event log either way, which is the point of the surface.
@@ -282,7 +282,7 @@ docker compose logs dicomhawk | grep 'Fingerprinting:'
 200 application/javascript; charset=utf-8
 ClientCapabilities.min.js" data-signals="bot,browser,math,rendering,screen" data-ingest="/synapse/error/ClientInfo"
 INFO commands.serve: Fingerprinting: signals=bot,browser,math,rendering,screen
-INFO fingerprint.component: Fingerprinting: enabled, db=/opt/dicomhawk/state/fingerprint.db max_body=65536 max_per_session=20
+INFO fingerprint.component: Fingerprinting: enabled, db=/opt/dicomhawk/state/fingerprint.db max_body=65536 max_per_session=20 max_per_ip=500
 ```
 
 Both `data-signals` and `data-ingest` must be present. The collector reads both and exits

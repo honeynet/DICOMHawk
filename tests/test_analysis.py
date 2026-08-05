@@ -227,6 +227,45 @@ def test_yara_dicom_uid_text_alone_does_not_trip_structural_rules():
     assert matches == []
 
 
+def test_embedded_pe_rule_follows_its_dos_header_pointer():
+    payload = bytearray(512)
+    base = 37
+    payload[base : base + 2] = b"MZ"
+    payload[base + 0x3C : base + 0x40] = (0x80).to_bytes(4, "little")
+    payload[base + 0x80 : base + 0x84] = b"PE\x00\x00"
+    payload[base + 0x86 : base + 0x88] = (3).to_bytes(2, "little")
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+
+    matches, state = yara_engine.scan(rules, bytes(payload))
+
+    assert state is None
+    assert any(match["rule"] == "Embedded_Windows_PE" for match in matches)
+
+
+def test_embedded_pe_rule_matches_the_shipped_runbook_fixture():
+    """The exact stub runbook Phase 9E.2 writes into dimse_embedded_pe.dcm."""
+    stub = bytearray(0x100)
+    stub[0:2] = b"MZ"
+    stub[0x3C:0x40] = (0x80).to_bytes(4, "little")
+    stub[0x40 : 0x40 + 38] = b"This program cannot be run in DOS mode"
+    stub[0x80:0x84] = b"PE\x00\x00"
+    stub[0x86:0x88] = (3).to_bytes(2, "little")
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+
+    matches, _state = yara_engine.scan(rules, bytes(stub))
+
+    assert any(match["rule"] == "Embedded_Windows_PE" for match in matches)
+
+
+def test_embedded_pe_rule_rejects_unrelated_markers():
+    payload = (
+        b"MZ" + b"A" * 100 + b"PE\x00\x00" + b"This program cannot be run in DOS mode"
+    )
+    rules, _hash, _problems = yara_engine.compile_rules(worker.RULES_DIR)
+    matches, _state = yara_engine.scan(rules, payload)
+    assert all(match["rule"] != "Embedded_Windows_PE" for match in matches)
+
+
 def test_yara_invalid_operator_rule_is_skipped_not_fatal(tmp_path):
     bad = tmp_path / "bad.yar"
     bad.write_text("this is not valid yara syntax {{{")
@@ -235,6 +274,21 @@ def test_yara_invalid_operator_rule_is_skipped_not_fatal(tmp_path):
     )
     assert rules is not None  # shipped rules still compiled
     assert any("bad.yar" in p for p in problems)
+
+
+def test_ruleset_hash_includes_the_rule_namespace_and_filename(tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    source = "rule SameBody { condition: true }\n"
+    (first / "alpha.yar").write_text(source)
+    (second / "renamed.yar").write_text(source)
+
+    _rules, first_hash, _problems = yara_engine.compile_rules(first)
+    _rules, second_hash, _problems = yara_engine.compile_rules(second)
+
+    assert first_hash != second_hash
 
 
 def test_yara_scan_with_no_rules_returns_empty():
@@ -533,6 +587,40 @@ def test_extract_encapsulated_document_strips_the_part10_pad_byte():
     )
     assert document == body
     assert metadata["padding_bytes_removed"] == 1
+
+
+def test_honest_even_length_document_keeps_a_trailing_null_byte():
+    """An even-length document needs no pad, so its real final 0x00 must survive."""
+    body = b"%PDF-1.4 trailing-real-null\x00"
+    assert len(body) % 2 == 0
+
+    metadata, document = analyzers.extract_encapsulated_document(
+        _encapsulated(body, "application/pdf"), "part10", 1_000_000
+    )
+
+    assert document == body
+    assert metadata["padding_bytes_removed"] == 0
+    assert metadata["declared_length_mismatch"] is False
+
+
+def test_declared_document_length_cannot_hide_trailing_content():
+    body = b"%PDF-EICAR-STILL-SCANNED"
+    raw = _encapsulated(body, "application/pdf")
+    from pydicom import dcmread
+
+    ds = dcmread(BytesIO(raw))
+    ds.EncapsulatedDocumentLength = 5
+    rewritten = BytesIO()
+    ds.save_as(rewritten, enforce_file_format=True)
+
+    metadata, document = analyzers.extract_encapsulated_document(
+        rewritten.getvalue(), "part10", 1_000_000
+    )
+
+    assert document == body
+    assert metadata["declared_length_mismatch"] is True
+    assert metadata["declared_size"] == 5
+    assert metadata["stored_size"] == len(body)
 
 
 def test_extract_encapsulated_document_is_bounded():

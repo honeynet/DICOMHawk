@@ -40,10 +40,10 @@ automatically, so nothing is lost and nothing needs to be re-submitted.
   UTF-16LE), capped in both count and length.
 - **`dicom`:** bounded, non-PHI DICOM metadata: SOP class and instance UID, transfer syntax,
   modality, and whether `PixelData`/`EncapsulatedDocument` is present (with its declared
-  size only, never its bytes). A raw C-STORE dataset has no Part-10 preamble and its
-  negotiated transfer syntax isn't available to the analyzer, so that case is parsed as a
-  best-effort guess (Implicit VR Little Endian), and the result's `parse_assumption` field says
-  so explicitly whenever this applies.
+  size only, never its bytes). A raw C-STORE dataset has no Part-10 preamble, so the analyzer
+  uses the transfer syntax recorded from the accepted presentation context. Older captures
+  without that field fall back to pydicom's byte-level heuristic, which is recorded in
+  `parse_assumption`.
 - **`encapsulated_document`:** present only when the object carries one. DICOM objects can wrap a
   whole other file (a PDF, an Office document, a CDA record) inside a single attribute. That inner
   file is unwrapped, its permitted padding byte removed, and it is identified and scanned **on its
@@ -65,13 +65,14 @@ produced it.
 Point `--analysis-rules` at a directory of your own `.yar` files to run alongside the shipped
 starters. They compile under a separate namespace, so a custom rule can never shadow or
 override a shipped one. A rule file that fails to compile is skipped and logged rather than
-the rest of your rules and the shipped starters still run. `YARA include` directives are
-disabled for all rule files, shipped and custom alike.
+preventing the remaining custom rules and shipped starters from running. `YARA include`
+directives are disabled for all rule files, shipped and custom alike.
 
 The shipped rules are original and MIT-licensed. They cover two tiers of detection:
 
-- **Generic, low-false-positive signals:** an embedded Windows PE executable anywhere in the
-  payload, common script/shell indicators, and the standard EICAR antivirus test string.
+- **Generic, low-false-positive signals:** an embedded Windows PE whose DOS header points to a
+  bounded PE header with a plausible section count, common script/shell indicators, and the
+  standard EICAR antivirus test string.
 - **DICOM-structural and CVE-specific signals**, gated on a real Part 10 preamble (`DICM` at
   offset 128) so they never fire on a raw DIMSE dataset that merely lacks one: a PE loader
   polyglotted with the DICOM prefix, an Orthanc REST config smuggled in the preamble
@@ -96,9 +97,11 @@ automatically and resumes pending work. This isolates crashes and runaway resour
 the filesystem. The worker still runs as the same unprivileged container user, so it should
 be treated as a defense-in-depth boundary, not an airtight sandbox.
 
-Analysis never changes what an attacker sees: response codes, headers, routes, and timing on
-every DICOM/web/DICOMweb surface are identical whether analysis is enabled, disabled, caught
-up, or backlogged.
+Analysis never changes response codes, headers, routes, or payloads, whether it is enabled,
+disabled, caught up, or backlogged. Handing a captured payload to the worker is one bounded
+database write, and if that write cannot complete the job is recorded as not queued rather
+than surfaced to the sender. Exact response timing is not a guarantee an optional
+asynchronous component or the host scheduler can make.
 
 Two independent timeouts protect the worker: a per-job wall-clock deadline (`--analysis-timeout`,
 what actually bounds a single analysis) and a much larger process-lifetime CPU-time backstop

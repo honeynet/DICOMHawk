@@ -38,6 +38,9 @@ instead.
 | `DICOMHAWK_DB` | SQLite path for the DICOM index. |
 | `DICOMHAWK_ANALYSIS_DB` | SQLite path for analysis results. |
 | `DICOMHAWK_FINGERPRINT_DB` | SQLite path for collected fingerprints. |
+| `DICOMHAWK_FINGERPRINT_MAX_BYTES` | Maximum size of one collector submission. |
+| `DICOMHAWK_FINGERPRINT_MAX_PER_SESSION` | Fingerprints retained for one web session. |
+| `DICOMHAWK_FINGERPRINT_MAX_PER_IP` | Per-source-address fingerprint storage cap; must be at least the per-session cap. |
 
 The three database paths are deliberately separate files. A flood of captured objects filling
 the traces volume must not be able to break indexing or lose analysis results.

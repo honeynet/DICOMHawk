@@ -23,12 +23,12 @@ def compile_rules(
 ) -> tuple["yara.Rules | None", str | None, list[str]]:
     """Compile shipped + operator .yar files under separate namespaces; a bad operator rule is skipped, not fatal."""
     filepaths: dict[str, str] = {}
-    sources: list[bytes] = []
+    sources: list[tuple[str, bytes]] = []
     problems: list[str] = []
 
     for path in _yar_files(shipped_dir):
         filepaths[f"shipped/{path.stem}"] = str(path)
-        sources.append(path.read_bytes())
+        sources.append((f"shipped/{path.name}", path.read_bytes()))
 
     for path in _yar_files(Path(operator_dir) if operator_dir else None):
         try:
@@ -39,7 +39,7 @@ def compile_rules(
             problems.append(f"{path.name}: {exc}")
             continue
         filepaths[f"operator/{path.stem}"] = str(path)
-        sources.append(path.read_bytes())
+        sources.append((f"operator/{path.name}", path.read_bytes()))
 
     if not filepaths:
         return None, None, problems
@@ -50,7 +50,14 @@ def compile_rules(
         problems.append(f"ruleset compile failed: {exc}")
         return None, None, problems
 
-    ruleset_hash = hashlib.sha256(b"".join(sources)).hexdigest()
+    digest = hashlib.sha256()
+    for namespace, source in sorted(sources):
+        encoded_name = namespace.encode("utf-8")
+        digest.update(len(encoded_name).to_bytes(4, "big"))
+        digest.update(encoded_name)
+        digest.update(len(source).to_bytes(8, "big"))
+        digest.update(source)
+    ruleset_hash = digest.hexdigest()
     return rules, ruleset_hash, problems
 
 

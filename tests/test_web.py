@@ -848,7 +848,7 @@ def test_fujifilm_honey_credential_lands_on_the_worklist(repo, bus, caplog):
         )
 
     assert login.status_code == 302
-    assert login.headers["Location"] == "/WorkflowUI/"
+    assert login.headers["Location"] == "/WorkflowUI/?path="
     cookies = "\n".join(login.headers.getlist("Set-Cookie"))
     assert "IdpCookie=" in cookies
     assert "Secure" in cookies
@@ -1017,6 +1017,30 @@ def test_worklist_shell_strings_come_from_the_profile(repo, bus):
     assert "Global Worklists" not in body
 
 
+def test_worklist_matches_the_stateful_synapse_shell(repo, bus):
+    body = _worklist_client(repo, bus).get("/WorkflowUI/?path=").get_data(as_text=True)
+
+    assert 'data-section="Worklists"' in body
+    assert 'aria-expanded="true" data-section="Worklists"' in body
+    assert 'aria-expanded="false" data-section="Global Worklists"' in body
+    assert 'role="toolbar"' in body
+    assert "glyphicon-comment" in body
+    assert "glyphicon-camera" in body
+    assert "Change Priority" in body
+    assert "Reserve for Others" in body
+    assert 'class="disabled"' in body
+    assert "setInterval(updateClock, 1000)" in body
+    total = repo.count_studies()
+    assert f'<span class="wl-badge">{total}</span>' in body
+
+
+def test_worklist_does_not_copy_site_specific_demo_labels(repo, bus):
+    body = _worklist_client(repo, bus).get("/WorkflowUI/?path=").get_data(as_text=True)
+
+    for label in ("Matt test", "dynamic 2", "Mammo - Additional Samples"):
+        assert label not in body
+
+
 def test_worklist_template_hardcodes_no_folder_names():
     template = Path("src/profiles/fujifilm/web/templates/worklist.html").read_text()
 
@@ -1081,6 +1105,30 @@ def test_worklist_action_renders_the_configured_error(repo, bus, caplog):
     assert "Action: Open Viewer" in caplog.text
 
 
+def test_worklist_action_resolution_walks_nested_submenus():
+    from web.app import _selected_action
+
+    leaf = {"label": "Deep Action", "result": "error"}
+    worklist = {
+        "context_menu": [
+            {
+                "label": "First",
+                "result": "submenu",
+                "items": [
+                    {
+                        "label": "Second",
+                        "result": "submenu",
+                        "items": [leaf],
+                    }
+                ],
+            }
+        ]
+    }
+
+    assert _selected_action(worklist, "Deep Action") is leaf
+    assert _selected_action(worklist, "attacker supplied") is None
+
+
 @pytest.mark.parametrize(
     "action",
     ["<script>alert(1)</script>", "Open Viewer'; DROP TABLE", "A" * 5000, ""],
@@ -1114,6 +1162,25 @@ def test_worklist_column_filter_is_bounded_in_the_log(repo, bus, caplog):
     term = next(p for p in params if p.startswith("Filter patient_name"))
 
     assert len(term.split(": ", 1)[1]) == _WORKLIST_PARAM_LIMIT
+
+
+def test_worklist_column_filters_change_the_visible_rows(repo, bus):
+    client = _worklist_client(repo, bus)
+    listing = client.get("/WorkflowUI/?path=").get_data(as_text=True)
+    patient = re.search(r'<tr data-uid="[^"]+"[^>]*>.*?<td>([^<]+)</td>', listing, re.S)
+    assert patient is not None
+
+    filtered = client.get(
+        "/WorkflowUI/",
+        query_string={"path": "", "filter_patient_name": patient.group(1)},
+    ).get_data(as_text=True)
+    missing = client.get(
+        "/WorkflowUI/",
+        query_string={"path": "", "filter_patient_name": "NO-SUCH-PATIENT"},
+    ).get_data(as_text=True)
+
+    assert patient.group(1) in filtered
+    assert "No studies." in missing
 
 
 def test_worklist_unknown_filter_parameter_is_ignored(repo, bus):

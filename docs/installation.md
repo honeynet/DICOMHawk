@@ -57,6 +57,10 @@ The script writes two files, both of which stay out of version control:
   `8081` for the operator API; the override republishes the set you actually chose. Without it,
   changing `DICOMHAWK_PORTS` alone would leave the honeypot listening on a port nothing publishes.
 
+The guided installer accepts packaged profile names only. A custom profile needs a deliberate
+read-only bind mount and should be configured manually as described in [Commands](./commands.md).
+The script also refuses to replace a `docker-compose.override.yml` it did not generate.
+
 Everything the script does is described below, so nothing about the result is opaque. Production
 deployment (TLS, egress lockdown, storage quotas) is deliberately **not** automated. See
 [Deployment](./deployment.md).

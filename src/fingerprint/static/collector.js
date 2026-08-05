@@ -1,4 +1,4 @@
-/* Browser fingerprint collector. */
+/* Browser fingerprint collector. Third-party notices: ../ATTRIBUTION.md. */
 (function () {
   'use strict';
 

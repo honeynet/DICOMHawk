@@ -156,12 +156,14 @@ def extract_encapsulated_document(
 
     stored_bytes = len(document)
     declared = ds.get("EncapsulatedDocumentLength")
-    if isinstance(declared, int) and 0 < declared <= stored_bytes:
+    declared = declared if isinstance(declared, int) and declared > 0 else None
+    length_mismatch = declared is not None and stored_bytes - declared not in (0, 1)
+    if declared is not None and not length_mismatch:
+        # An honest length is exact or one pad byte short; trust it rather than guessing.
         document = document[:declared]
-    elif document.endswith(b"\x00"):
-        document = document[
-            :-1
-        ]  # the single pad byte Part 10 allows for an odd-length value
+    elif declared is None and document.endswith(b"\x00"):
+        # No declared length, so fall back to the single pad byte Part 10 allows.
+        document = document[:-1]
 
     truncated = len(document) > max_bytes
     if truncated:
@@ -171,6 +173,9 @@ def extract_encapsulated_document(
     file_type = identify_type(document)
     metadata = {
         "declared_mime": declared_mime,
+        "declared_size": declared,
+        "stored_size": stored_bytes,
+        "declared_length_mismatch": length_mismatch,
         "size": len(document),
         "padding_bytes_removed": stored_bytes - len(document) if not truncated else 0,
         "truncated": truncated,

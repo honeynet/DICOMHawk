@@ -1,7 +1,8 @@
 # Features
 
-DICOMHawk is a medical imaging honeypot. It presents the network surface of a real PACS,
-records everything an attacker does against it, and never becomes a route into anything else.
+DICOMHawk is a medical imaging honeypot. It presents the network surface of a real PACS and
+records attacker interactions while containment controls limit access to the host and other
+systems.
 
 ## DICOM services
 
@@ -76,7 +77,8 @@ imaging-parser exploits and embedded executables.
 
 Analysis runs in a separate worker process under a hard deadline and never executes the payload.
 Results are attached to the session that submitted them and are visible only to the operator.
-Nothing about the analysis changes what the attacker sees.
+It does not change attacker-facing status codes, headers, routes, or response bodies. Queueing is
+bounded and a failed handoff is logged, but exact response timing is not guaranteed.
 
 See [Payload analysis](./analysis.md).
 
@@ -97,7 +99,9 @@ exact incoming bytes retained alongside the parsed copy.
 
 A loopback-only operator API and dashboard summarise what has been collected, including
 per-attacker rollups, captured credentials, uploaded artifacts with their analysis results,
-sessions, and browser fingerprints. It is never published to the internet.
+sessions, and browser fingerprints. The supplied deployment publishes it on host loopback only;
+operators must preserve that restriction or protect remote access with authentication and
+network controls.
 
 ## Containment
 

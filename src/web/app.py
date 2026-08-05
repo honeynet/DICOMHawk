@@ -362,7 +362,7 @@ def _revoke_session() -> None:
 def _grant(username: str = ""):
     """Grant response: redirect into the decoy landing (browse console if enabled) with the session cookie set."""
     web = _web()
-    landing = web.routes["console"] if web.browse else web.routes["worklist"]
+    landing = _landing_url(web)
     resp = make_response(redirect(landing, code=302))
     secure = web.secure_cookies or request.is_secure
     resp.set_cookie(
@@ -618,8 +618,7 @@ def entry():
     # Fujifilm launches the authenticated shell under WorkflowUI.
     web = _web()
     if _session_ok():
-        landing = web.routes["console"] if web.browse else web.routes["worklist"]
-        return redirect(landing, code=302)
+        return redirect(_landing_url(web), code=302)
     signin = secrets.token_hex(16)
     return redirect(f"{web.routes['login']}?signin={signin}", code=302)
 
@@ -632,6 +631,12 @@ def _worklist_folders(worklist: dict) -> list[dict]:
     ]
 
 
+def _landing_url(web) -> str:
+    if web.browse:
+        return web.routes["console"]
+    return f"{web.routes['worklist']}?path="
+
+
 def _selected_folder(worklist: dict, requested: str) -> dict | None:
     """Resolve against the profile's own labels; an unknown folder falls back, never reflects."""
     for item in _worklist_folders(worklist):
@@ -640,10 +645,33 @@ def _selected_folder(worklist: dict, requested: str) -> dict | None:
     return None
 
 
+def _worklist_sidebar_counts(worklist: dict) -> dict[str, int]:
+    """Live study totals for folders that asked; the schema forbids them on a filtered folder."""
+    wanted = [
+        item
+        for item in _worklist_folders(worklist)
+        if item.get("dynamic_count") == "studies"
+    ]
+    if not wanted:
+        return {}
+    total = current_app.config["REPO"].count_studies()
+    return {item["label"]: total for item in wanted}
+
+
 def _selected_action(worklist: dict, requested: str) -> dict | None:
-    for item in worklist.get("context_menu", []):
-        if item["label"] == requested:
+    """Resolve against every declared action at any submenu depth, never reflecting input."""
+    pending = [
+        *worklist.get("context_menu", []),
+        *worklist.get("toolbar", []),
+        *worklist.get("header_links", []),
+    ]
+    while pending:
+        item = pending.pop()
+        if not isinstance(item, dict):
+            continue
+        if item.get("label") == requested:
             return item
+        pending.extend(item.get("items", []))
     return None
 
 
@@ -657,6 +685,13 @@ def _worklist_filters(worklist: dict) -> dict[str, str]:
     return filters
 
 
+def _filter_worklist_rows(rows: list[dict], filters: dict[str, str]) -> list[dict]:
+    for key, value in filters.items():
+        needle = value.casefold()
+        rows = [row for row in rows if needle in str(row.get(key, "")).casefold()]
+    return rows
+
+
 def worklist(subpath=None):
     web = _web()
     if not _session_ok():
@@ -667,6 +702,7 @@ def worklist(subpath=None):
     action = _selected_action(config, request.args.get("action", ""))
     filters = _worklist_filters(config)
     rows = _worklist_rows((folder or {}).get("filter", {}).get("modality", ""))
+    rows = _filter_worklist_rows(rows, filters)
 
     # Only a study already on this page opens, so the parameter cannot probe for others.
     wanted = request.args.get("study", "")[:_WORKLIST_PARAM_LIMIT]
@@ -675,7 +711,7 @@ def worklist(subpath=None):
         detail = None
 
     # Rebuilt from resolved values only, so no raw query parameter is ever echoed back.
-    query = {"path": folder["label"]} if folder else {}
+    query = {"path": folder["label"] if folder else ""}
     query.update({f"filter_{key}": value for key, value in filters.items()})
 
     params = [f"Studies: {len(rows)}"]
@@ -694,7 +730,12 @@ def worklist(subpath=None):
         studies=rows,
         worklist=config,
         username=_session_user(),
-        total_studies=current_app.config["REPO"].count_studies(),
+        total_studies=(
+            len(rows)
+            if folder is not None or filters
+            else current_app.config["REPO"].count_studies()
+        ),
+        sidebar_counts=_worklist_sidebar_counts(config),
         folder=folder,
         detail=detail,
         filters=filters,

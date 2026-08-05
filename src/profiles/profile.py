@@ -56,7 +56,7 @@ _WORKLIST_ROW_KEYS = frozenset(
 # Sidebar folders may narrow the study list only on these identifier keywords.
 _WORKLIST_FILTER_KEYS = frozenset({"modality"})
 # What a context-menu entry does: show the study we already loaded, or refuse plausibly.
-_WORKLIST_RESULTS = frozenset({"detail", "error"})
+_WORKLIST_RESULTS = frozenset({"detail", "disabled", "error", "submenu"})
 
 # (abstract_syntax_uid, [transfer_syntax_uids]); a plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
@@ -405,6 +405,15 @@ def _validate_worklist_sidebar(sidebar) -> None:
             for count_key in ("count", "urgent_count"):
                 if count_key in folder:
                     _worklist_count(folder[count_key], f"{item_where}.{count_key}")
+            if folder.get("dynamic_count") not in (None, "studies"):
+                raise ValueError(
+                    f"Unknown {item_where}.dynamic_count '{folder['dynamic_count']}'"
+                )
+            if folder.get("dynamic_count") and folder.get("filter"):
+                # The badge is the repository study total, so a narrowed folder would contradict its own list.
+                raise ValueError(
+                    f"Profile '{item_where}' cannot set both dynamic_count and filter"
+                )
             unknown = set(_mapping(folder.get("filter"), f"{item_where}.filter"))
             unknown -= _WORKLIST_FILTER_KEYS
             if unknown:
@@ -414,34 +423,50 @@ def _validate_worklist_sidebar(sidebar) -> None:
                 )
 
 
-def _validate_worklist_menu(context_menu) -> None:
-    if not isinstance(context_menu, list):
-        raise ValueError("Profile 'web.worklist.context_menu' must be a list")
-    for i, item in enumerate(context_menu):
-        where = f"web.worklist.context_menu[{i}]"
-        entry = _mapping(item, where)
-        if not isinstance(_require(entry, "label", where), str):
-            raise ValueError(f"Profile '{where}.label' must be a string")
+def _validate_worklist_actions(items, where: str, *, icons: bool = False) -> None:
+    if not isinstance(items, list):
+        raise ValueError(f"Profile '{where}' must be a list")
+    for i, item in enumerate(items):
+        item_where = f"{where}[{i}]"
+        if isinstance(item, str):
+            # Bare label strings predate icons; name the fix, don't fail generically.
+            raise ValueError(
+                f"Profile '{item_where}' is a string; entries are now mappings, "
+                f"so write {{label: {item}}} instead"
+            )
+        entry = _mapping(item, item_where)
+        if not isinstance(_require(entry, "label", item_where), str):
+            raise ValueError(f"Profile '{item_where}.label' must be a string")
+        if icons and not isinstance(_require(entry, "icon", item_where), str):
+            raise ValueError(f"Profile '{item_where}.icon' must be a string")
         result = entry.get("result", "error")
         if result not in _WORKLIST_RESULTS:
             raise ValueError(
-                f"Unknown {where}.result '{result}' "
+                f"Unknown {item_where}.result '{result}' "
                 f"(known: {', '.join(sorted(_WORKLIST_RESULTS))})"
             )
+        children = entry.get("items", [])
+        if result == "submenu" and not children:
+            raise ValueError(f"Profile '{item_where}.items' must not be empty")
+        if children:
+            _validate_worklist_actions(children, f"{item_where}.items")
 
 
 def _validate_worklist(worklist: dict) -> None:
     """Reject a malformed worklist block at load time, like every other web section."""
     if not isinstance(worklist.get("title"), str):
         raise ValueError("Profile 'web.worklist.title' must be a string")
-    links = worklist.get("header_links")
-    if not isinstance(links, list) or any(not isinstance(v, str) for v in links):
-        raise ValueError(
-            "Profile 'web.worklist.header_links' must be a list of strings"
-        )
+    _validate_worklist_actions(
+        worklist.get("header_links"), "web.worklist.header_links", icons=True
+    )
+    _validate_worklist_actions(
+        worklist.get("toolbar", []), "web.worklist.toolbar", icons=True
+    )
     _validate_worklist_columns(worklist.get("columns"))
     _validate_worklist_sidebar(worklist.get("sidebar"))
-    _validate_worklist_menu(worklist.get("context_menu"))
+    _validate_worklist_actions(
+        worklist.get("context_menu"), "web.worklist.context_menu"
+    )
     for key in ("footer", "messages", "placeholders"):
         section = _mapping(worklist.get(key), f"web.worklist.{key}")
         for name, value in section.items():

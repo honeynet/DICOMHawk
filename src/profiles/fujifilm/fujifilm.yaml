@@ -317,7 +317,17 @@ web:
   # Post-login worklist shell; every visible string is profile data, the engine ships none of it.
   worklist:
     title: All Studies with Images
-    header_links: ["Messages", "Help", "Settings", "Text Size"]
+    header_links:
+      - {label: Messages, icon: comment, result: error}
+      - {label: Help, icon: question-sign, result: error}
+      - {label: Settings, icon: cog, result: error}
+      - {label: Text Size, icon: font, result: error}
+    toolbar:
+      - {label: Open Viewer, icon: camera, result: error}
+      - {label: Documents, icon: file, result: error}
+      - {label: Study Information, icon: edit, result: detail}
+      - {label: Reports, icon: floppy-disk, result: error}
+      - {label: Reserve for Me, icon: pushpin, result: error}
     columns:
       - {key: patient_name, label: Patient Name}
       - {key: description, label: Proc Description}
@@ -332,7 +342,7 @@ web:
       - {key: accession_number, label: Accession}
       - {key: institution_name, label: Institution}
       - {key: referring_physician, label: Referring}
-    # Folder names observed in a deployment; counts are omitted so no badge contradicts real data.
+    # Observed folder names; the only badge uses the live repository total.
     sidebar:
       - label: My History
       - label: My Favorites
@@ -343,30 +353,52 @@ web:
           - {label: All Studies Global}
           - {label: Unread Studies Global}
       - label: Worklists
+        open: true
         items:
           - {label: All Patients}
+          - {label: All Patients Copy}
+          - {label: All Reservations}
           - {label: All Studies}
           - {label: All Studies with Images}
-          - {label: All Reservations}
+          - {label: All Studies with Images Copy}
           - {label: CT, filter: {modality: CT}}
           - {label: CR, filter: {modality: CR}}
+          - {label: Unread Studies, dynamic_count: studies}
       - label: Collections
         items:
           - {label: My Collection}
-          - {label: Mammo Samples}
+          - {label: Teaching Files}
       - label: Public Collections
         items:
-          - {label: Matt test}
-          - {label: Mammo - Additional Samples}
+          - {label: Shared Teaching Files}
     context_menu:
       - {label: Open Viewer, result: error}
       - {label: Open PowerJacket, result: error}
       - {label: Open Series Picker, result: error}
-      - {label: Study Information, result: detail}
       - {label: Reports, result: error}
       - {label: Notes, result: error}
       - {label: Documents, result: error}
+      - {label: Scan Documents, result: error}
+      - label: Change Priority
+        result: submenu
+        items:
+          - {label: Routine, result: error}
+          - {label: Urgent, result: error}
+          - {label: STAT, result: error}
+      - label: Change Status
+        result: submenu
+        items:
+          - {label: Read, result: error}
+          - {label: Unread, result: error}
+      - label: Add to Collection
+        result: submenu
+        items:
+          - {label: My Collection, result: error}
+          - {label: New Collection, result: error}
+      - {label: Set Permissions, result: error}
       - {label: Reserve for Me, result: error}
+      - {label: Reserve for Others, result: error}
+      - {label: Unreserve, result: disabled}
       - {label: DICOM Transfer, result: error}
     footer:
       item_label: items

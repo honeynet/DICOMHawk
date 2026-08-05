@@ -24,7 +24,7 @@ The filesystem layout and complete schema are documented in
   and worklist activity are recorded in the shared JSON interaction log.
 - Ordinary credentials are denied unless `grant_access` is enabled. Declared honey
   credentials always enter the decoy and produce a distinct high-confidence event.
-- Successful Fujifilm flows land under `/WorkflowUI/`; deep links below that prefix
+- Successful Fujifilm flows land on `/WorkflowUI/?path=`; deep links below `/WorkflowUI/`
   remain in the authenticated shell.
 - The worklist reads trusted seeded studies from the same repository used by DIMSE.
 - Request bodies are bounded by `web.max_request_bytes` (1 MiB by default), and logged

@@ -2,6 +2,7 @@ from contextlib import contextmanager
 import tempfile
 import gzip
 import hashlib
+import os
 import shutil
 from io import BytesIO
 from typing import BinaryIO, Callable
@@ -130,8 +131,14 @@ class Storage:
         """Preserve an exact attacker-supplied payload as a uniquely named gzip trace."""
         artifact_id = uuid4().hex
         captured = self._capture_path(artifact_id, suffix)
-        with gzip.open(captured, "wb") as output:
-            shutil.copyfileobj(BytesIO(payload), output)
+        partial = captured.with_name(f".{captured.name}.part")
+        try:
+            with gzip.open(partial, "wb") as output:
+                shutil.copyfileobj(BytesIO(payload), output)
+            os.replace(partial, captured)
+        except Exception:
+            partial.unlink(missing_ok=True)
+            raise
         return Capture(
             artifact_id, captured, len(payload), hashlib.sha256(payload).hexdigest()
         )
@@ -141,17 +148,19 @@ class Storage:
         position = source.tell()
         artifact_id = uuid4().hex
         captured = self._capture_path(artifact_id, suffix)
+        partial = captured.with_name(f".{captured.name}.part")
         digest = hashlib.sha256()
         size = 0
         try:
             source.seek(0)
-            with gzip.open(captured, "wb") as output:
+            with gzip.open(partial, "wb") as output:
                 while chunk := source.read(1024 * 1024):
                     digest.update(chunk)
                     size += len(chunk)
                     output.write(chunk)
+            os.replace(partial, captured)
         except Exception:
-            captured.unlink(missing_ok=True)
+            partial.unlink(missing_ok=True)
             raise
         finally:
             source.seek(position)
@@ -162,8 +171,14 @@ class Storage:
         """Yield a writer that gzip-preserves a request incrementally; call .result() after writing."""
         artifact_id = uuid4().hex
         captured = self._capture_path(artifact_id, suffix)
-        with gzip.open(captured, "wb") as output:
-            yield _CaptureWriter(artifact_id, captured, output)
+        partial = captured.with_name(f".{captured.name}.part")
+        try:
+            with gzip.open(partial, "wb") as output:
+                yield _CaptureWriter(artifact_id, captured, output)
+            os.replace(partial, captured)
+        except Exception:
+            partial.unlink(missing_ok=True)
+            raise
 
 
 class _CaptureWriter:

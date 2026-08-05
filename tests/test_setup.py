@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).parents[1]
 SCRIPT = REPO / "setup.sh"
 
@@ -232,6 +234,25 @@ def test_a_stale_override_is_removed_when_ports_return_to_default(tmp_path):
     assert not (root / "docker-compose.override.yml").exists()
 
 
+def test_an_unowned_compose_override_is_never_changed(tmp_path):
+    root, env, _log = _harness(tmp_path, DICOMHAWK_PORTS="11112")
+    override = root / "docker-compose.override.yml"
+    original = "services:\n  dicomhawk:\n    volumes: [custom:/data]\n"
+    override.write_text(original)
+
+    result = _run(root, env, "--defaults", "--no-start")
+
+    assert result.returncode != 0
+    assert "refusing" in result.stderr
+    assert override.read_text() == original
+    assert not (root / ".env").exists()
+
+
+def test_generated_override_is_written_atomically(tmp_path):
+    assert ".compose.tmp." in SCRIPT.read_text()
+    assert '} >"$tmp"\n    mv "$tmp" "$OVERRIDE_FILE"' in SCRIPT.read_text()
+
+
 def test_a_custom_port_survives_a_reconfigure_that_does_not_mention_it(tmp_path):
     root, env, _log = _harness(tmp_path, DICOMHAWK_PORTS="11112")
     _run(root, env, "--defaults", "--no-start")
@@ -249,6 +270,18 @@ def test_existing_env_is_not_silently_overwritten(tmp_path):
     result = _run(root, env, "--defaults", "--no-start")
     assert result.returncode != 0
     assert "--reconfigure" in result.stderr
+
+
+def test_keep_existing_configuration_does_not_reseed():
+    source = SCRIPT.read_text()
+    assert "keep) KEEP_EXISTING=1; DO_SEED=0" in source
+
+
+def test_guided_installer_does_not_offer_an_unmounted_custom_profile():
+    step = (
+        SCRIPT.read_text().split("step_profile()", 1)[1].split("step_ae_title()", 1)[0]
+    )
+    assert '"custom"' not in step
 
 
 def test_reconfigure_overwrites_an_existing_env(tmp_path):
@@ -556,6 +589,24 @@ def test_an_exported_value_still_beats_the_saved_one(tmp_path):
 def test_a_non_numeric_port_is_refused_before_anything_is_written(tmp_path):
     # Otherwise it reaches .env and surfaces minutes later as an opaque `compose up` failure.
     root, env, _log = _harness(tmp_path, DICOMHAWK_PORTS="abc")
+    result = _run(root, env, "--defaults", "--no-start")
+    assert result.returncode != 0
+    assert not (root / ".env").exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("DICOMHAWK_PROFILE", "/host/custom.yaml"),
+        ("DICOMHAWK_AE_TITLE", "THIS-AE-TITLE-IS-TOO-LONG"),
+        ("DICOMHAWK_ANALYSIS", "perhaps"),
+        ("DICOMHAWK_FINGERPRINT", "1"),
+        ("DICOMHAWK_PUBLIC_BASE_URL", "not a url"),
+        ("DICOMHAWK_TRUSTED_PROXY", "999.1.1.1"),
+    ],
+)
+def test_invalid_exported_answers_are_refused_before_writing(tmp_path, name, value):
+    root, env, _log = _harness(tmp_path, **{name: value})
     result = _run(root, env, "--defaults", "--no-start")
     assert result.returncode != 0
     assert not (root / ".env").exists()

@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
-_BUSY_TIMEOUT_SECONDS = 5.0  # how long a writer waits for SQLite's single write lock
+_BUSY_TIMEOUT_SECONDS = 0.05  # fail fast rather than delay the collector response
 
 
 class FingerprintRecord(Base):
@@ -40,11 +41,13 @@ def _now() -> datetime:
 class FingerprintStore:
     """The durable fingerprint table. Own engine and own SQLite file, separate from every other store."""
 
-    def __init__(self, db_path: str, max_per_session: int = 20):
+    def __init__(self, db_path: str, max_per_session: int = 20, max_per_ip: int = 500):
         self.db_path = db_path
         self.max_per_session = max_per_session
+        self.max_per_ip = max_per_ip
         self.engine = None
         self.session = None
+        self._record_lock = threading.Lock()
 
     def start(self) -> "FingerprintStore":
         # Needs a real path: under NullPool a new ":memory:" connection is a fresh empty database.
@@ -88,6 +91,16 @@ class FingerprintStore:
             or 0
         )
 
+    def ip_count(self, ip: str | None) -> int:
+        if ip is None or not self.ready():
+            return 0
+        return (
+            self.session.query(func.count(FingerprintRecord.fingerprint_id))
+            .filter(FingerprintRecord.ip == ip)
+            .scalar()
+            or 0
+        )
+
     def record(
         self,
         *,
@@ -103,27 +116,32 @@ class FingerprintStore:
         bot_verdict: str | None,
         source_errors: int,
     ) -> bool:
-        """Insert one submission. False when the store is closed or the per-session cap is reached."""
-        # Counting then inserting can over-admit slightly under concurrency; this is a bound, not a quota.
-        if not self.ready() or self.session_count(session_id) >= self.max_per_session:
+        """Insert one submission, bounded by both browser session and source address."""
+        if not self.ready():
             return False
-        self.session.add(
-            FingerprintRecord(
-                fingerprint_id=fingerprint_id,
-                fingerprint_hash=fingerprint_hash,
-                session_id=session_id,
-                ip=ip,
-                local_port=local_port,
-                path=path,
-                user_agent=user_agent,
-                signals=signals,
-                bot_checks=bot_checks,
-                bot_verdict=bot_verdict,
-                source_errors=source_errors,
-                created_at=_now(),
+        with self._record_lock:
+            if self.session_count(session_id) >= self.max_per_session:
+                return False
+            # Far looser than the session cap: a repeat visitor is worth keeping.
+            if self.ip_count(ip) >= self.max_per_ip:
+                return False
+            self.session.add(
+                FingerprintRecord(
+                    fingerprint_id=fingerprint_id,
+                    fingerprint_hash=fingerprint_hash,
+                    session_id=session_id,
+                    ip=ip,
+                    local_port=local_port,
+                    path=path,
+                    user_agent=user_agent,
+                    signals=signals,
+                    bot_checks=bot_checks,
+                    bot_verdict=bot_verdict,
+                    source_errors=source_errors,
+                    created_at=_now(),
+                )
             )
-        )
-        self._commit()
+            self._commit()
         return True
 
     def get(self, fingerprint_id: str) -> FingerprintRecord | None:
@@ -160,5 +178,7 @@ class FingerprintStore:
         return rows, total
 
 
-def new_fingerprint_store(db_path: str, max_per_session: int = 20) -> FingerprintStore:
-    return FingerprintStore(db_path, max_per_session)
+def new_fingerprint_store(
+    db_path: str, max_per_session: int = 20, max_per_ip: int = 500
+) -> FingerprintStore:
+    return FingerprintStore(db_path, max_per_session, max_per_ip)
