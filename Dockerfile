@@ -15,6 +15,11 @@ FROM python:3.12-slim AS runtime
 RUN groupadd --system dicomhawk \
     && useradd --system --gid dicomhawk --no-create-home --shell /usr/sbin/nologin dicomhawk
 
+# libmagic1: python-magic links against it; yara-python bundles its own libyara.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /install /usr/local
 
 # Writable runtime paths owned by the unprivileged user (traces, DB, logs live on mounted volumes).

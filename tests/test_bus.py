@@ -2,14 +2,15 @@ import gc
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from dicomhawk.bus import (
     InteractionEvent,
     RecentEventsHandler,
     SessionCache,
     _extract_params,
-    hash_request,
     new_bus,
+    new_dev_log,
     recent_events,
 )
 from dicomhawk.status import QRStatus
@@ -95,23 +96,6 @@ def test_extract_params_bounds_attacker_controlled_values():
     assert params[0].endswith("...[truncated]")
 
 
-def test_hash_request_matches_sha256_and_preserves_stream_position():
-    import hashlib
-    from io import BytesIO
-
-    class _FakeRequest:
-        DataSet = BytesIO(b"raw c-store bytes")
-
-    class _FakeEvt:
-        request = _FakeRequest()
-
-    _FakeEvt.request.DataSet.seek(5)  # arbitrary position before hashing
-    digest = hash_request(_FakeEvt())
-
-    assert digest == hashlib.sha256(b"raw c-store bytes").hexdigest()
-    assert _FakeEvt.request.DataSet.tell() == 5  # position restored
-
-
 def test_interaction_event_from_http_round_trips_through_json():
     ie = InteractionEvent.from_http(
         "WEB",
@@ -137,6 +121,42 @@ def test_interaction_event_from_http_round_trips_through_json():
     assert data["path"] == "/login"
     assert data["status"] is None  # DIMSE-only field, None for HTTP
     assert data["artifact"] == {"sha256": "abc", "captured": True}
+
+
+def test_background_event_carries_artifact_id_and_analysis_with_no_network_context():
+    ie = InteractionEvent.background(
+        "ANALYSIS",
+        "ANALYSIS_RESULT",
+        session_id="1785516989802",
+        artifact_id="9d1a2d9ca0f0",
+        analysis={"entropy": 5.2},
+        session_parameters=["Matched: EICAR_Test_String"],
+    )
+    data = json.loads(str(ie))
+
+    assert data["channel"] == "ANALYSIS"
+    assert data["artifact_id"] == "9d1a2d9ca0f0"
+    assert data["analysis"] == {"entropy": 5.2}
+    assert data["ip"] is None and data["port"] is None and data["local_port"] is None
+
+
+def test_console_formatter_shows_session_not_none_for_background_events():
+    from dicomhawk.bus import _ConsoleFormatter
+
+    ie = InteractionEvent.background(
+        "ANALYSIS",
+        "ANALYSIS_RESULT",
+        session_id="1785516989802",
+        artifact_id="9d1a2d9ca0f0",
+        session_parameters=["Matched: EICAR_Test_String"],
+    )
+    record = logging.LogRecord("bus", logging.INFO, __file__, 0, ie, None, None)
+    line = _ConsoleFormatter(use_color=False).format(record)
+
+    assert "None:None" not in line
+    assert "session=1785516989802" in line
+    assert "artifact=9d1a2d9ca0f0" in line
+    assert "Matched: EICAR_Test_String" in line
 
 
 class _FakeRequestorAddr:
@@ -204,3 +224,18 @@ def test_new_bus_replaces_its_handlers_instead_of_duplicating(tmp_path):
     rotating = next(h for h in logger.handlers if isinstance(h, RotatingFileHandler))
     assert rotating.maxBytes == 50 * 1024 * 1024
     assert rotating.backupCount == 5
+
+
+def test_new_bus_silences_pynetdicoms_own_exception_tracebacks(tmp_path, capsys):
+    new_bus(str(tmp_path / "bus.log"), verbose=False)
+    logging.getLogger("pynetdicom.association").exception(ValueError("boom"))
+    assert "boom" not in capsys.readouterr().err
+
+
+def test_new_dev_log_reinstates_pynetdicom_detail_over_new_bus_default(
+    tmp_path, capsys
+):
+    new_bus(str(tmp_path / "bus.log"), verbose=False)
+    new_dev_log(str(tmp_path / "dev.log"))
+    logging.getLogger("pynetdicom.association").exception(ValueError("boom"))
+    assert "boom" in Path(tmp_path / "dev.log").read_text()

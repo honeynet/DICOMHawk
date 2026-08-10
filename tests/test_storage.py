@@ -1,4 +1,6 @@
 import gzip
+import io
+import shutil
 
 import pytest
 
@@ -69,15 +71,86 @@ def test_compress_gzips_content_under_traces_dir(storage):
 def test_capture_preserves_exact_bytes_with_unique_names(storage):
     first = storage.capture(b"first\x00payload", suffix=".stow")
     second = storage.capture(b"second", suffix=".stow")
-    assert first != second
-    assert gzip.decompress(first.read_bytes()) == b"first\x00payload"
-    assert gzip.decompress(second.read_bytes()) == b"second"
+    assert first.artifact_id != second.artifact_id
+    assert first.path != second.path
+    assert gzip.decompress(first.path.read_bytes()) == b"first\x00payload"
+    assert gzip.decompress(second.path.read_bytes()) == b"second"
+
+
+def test_capture_records_size_and_sha256_of_the_exact_payload(storage):
+    import hashlib
+
+    payload = b"first\x00payload"
+    captured = storage.capture(payload)
+    assert captured.size == len(payload)
+    assert captured.sha256 == hashlib.sha256(payload).hexdigest()
 
 
 def test_capture_stream_does_not_require_buffering_whole_payload(storage):
     with storage.capture_stream(suffix=".request") as output:
         output.write(b"part-one")
         output.write(b"part-two")
-    captured = list(storage.traces_dir.glob("*.request.gz"))
-    assert len(captured) == 1
-    assert gzip.decompress(captured[0].read_bytes()) == b"part-onepart-two"
+        captured = output.result()
+    files = list(storage.traces_dir.glob("*.request.gz"))
+    assert len(files) == 1
+    assert files[0] == captured.path
+    assert gzip.decompress(captured.path.read_bytes()) == b"part-onepart-two"
+    assert captured.size == len(b"part-onepart-two")
+
+
+def test_failed_capture_stream_removes_partial_file(storage):
+    with pytest.raises(RuntimeError):
+        with storage.capture_stream(suffix=".request") as output:
+            output.write(b"partial")
+            raise RuntimeError("client disconnected")
+
+    assert list(storage.traces_dir.glob("*.part")) == []
+    assert list(storage.traces_dir.glob("*.request.gz")) == []
+
+
+def test_capture_fileobj_preserves_exact_bytes_and_position(storage):
+    source = io.BytesIO(b"exact\x00dimse-dataset")
+    source.seek(5)
+
+    captured = storage.capture_fileobj(source)
+
+    assert source.tell() == 5
+    assert gzip.decompress(captured.path.read_bytes()) == b"exact\x00dimse-dataset"
+    assert captured.size == len(b"exact\x00dimse-dataset")
+
+
+def test_failed_capture_removes_partial_file(storage, monkeypatch):
+    def fail_after_write(source, output):
+        output.write(source.read(4))
+        raise OSError("disk write failed")
+
+    monkeypatch.setattr(shutil, "copyfileobj", fail_after_write)
+
+    with pytest.raises(OSError, match="disk write failed"):
+        storage.capture(b"attacker payload")
+
+    assert list(storage.traces_dir.glob("*.part")) == []
+    assert list(storage.traces_dir.glob("*.dcm.gz")) == []
+
+
+def test_failed_capture_fileobj_removes_partial_and_restores_position(storage):
+    class FailingSource(io.BytesIO):
+        def __init__(self, payload):
+            super().__init__(payload)
+            self.reads = 0
+
+        def read(self, size=-1):
+            self.reads += 1
+            if self.reads == 2:
+                raise OSError("source disconnected")
+            return super().read(4)
+
+    source = FailingSource(b"attacker payload")
+    source.seek(3)
+
+    with pytest.raises(OSError, match="source disconnected"):
+        storage.capture_fileobj(source)
+
+    assert source.tell() == 3
+    assert list(storage.traces_dir.glob("*.part")) == []
+    assert list(storage.traces_dir.glob("*.dcm.gz")) == []

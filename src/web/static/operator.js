@@ -97,6 +97,42 @@ function renderCredentials(items) {
   });
 }
 
+function renderArtifacts(items) {
+  const root = byId("artifacts"); root.replaceChildren();
+  items.forEach((item) => {
+    const row = document.createElement("tr");
+    cell(row, time(item.created_at), "muted"); cell(row, item.channel);
+    const disposition = cell(row, ""); disposition.textContent = "";
+    badge(disposition, item.disposition, item.disposition === "rejected" ? "bad" : "good");
+    const state = cell(row, ""); state.textContent = "";
+    badge(state, item.state, item.state === "completed" ? "good" : item.state === "pending" || item.state === "running" ? "warn" : "bad");
+    const rules = (item.matched_rules || []);
+    const rulesCell = cell(row, "");
+    if (rules.length) { rulesCell.textContent = ""; rules.forEach((rule) => badge(rulesCell, rule, "bad")); }
+    const hash = item.sha256 ? `${item.sha256.slice(0, 12)}…` : "—";
+    const hashCell = cell(row, hash, "mono"); hashCell.title = item.sha256 || "";
+    root.appendChild(row);
+  });
+}
+
+function renderFingerprints(items) {
+  const root = byId("fingerprints"); root.replaceChildren();
+  items.forEach((item) => {
+    const row = document.createElement("tr");
+    cell(row, time(item.created_at), "muted"); cell(row, item.ip || "—", "mono");
+    const verdict = cell(row, "");
+    if (item.bot_verdict) { verdict.textContent = ""; badge(verdict, item.bot_verdict, "bad"); }
+    else verdict.textContent = "—";
+    const checks = (item.bot_checks || []);
+    const checksCell = cell(row, checks.length ? "" : "—");
+    checks.forEach((check) => badge(checksCell, check.check, "warn"));
+    const agent = cell(row, item.user_agent || "—"); agent.title = item.user_agent || "";
+    const hash = item.fingerprint_hash ? `${item.fingerprint_hash.slice(0, 12)}…` : "—";
+    const hashCell = cell(row, hash, "mono"); hashCell.title = item.fingerprint_hash || "";
+    root.appendChild(row);
+  });
+}
+
 function query() {
   const params = new URLSearchParams();
   const hours = byId("range").value;
@@ -114,9 +150,13 @@ async function refresh() {
   const notice = byId("notice");
   notice.className = "notice"; notice.textContent = "Refreshing retained activity…";
   try {
-    const response = await fetch(`/api/overview?${query()}`, {cache: "no-store"});
-    if (!response.ok) throw new Error(`Operator API returned ${response.status}`);
-    const data = await response.json(); const stats = data.stats;
+    const [overviewResponse, artifactsResponse, fingerprintsResponse] = await Promise.all([
+      fetch(`/api/overview?${query()}`, {cache: "no-store"}),
+      fetch("/api/artifacts?limit=50", {cache: "no-store"}),
+      fetch("/api/fingerprints?limit=50", {cache: "no-store"}),
+    ]);
+    if (!overviewResponse.ok) throw new Error(`Operator API returned ${overviewResponse.status}`);
+    const data = await overviewResponse.json(); const stats = data.stats;
     byId("total-events").textContent = stats.total_events.toLocaleString();
     byId("unique-sources").textContent = stats.unique_source_ips.toLocaleString();
     byId("credential-attempts").textContent = stats.credentials_captured.toLocaleString();
@@ -124,6 +164,8 @@ async function refresh() {
     byId("rejected-payloads").textContent = stats.uploads_rejected.toLocaleString();
     renderChannels(stats.by_channel); renderAttackers(data.attackers); renderEvents(data.events);
     renderUploads(data.uploads); renderCredentials(data.credentials);
+    renderArtifacts(artifactsResponse.ok ? await artifactsResponse.json() : []);
+    renderFingerprints(fingerprintsResponse.ok ? await fingerprintsResponse.json() : []);
     const skipped = stats.skipped_records ? ` · ${stats.skipped_records} malformed record(s) skipped` : "";
     notice.textContent = `Updated ${new Date().toLocaleTimeString()}${skipped}`;
   } catch (error) {

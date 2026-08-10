@@ -1,6 +1,8 @@
 """Handler unit tests and real loopback DIMSE integration tests."""
 
 import io
+import gzip
+import hashlib
 import json
 import logging
 import tempfile
@@ -343,6 +345,15 @@ def test_c_store_quarantines_visible_in_find_but_blocked_on_get(loopback, caplog
     assert event["artifact"]["sop_instance_uid"] == ds.SOPInstanceUID
     assert event["artifact"]["sop_class_uid"] == ds.SOPClassUID
     assert event["artifact"]["captured"] is True
+    capture = loopback.repo.storage.traces_dir / event["artifact"]["filename"]
+    raw = gzip.decompress(capture.read_bytes())
+    assert hashlib.sha256(raw).hexdigest() == event["artifact"]["sha256"]
+
+    canonical = loopback.repo.storage.quarantine_dir / str(ds.SOPInstanceUID)
+    assert canonical.read_bytes()[128:132] == b"DICM"
+    stored = dcmread(canonical)
+    assert stored.SOPInstanceUID == ds.SOPInstanceUID
+    assert stored.file_meta.TransferSyntaxUID == ExplicitVRLittleEndian
 
     find_results = list(
         assoc.send_c_find(
@@ -380,6 +391,113 @@ def test_c_store_rejects_instance_over_configured_size(loopback):
 
     assert status.Status == int(QRStatus.STORE_ERROR)
     assert not (loopback.repo.storage.quarantine_dir / str(ds.SOPInstanceUID)).exists()
+
+
+def test_c_store_submits_accepted_artifact_to_sink(tmp_path):
+    """The injected ArtifactSink receives one SubmittedArtifact for an accepted C-STORE."""
+    submitted = []
+    bus = logging.getLogger(f"test-sink-{tmp_path.name}")
+    bus.setLevel(logging.INFO)
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+
+    scp = AE(ae_title="SCPTEST")
+    scp.add_supported_context(CTImageStorage, scu_role=True, scp_role=True)
+    handlers = list(new_dimse_factory(repo, bus, sink=submitted.append).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    port = server.socket.getsockname()[1]
+    try:
+        scu = AE(ae_title="SCUTEST")
+        scu.add_requested_context(CTImageStorage)
+        assoc = scu.associate("127.0.0.1", port)
+        ds = _ct_dataset()
+        status = assoc.send_c_store(ds)
+        assoc.release()
+    finally:
+        server.shutdown()
+        repo.stop()
+
+    assert status.Status == 0x0000
+    assert len(submitted) == 1
+    artifact = submitted[0]
+    assert artifact.channel == "DIMSE"
+    assert artifact.request_type == "C-STORE"
+    assert artifact.disposition == "stored"
+    assert artifact.source_encoding == "dimse-dataset"
+    assert artifact.sop_instance_uid == str(ds.SOPInstanceUID)
+    assert (
+        artifact.transfer_syntax_uid
+    )  # the association's actual negotiated syntax, not a guess
+    assert artifact.capture.sha256
+
+
+def test_c_store_submitted_artifact_carries_the_actual_negotiated_transfer_syntax(
+    tmp_path,
+):
+    """Regression guard: the analyzer must not have to guess a DIMSE dataset's encoding."""
+    from pydicom.uid import ExplicitVRBigEndian
+
+    submitted = []
+    bus = logging.getLogger(f"test-ts-{tmp_path.name}")
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+    scp = AE(ae_title="SCPTEST")
+    scp.add_supported_context(
+        CTImageStorage,
+        transfer_syntax=[ExplicitVRBigEndian],
+        scu_role=True,
+        scp_role=True,
+    )
+    handlers = list(new_dimse_factory(repo, bus, sink=submitted.append).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    port = server.socket.getsockname()[1]
+    try:
+        scu = AE(ae_title="SCUTEST")
+        scu.add_requested_context(CTImageStorage, transfer_syntax=[ExplicitVRBigEndian])
+        assoc = scu.associate("127.0.0.1", port)
+        ds = Dataset()
+        ds.file_meta = FileMetaDataset()
+        ds.file_meta.TransferSyntaxUID = ExplicitVRBigEndian
+        ds.file_meta.MediaStorageSOPClassUID = CTImageStorage
+        uid = generate_uid()
+        ds.file_meta.MediaStorageSOPInstanceUID = uid
+        ds.SOPClassUID = CTImageStorage
+        ds.SOPInstanceUID = uid
+        ds.PatientID = "TESTPAT"
+        ds.StudyInstanceUID = generate_uid()
+        ds.SeriesInstanceUID = generate_uid()
+        assoc.send_c_store(ds)
+        assoc.release()
+    finally:
+        server.shutdown()
+        repo.stop()
+
+    assert len(submitted) == 1
+    assert submitted[0].transfer_syntax_uid == str(ExplicitVRBigEndian)
+
+
+def test_c_store_succeeds_even_when_the_artifact_sink_raises(tmp_path):
+    """Analysis failures must never change what the peer sees; the payload is already captured."""
+
+    def exploding_sink(_artifact):
+        raise RuntimeError("analysis store unavailable")
+
+    bus = logging.getLogger(f"test-sink-raise-{tmp_path.name}")
+    repo = new_repo(None, new_store(str(tmp_path / "traces"))).start()
+    scp = AE(ae_title="SCPTEST")
+    scp.add_supported_context(CTImageStorage, scu_role=True, scp_role=True)
+    handlers = list(new_dimse_factory(repo, bus, sink=exploding_sink).values())
+    server = scp.start_server(("127.0.0.1", 0), evt_handlers=handlers, block=False)
+    port = server.socket.getsockname()[1]
+    try:
+        scu = AE(ae_title="SCUTEST")
+        scu.add_requested_context(CTImageStorage)
+        assoc = scu.associate("127.0.0.1", port)
+        status = assoc.send_c_store(_ct_dataset())
+        assoc.release()
+    finally:
+        server.shutdown()
+        repo.stop()
+
+    assert status.Status == 0x0000
 
 
 def test_c_get_retrieves_a_safely_seeded_instance(loopback):
@@ -471,3 +589,182 @@ def test_association_rejected_for_disallowed_calling_aet(tmp_path, caplog):
 
     server.shutdown()
     repo.stop()
+
+
+# --- C-FIND returns the attributes the Q/R index cannot hold ---
+
+
+def _seed_study(loopback):
+    """Seed one study so the detail index and the rollups both have something to answer with."""
+    from seeding.seeder import new_seeder
+
+    seeder = new_seeder(loopback.repo)
+    assert seeder._seed_fallback(seeder._locations[0], "CT", "find-epoch") > 0
+    (uid,) = loopback.repo.conn.execute(
+        __import__("sqlalchemy").text("select study_instance_uid from instance limit 1")
+    ).fetchone()
+    return str(uid)
+
+
+def _enriched_query(**keys):
+    ds = Dataset()
+    ds.QueryRetrieveLevel = "STUDY"
+    ds.PatientName = ""
+    for keyword, value in keys.items():
+        setattr(ds, keyword, value)
+    return ds
+
+
+def _find(assoc, query):
+    return [
+        ds
+        for status, ds in assoc.send_c_find(
+            query, StudyRootQueryRetrieveInformationModelFind
+        )
+        if ds is not None
+    ]
+
+
+def test_c_find_answers_attributes_the_index_has_no_column_for(loopback):
+    """The web worklist shows these; a blank C-FIND would contradict it."""
+    _seed_study(loopback)
+    assoc = loopback.associate()
+
+    responses = _find(
+        assoc,
+        _enriched_query(
+            PatientSex="",
+            PatientBirthDate="",
+            StudyDescription="",
+            InstitutionName="",
+            BodyPartExamined="",
+            ReferringPhysicianName="",
+        ),
+    )
+    assoc.release()
+
+    assert responses
+    answer = responses[0]
+    assert answer.PatientSex in ("M", "F")
+    assert answer.PatientBirthDate
+    assert answer.StudyDescription
+    assert answer.InstitutionName
+    assert answer.BodyPartExamined
+    assert answer.ReferringPhysicianName
+
+
+def test_c_find_answers_modalities_and_instance_count(loopback):
+    _seed_study(loopback)
+    assoc = loopback.associate()
+
+    responses = _find(
+        assoc, _enriched_query(ModalitiesInStudy="", NumberOfStudyRelatedInstances="")
+    )
+    assoc.release()
+
+    assert responses
+    assert "CT" in str(responses[0].ModalitiesInStudy)
+    assert int(responses[0].NumberOfStudyRelatedInstances) > 0
+
+
+def test_c_find_matches_the_web_worklist_field_for_field(loopback, tmp_path):
+    """The two surfaces must agree; a difference is exactly what an attacker looks for."""
+    from profiles.profile import load_profile
+    from web.app import new_web
+
+    _seed_study(loopback)
+    client = new_web(
+        load_profile("fujifilm"), loopback.repo, loopback.bus
+    ).test_client()
+    client.post(
+        "/SynapseSignOn/sts/login?signin=x",
+        data={"username": "svc_dicom", "password": "svc_dicom"},
+    )
+    page = client.get("/WorkflowUI/").get_data(as_text=True)
+
+    assoc = loopback.associate()
+    answer = _find(
+        assoc,
+        _enriched_query(
+            PatientSex="", PatientBirthDate="", StudyDescription="", InstitutionName=""
+        ),
+    )[0]
+    assoc.release()
+
+    for value in (
+        str(answer.StudyDescription),
+        str(answer.InstitutionName),
+        str(answer.PatientBirthDate),
+    ):
+        assert value in page
+
+
+@pytest.mark.parametrize(
+    "keyword,matching,non_matching",
+    [
+        ("StudyDescription", "*CHEST*", "*KNEE*"),
+        ("BodyPartExamined", "CHEST", "ABDOMEN"),
+        ("StudyDescription", "CT*", "MR*"),
+    ],
+)
+def test_c_find_filters_on_an_enriched_key(loopback, keyword, matching, non_matching):
+    """Returning every study for a filtered query would be its own tell."""
+    _seed_study(loopback)
+    assoc = loopback.associate()
+
+    hits = _find(assoc, _enriched_query(**{keyword: matching}))
+    misses = _find(assoc, _enriched_query(**{keyword: non_matching}))
+    assoc.release()
+
+    assert len(hits) == 1
+    assert misses == []
+
+
+def test_c_find_without_enriched_keys_is_unchanged(loopback):
+    """A query that asks for none of them must cost nothing and gain no extra elements."""
+    study_uid = _seed_study(loopback)
+    assoc = loopback.associate()
+
+    responses = _find(assoc, _find_query(study_uid))
+    assoc.release()
+
+    assert len(responses) == 1
+    assert sorted(e.keyword for e in responses[0]) == [
+        "PatientID",
+        "QueryRetrieveLevel",
+        "RetrieveAETitle",
+        "StudyInstanceUID",
+    ]
+
+
+def test_c_find_enrichment_survives_a_dead_detail_index(loopback, monkeypatch):
+    """A failed rollup must degrade to blank values, never change the C-FIND status."""
+    _seed_study(loopback)
+    monkeypatch.setattr(loopback.repo, "study_details", lambda uids: {})
+    assoc = loopback.associate()
+
+    responses = _find(assoc, _enriched_query(PatientSex="", StudyDescription=""))
+    assoc.release()
+
+    assert len(responses) == 1
+    assert str(responses[0].PatientSex) == ""
+
+
+@pytest.mark.parametrize(
+    "value,query,expected",
+    [
+        ("CT CHEST", "", True),
+        ("CT CHEST", None, True),
+        ("CT CHEST", "CT CHEST", True),
+        ("CT CHEST", "ct chest", True),
+        ("CT CHEST", "MR BRAIN", False),
+        ("CT CHEST", "*CHEST*", True),
+        ("CT CHEST", "CT*", True),
+        ("CT CHEST", "*BRAIN*", False),
+        ("", "CT", False),
+    ],
+)
+def test_enriched_match_cases(value, query, expected):
+    from dicomhawk.handlers import _enriched_match
+
+    assert _enriched_match(value, query) is expected

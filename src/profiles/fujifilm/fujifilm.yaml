@@ -2,9 +2,9 @@
 _ts_verification: &ts_verification         # Table 1-5: Implicit + Explicit VR LE only
   - 1.2.840.10008.1.2           # Implicit VR Little Endian
   - 1.2.840.10008.1.2.1         # Explicit VR Little Endian
-_ts_qr_find: &ts_qr_find                   # "LEI" — Q/R FIND SCP: Implicit VR LE only
+_ts_qr_find: &ts_qr_find                   # "LEI": Q/R FIND SCP, Implicit VR LE only
   - 1.2.840.10008.1.2
-_ts_qr_move_get: &ts_qr_move_get           # "LEI, LEE" — Q/R MOVE/GET SCP
+_ts_qr_move_get: &ts_qr_move_get           # "LEI, LEE": Q/R MOVE/GET SCP
   - 1.2.840.10008.1.2
   - 1.2.840.10008.1.2.1
 _ts_storage_llu: &ts_storage_llu           # Table 1-1 group "LL, L, U"
@@ -57,30 +57,30 @@ dicom:
 
   qr_classes:
     find:
-      - uid: 1.2.840.10008.5.1.4.1.2.1.1     # Patient Root Q/R Information Model – FIND
+      - uid: 1.2.840.10008.5.1.4.1.2.1.1     # Patient Root Q/R Information Model - FIND
         transfer_syntaxes: *ts_qr_find
-      - uid: 1.2.840.10008.5.1.4.1.2.2.1     # Study Root Q/R Information Model – FIND
+      - uid: 1.2.840.10008.5.1.4.1.2.2.1     # Study Root Q/R Information Model - FIND
         transfer_syntaxes: *ts_qr_find
-      - uid: 1.2.840.10008.5.1.4.1.2.3.1     # Patient/Study Only Q/R Information Model – FIND, retired
+      - uid: 1.2.840.10008.5.1.4.1.2.3.1     # Patient/Study Only Q/R Information Model - FIND, retired
         transfer_syntaxes: *ts_qr_find
     move:
-      - uid: 1.2.840.10008.5.1.4.1.2.1.2     # Patient Root Q/R Information Model – MOVE
+      - uid: 1.2.840.10008.5.1.4.1.2.1.2     # Patient Root Q/R Information Model - MOVE
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.2.2     # Study Root Q/R Information Model – MOVE
+      - uid: 1.2.840.10008.5.1.4.1.2.2.2     # Study Root Q/R Information Model - MOVE
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.3.2     # Patient/Study Only Q/R Information Model – MOVE, retired
+      - uid: 1.2.840.10008.5.1.4.1.2.3.2     # Patient/Study Only Q/R Information Model - MOVE, retired
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.4.2     # Composite Instance Root Retrieve – MOVE
+      - uid: 1.2.840.10008.5.1.4.1.2.4.2     # Composite Instance Root Retrieve - MOVE
         transfer_syntaxes: *ts_qr_move_get
     get:
-      - uid: 1.2.840.10008.5.1.4.1.2.2.3     # Study Root Q/R Information Model – GET
+      - uid: 1.2.840.10008.5.1.4.1.2.2.3     # Study Root Q/R Information Model - GET
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.4.3     # Composite Instance Root Retrieve – GET
+      - uid: 1.2.840.10008.5.1.4.1.2.4.3     # Composite Instance Root Retrieve - GET
         transfer_syntaxes: *ts_qr_move_get
-      - uid: 1.2.840.10008.5.1.4.1.2.5.3     # Composite Instance Retrieve Without Bulk Data – GET
+      - uid: 1.2.840.10008.5.1.4.1.2.5.3     # Composite Instance Retrieve Without Bulk Data - GET
         transfer_syntaxes: *ts_qr_move_get
 
-  # Table 1-1 Storage SCP subset (~77 classes) — NOT AllStoragePresentationContexts.
+  # Table 1-1 Storage SCP subset (~77 classes), NOT AllStoragePresentationContexts.
   storage_classes:
     # --- accepted TS set "LL, L, U" ---
     - uid: 1.2.392.200036.9125.1.1.2                # Fuji Private CR Storage (FujiCR)
@@ -91,17 +91,17 @@ dicom:
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.1                 # Computed Radiography Image Storage
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.1               # Digital X-Ray Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.1.1               # Digital X-Ray Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.1.1             # Digital X-Ray Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.1.1.1             # Digital X-Ray Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.2               # Digital Mammography X-Ray Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.1.2               # Digital Mammography X-Ray Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.2.1             # Digital Mammography X-Ray Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.1.2.1             # Digital Mammography X-Ray Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.3               # Digital Intra-Oral X-Ray Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.1.3               # Digital Intra-Oral X-Ray Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.1.3.1             # Digital Intra-Oral X-Ray Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.1.3.1             # Digital Intra-Oral X-Ray Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.2                 # CT Image Storage
       transfer_syntaxes: *ts_storage_llu
@@ -131,9 +131,9 @@ dicom:
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.13.1.3            # Breast Tomosynthesis Image Storage
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.14.1              # Intravascular OCT Image Storage – For Presentation
+    - uid: 1.2.840.10008.5.1.4.1.1.14.1              # Intravascular OCT Image Storage - For Presentation
       transfer_syntaxes: *ts_storage_llu
-    - uid: 1.2.840.10008.5.1.4.1.1.14.2              # Intravascular OCT Image Storage – For Processing
+    - uid: 1.2.840.10008.5.1.4.1.1.14.2              # Intravascular OCT Image Storage - For Processing
       transfer_syntaxes: *ts_storage_llu
     - uid: 1.2.840.10008.5.1.4.1.1.20                # Nuclear Medicine Image Storage
       transfer_syntaxes: *ts_storage_llu
@@ -248,8 +248,8 @@ web:
   enabled: true
   templates_dir: fujifilm
   favicon: synapse/favicon.ico
-  grant_access: false                            # false = log + deny; true = grant into the decoy worklist
-  secure_cookies: true                           # observed HTTPS deployment cookie behavior
+  grant_access: bait                             # none | bait | any; only the honey_credentials below get in
+  secure_cookies: true                           # real product is HTTPS; without TLS set DICOMHAWK_SECURE_COOKIES=false
 
   # Real Synapse paths, sourced from public passive recon; response kinds are defined in web/app.py::_HONEYTRAP_RESPONSES.
   honeytraps:
@@ -274,7 +274,7 @@ web:
 
   # The observed deployment emits both the modern and legacy CSP header.
   legacy_csp_header: true
-  # Keep the {nonce} placeholder — filled per request so inline scripts run.
+  # Keep the {nonce} placeholder; it is filled per request so inline scripts run.
   content_security_policy: >-
     default-src 'self'; script-src 'nonce-{nonce}' 'self'; style-src 'self' 'unsafe-inline';
     img-src *; report-uri /SynapseSignOn/sts/csp/report
@@ -302,7 +302,113 @@ web:
       ThinkLogService ViewerService WorkflowEngine SubscriptionService
       ExtApiService XDSConsumerApi FHIRCastHub
 
-  # No honey hint: it would fingerprint the Synapse login capture.
+  # Bait accounts. No honey hint: the sign-on page is a verbatim capture, so it discloses nothing.
+  honey_credentials:
+    - username: svc_dicom
+      password: svc_dicom
+    - username: pacsadmin
+      password: Password1
+
+  fingerprint:
+    enabled: true
+
+  worklist_page_size: 100
+
+  # Post-login worklist shell; every visible string is profile data, the engine ships none of it.
+  worklist:
+    title: All Studies with Images
+    header_links:
+      - {label: Messages, icon: comment, result: error}
+      - {label: Help, icon: question-sign, result: error}
+      - {label: Settings, icon: cog, result: error}
+      - {label: Text Size, icon: font, result: error}
+    toolbar:
+      - {label: Open Viewer, icon: camera, result: error}
+      - {label: Documents, icon: file, result: error}
+      - {label: Study Information, icon: edit, result: detail}
+      - {label: Reports, icon: floppy-disk, result: error}
+      - {label: Reserve for Me, icon: pushpin, result: error}
+    columns:
+      - {key: patient_name, label: Patient Name}
+      - {key: description, label: Proc Description}
+      - {key: modality, label: Modality}
+      - {key: images, label: Images}
+      - {key: patient_id, label: Patient ID}
+      - {key: patient_sex, label: Sex}
+      - {key: patient_birth_date, label: DOB}
+      - {key: age, label: Age}
+      - {key: body_part, label: Body Part}
+      - {key: study_datetime, label: Study Date Time}
+      - {key: accession_number, label: Accession}
+      - {key: institution_name, label: Institution}
+      - {key: referring_physician, label: Referring}
+    # Observed folder names; the only badge uses the live repository total.
+    sidebar:
+      - label: My History
+      - label: My Favorites
+      - label: Global Worklists
+        items:
+          - {label: All Patients Global}
+          - {label: All Recent Studies Global}
+          - {label: All Studies Global}
+          - {label: Unread Studies Global}
+      - label: Worklists
+        open: true
+        items:
+          - {label: All Patients}
+          - {label: All Patients Copy}
+          - {label: All Reservations}
+          - {label: All Studies}
+          - {label: All Studies with Images}
+          - {label: All Studies with Images Copy}
+          - {label: CT, filter: {modality: CT}}
+          - {label: CR, filter: {modality: CR}}
+          - {label: Unread Studies, dynamic_count: studies}
+      - label: Collections
+        items:
+          - {label: My Collection}
+          - {label: Teaching Files}
+      - label: Public Collections
+        items:
+          - {label: Shared Teaching Files}
+    context_menu:
+      - {label: Open Viewer, result: error}
+      - {label: Open PowerJacket, result: error}
+      - {label: Open Series Picker, result: error}
+      - {label: Reports, result: error}
+      - {label: Notes, result: error}
+      - {label: Documents, result: error}
+      - {label: Scan Documents, result: error}
+      - label: Change Priority
+        result: submenu
+        items:
+          - {label: Routine, result: error}
+          - {label: Urgent, result: error}
+          - {label: STAT, result: error}
+      - label: Change Status
+        result: submenu
+        items:
+          - {label: Read, result: error}
+          - {label: Unread, result: error}
+      - label: Add to Collection
+        result: submenu
+        items:
+          - {label: My Collection, result: error}
+          - {label: New Collection, result: error}
+      - {label: Set Permissions, result: error}
+      - {label: Reserve for Me, result: error}
+      - {label: Reserve for Others, result: error}
+      - {label: Unreserve, result: disabled}
+      - {label: DICOM Transfer, result: error}
+    footer:
+      item_label: items
+      refresh_label: Last refreshed
+    messages:
+      action_failed: The imaging service did not respond. Contact your system administrator.
+    placeholders:
+      description: UNKNOWN
+      status: ""
+      empty: ""
 
   # Synapse paths and cookie names sourced from public passive recon.
   routes:
@@ -315,6 +421,9 @@ web:
     sts_authorize: /SynapseSignOn/sts/connect/authorize
     csp_report: /SynapseSignOn/sts/csp/report
     translated_items: /synapse/error/TranslatedItems
+    # Sits in the same asset prefix and namespace as the real scripts, so it doesn't stand out.
+    fingerprint_script: /static/synapse/ClientCapabilities.min.js
+    fingerprint_ingest: /synapse/error/ClientInfo
   cookies:
     antiforgery: idsrv.xsrf
     session: IdpCookie

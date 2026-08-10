@@ -1,10 +1,15 @@
+import errno
 import logging
+import re
 import threading
+import time
 
 import waitress
 
+from analysis.store import AnalysisStore
 from dicomhawk.component import Component
 from dicomhawk.repository import Repository
+from dicomhawk.storage import ArtifactSink
 from profiles.profile import ProfileConfig
 
 from .app import new_web
@@ -12,12 +17,83 @@ from .dicomweb import new_dicomweb
 from .operator_api import new_operator_api
 
 logger = logging.getLogger(__name__)
+_QUEUE_DEPTH = re.compile(r"^Task queue depth is (\d+)$")
+
+
+class _QueueDepthFilter(logging.Filter):
+    """Keep queue-pressure milestones without logging every queued request."""
+
+    def __init__(self, quiet_seconds: float = 10.0, clock=time.monotonic):
+        super().__init__()
+        self.quiet_seconds = quiet_seconds
+        self.clock = clock
+        self.last_seen = 0.0
+        self.next_depth = 1
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def _next_milestone(depth: int) -> int:
+        for milestone in (5, 10, 25, 50, 100):
+            if depth < milestone:
+                return milestone
+        return 2 ** depth.bit_length()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "waitress.queue":
+            return True
+        match = _QUEUE_DEPTH.match(record.getMessage())
+        if match is None:
+            return True
+        depth = int(match.group(1))
+        now = self.clock()
+        with self.lock:
+            if now - self.last_seen >= self.quiet_seconds:
+                self.next_depth = 1
+            self.last_seen = now
+            if depth < self.next_depth:
+                return False
+            self.next_depth = self._next_milestone(depth)
+            return True
+
+
+_queue_depth_filter = _QueueDepthFilter()
+
+
+def _install_waitress_queue_filter() -> None:
+    queue_logger = logging.getLogger("waitress.queue")
+    if _queue_depth_filter not in queue_logger.filters:
+        queue_logger.addFilter(_queue_depth_filter)
+
+
+def _serve(name: str, server, stopping: threading.Event) -> None:
+    """stop() closes the socket asyncore is polling, so EBADF while stopping is expected."""
+    try:
+        server.run()
+    except OSError as exc:
+        if not (stopping.is_set() and exc.errno == errno.EBADF):
+            raise
+        logger.debug(f"Listener {name} closed during shutdown")
+
+
+def _hide_app_server_header(app):
+    """waitress adds 'Via: <ident>' whenever the app sets Server itself, naming the real stack."""
+
+    def wrapped(environ, start_response):
+        def start(status, headers, exc_info=None):
+            kept = [(k, v) for k, v in headers if k.lower() != "server"]
+            return start_response(status, kept, exc_info)
+
+        return app(environ, start)
+
+    return wrapped
 
 
 def _build_servers(specs, trusted_proxy=None):
+    _install_waitress_queue_filter()
     servers, threads = [], []
+    stopping = threading.Event()
     try:
-        for name, app, host, port, max_body, proxied in specs:
+        for name, app, host, port, max_body, proxied, ident in specs:
             proxy_options = {}
             if proxied and trusted_proxy:
                 proxy_options = {
@@ -32,31 +108,37 @@ def _build_servers(specs, trusted_proxy=None):
                     "clear_untrusted_proxy_headers": True,
                 }
             server = waitress.create_server(
-                app,
+                _hide_app_server_header(app),
                 host=host,
                 port=port,
                 max_request_body_size=max_body,
+                ident=ident,
                 **proxy_options,
             )
             servers.append(server)
             threads.append(
                 threading.Thread(
-                    target=server.run, daemon=True, name=f"dicomhawk-{name}"
+                    target=_serve,
+                    args=(name, server, stopping),
+                    daemon=True,
+                    name=f"dicomhawk-{name}",
                 )
             )
     except Exception:
-        _stop_servers(servers, threads)
+        _stop_servers(servers, threads, stopping)
         raise
     try:
         for thread in threads:
             thread.start()
     except Exception:
-        _stop_servers(servers, threads)
+        _stop_servers(servers, threads, stopping)
         raise
-    return servers, threads
+    return servers, threads, stopping
 
 
-def _stop_servers(servers, threads):
+def _stop_servers(servers, threads, stopping=None):
+    if stopping is not None:
+        stopping.set()
     for server in servers:
         try:
             server.close()
@@ -84,6 +166,10 @@ class WebComponent(Component):
         operator_host: str = "127.0.0.1",
         operator_token: str | None = None,
         trusted_proxy: str | None = None,
+        sink: ArtifactSink | None = None,
+        analysis_store: AnalysisStore | None = None,
+        fingerprint_sink=None,
+        fingerprint_store=None,
     ):
         self.profile = profile
         self.repo = repo
@@ -94,14 +180,27 @@ class WebComponent(Component):
         self.operator_host = operator_host
         self.operator_token = operator_token
         self.trusted_proxy = trusted_proxy
+        self.sink = sink
+        self.analysis_store = analysis_store
+        self.fingerprint_sink = fingerprint_sink
+        self.fingerprint_store = fingerprint_store
         self._servers = []
         self._threads: list[threading.Thread] = []
+        self._stopping: threading.Event | None = None
 
     def start(self) -> None:
         if self._servers:
             return
-        web_app = new_web(self.profile, self.repo, self.bus)
-        operator_app = new_operator_api(self.profile, self.bus, self.operator_token)
+        web_app = new_web(
+            self.profile, self.repo, self.bus, self.sink, self.fingerprint_sink
+        )
+        operator_app = new_operator_api(
+            self.profile,
+            self.bus,
+            self.operator_token,
+            self.analysis_store,
+            self.fingerprint_store,
+        )
         specs = (
             (
                 "web",
@@ -110,6 +209,7 @@ class WebComponent(Component):
                 self.web_port,
                 self.profile.web.max_request_bytes,
                 True,
+                self.profile.web.headers.get("Server"),
             ),
             (
                 "operator",
@@ -118,15 +218,18 @@ class WebComponent(Component):
                 self.operator_port,
                 1_048_576,
                 False,
+                None,
             ),
         )
-        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
+        self._servers, self._threads, self._stopping = _build_servers(
+            specs, self.trusted_proxy
+        )
         logger.info(
             f"Web: {self.host}:{self.web_port}  Operator API: {self.operator_host}:{self.operator_port}"
         )
 
     def stop(self) -> None:
-        _stop_servers(self._servers, self._threads)
+        _stop_servers(self._servers, self._threads, self._stopping)
 
 
 class DicomWebComponent(Component):
@@ -139,19 +242,22 @@ class DicomWebComponent(Component):
         bus: logging.Logger,
         host: str,
         trusted_proxy: str | None = None,
+        sink: ArtifactSink | None = None,
     ):
         self.profile = profile
         self.repo = repo
         self.bus = bus
         self.host = host
         self.trusted_proxy = trusted_proxy
+        self.sink = sink
         self._servers = []
         self._threads: list[threading.Thread] = []
+        self._stopping: threading.Event | None = None
 
     def start(self) -> None:
         if self._servers:
             return
-        apps = new_dicomweb(self.profile, self.repo, self.bus)
+        apps = new_dicomweb(self.profile, self.repo, self.bus, self.sink)
         specs = [
             (
                 f"dicomweb-{port}",
@@ -160,16 +266,19 @@ class DicomWebComponent(Component):
                 port,
                 app.config["MAX_CONTENT_LENGTH"],
                 True,
+                self.profile.web.headers.get("Server"),
             )
             for port, app in apps.items()
         ]
-        self._servers, self._threads = _build_servers(specs, self.trusted_proxy)
+        self._servers, self._threads, self._stopping = _build_servers(
+            specs, self.trusted_proxy
+        )
         logger.info(
             "DICOMweb: " + ", ".join(f"{self.host}:{port}" for port in sorted(apps))
         )
 
     def stop(self) -> None:
-        _stop_servers(self._servers, self._threads)
+        _stop_servers(self._servers, self._threads, self._stopping)
 
 
 def new_web_component(
@@ -182,6 +291,10 @@ def new_web_component(
     operator_host: str = "127.0.0.1",
     operator_token: str | None = None,
     trusted_proxy: str | None = None,
+    sink: ArtifactSink | None = None,
+    analysis_store: AnalysisStore | None = None,
+    fingerprint_sink=None,
+    fingerprint_store=None,
 ) -> WebComponent:
     return WebComponent(
         profile,
@@ -193,6 +306,10 @@ def new_web_component(
         operator_host,
         operator_token,
         trusted_proxy,
+        sink,
+        analysis_store,
+        fingerprint_sink,
+        fingerprint_store,
     )
 
 
@@ -202,5 +319,6 @@ def new_dicomweb_component(
     bus: logging.Logger,
     host: str,
     trusted_proxy: str | None = None,
+    sink: ArtifactSink | None = None,
 ) -> DicomWebComponent:
-    return DicomWebComponent(profile, repo, bus, host, trusted_proxy)
+    return DicomWebComponent(profile, repo, bus, host, trusted_proxy, sink)

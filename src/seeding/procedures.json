@@ -1,0 +1,62 @@
+{
+  "CT": {
+    "_default": ["CT WITHOUT CONTRAST", "CT WITH CONTRAST", "CT WITH AND WITHOUT CONTRAST"],
+    "CHEST": ["CT CHEST W/O CONTRAST", "CT CHEST W CONTRAST", "CT ANGIO CHEST PE PROTOCOL", "CT CHEST HIGH RESOLUTION"],
+    "ABDOMEN": ["CT ABDOMEN/PELVIS W CONTRAST", "CT ABDOMEN W/O CONTRAST", "CT ENTEROGRAPHY"],
+    "HEAD": ["CT HEAD W/O CONTRAST", "CT HEAD W CONTRAST", "CT ANGIO HEAD AND NECK"],
+    "PELVIS": ["CT PELVIS W CONTRAST", "CT ABDOMEN/PELVIS W/O CONTRAST"],
+    "SPINE": ["CT LUMBAR SPINE W/O CONTRAST", "CT CERVICAL SPINE W/O CONTRAST"],
+    "NECK": ["CT SOFT TISSUE NECK W CONTRAST"]
+  },
+  "CR": {
+    "_default": ["X-Ray 2 View", "X-Ray 1 View", "X-Ray Portable"],
+    "CHEST": ["Chest 2 View", "Chest 1 View Portable", "Chest PA and Lateral"],
+    "ABDOMEN": ["Abdomen", "Abdomen 2 View Acute Series"],
+    "PELVIS": ["Pelvis", "Pelvis 1 View"],
+    "SPINE": ["Sacro-coccygeal Spine", "Lumbar Spine 4 View", "Cervical Spine 3 View"],
+    "KNEE": ["Knee 3 View (Left)", "Knee 3 View (Right)", "Knee - Both"],
+    "HIP": ["Hip (Both)", "Hip 2 View (Left)", "Hip 2 View (Right)"],
+    "RIBS": ["Ribs 1 side or Sternum (Left)", "Ribs 1 side or Sternum (Right)"],
+    "HAND": ["Hand 3 View (Left)", "Hand 3 View (Right)"],
+    "FOOT": ["Foot 3 View (Left)", "Foot 3 View (Right)"],
+    "SHOULDER": ["Shoulder 2 View (Left)", "Shoulder 2 View (Right)"]
+  },
+  "DX": {
+    "_default": ["Digital Radiography 2 View", "Digital Radiography 1 View"],
+    "CHEST": ["Chest 2 View", "Chest 1 View Portable"]
+  },
+  "MR": {
+    "_default": ["MR W/O CONTRAST", "MR W AND W/O CONTRAST"],
+    "BRAIN": ["MR BRAIN W/O CONTRAST", "MR BRAIN W AND W/O CONTRAST"],
+    "HEAD": ["MR BRAIN W/O CONTRAST", "MR ANGIO HEAD W/O CONTRAST"],
+    "SPINE": ["MR LUMBAR SPINE W/O CONTRAST", "MR CERVICAL SPINE W/O CONTRAST"],
+    "KNEE": ["MR KNEE W/O CONTRAST (Left)", "MR KNEE W/O CONTRAST (Right)"],
+    "ABDOMEN": ["MR ABDOMEN W AND W/O CONTRAST", "MRCP"],
+    "BREAST": ["MR BREAST BILATERAL W AND W/O CONTRAST"]
+  },
+  "US": {
+    "_default": ["Ultrasound Complete", "Ultrasound Limited"],
+    "ABDOMEN": ["Abdomen Complete", "Abdomen Limited RUQ"],
+    "HEART": ["Echo Complete", "AVR /TV REPAIR", "Echo Stress"],
+    "PELVIS": ["Pelvis Transabdominal", "Pelvis Transvaginal"],
+    "NECK": ["Thyroid/Neck Soft Tissue", "Carotid Duplex Bilateral"],
+    "BREAST": ["Breast Bilateral Complete"]
+  },
+  "NM": {
+    "_default": ["Nuclear Medicine Study", "Whole Body Scan"],
+    "HEART": ["99mTc-MIBI Stress", "99mTc-MIBI Rest", "Myocardial Perfusion Stress/Rest"],
+    "BONE": ["Bone Scan Whole Body", "Bone Scan 3 Phase"],
+    "THYROID": ["Thyroid Uptake and Scan"]
+  },
+  "MG": {
+    "_default": ["Mammogram Bilateral Screening", "Mammogram Bilateral Diagnostic"],
+    "BREAST": ["Mammogram Bilateral Screening", "Mammogram Unilateral Diagnostic (Left)", "Mammogram Unilateral Diagnostic (Right)"]
+  },
+  "PT": {
+    "_default": ["PET/CT Skull Base to Thigh", "PET/CT Whole Body"],
+    "CHEST": ["PET/CT Skull Base to Thigh"]
+  },
+  "_default": {
+    "_default": ["Diagnostic Imaging Study", "Imaging Study Limited", "Imaging Study Complete"]
+  }
+}

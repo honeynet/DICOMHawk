@@ -1,18 +1,20 @@
 from enum import IntEnum, StrEnum
 
+
 class QRStatus(IntEnum):
     SUCCESS = 0x0000
     PENDING = 0xFF00
-    CANCEL =  0xFE00
+    CANCEL = 0xFE00
     FAILURE = 0xC000
 
     SOP_CLASS_NOT_SUPPORTED = 0x0122
     SOP_CLASS_INVALID = 0xA900
-    
+
     STORE_ERROR = 0xA700
     READ_ERROR = 0xC421
     MOVE_DESTINATION_UNKNOWN = 0xA801
     INVALID_REQUEST = 0xAA04
+
 
 class QRLevel(StrEnum):
     STUDY = "STUDY"

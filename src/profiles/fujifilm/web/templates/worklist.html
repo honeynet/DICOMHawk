@@ -1,20 +1,70 @@
 <!DOCTYPE html>
 <html class="hydrated"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Synapse Worklist</title>
+    <title>{{ worklist.title }}</title>
     <link href="{{ url_for('static', filename='synapse/head-third-party.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='synapse/head-app.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='synapse/app.css') }}" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='synapse/OpenSansFonts.css') }}">
     <style>
-        body.sw-dark { padding-top: 60px; }
-        .worklist-wrap { padding: 20px 30px; }
-        .worklist-table { width: 100%; border-collapse: collapse; }
-        .worklist-table th, .worklist-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2E403F; }
-        .worklist-table thead th { color: #7ec699; border-bottom: 2px solid #3d5a50; font-weight: 600; }
-        .worklist-table tbody tr:hover { background: rgba(126,198,153,0.08); }
-        .folder-nav { color: #7ec699; }
-        .folder-nav li { padding: 6px 0; list-style: none; }
+        body.sw-dark { padding-top: 42px; overflow: hidden; }
+        .navbar-inverse { min-height: 42px; }
+        .navbar-brand { padding: 11px 15px; }
+        .wl-user { float: right; color: #dcdcdc; padding: 12px 18px 0 0; font-size: 12px; letter-spacing: .5px; }
+        .wl-tools { float: right; padding: 7px 8px 0 0; }
+        .wl-icon-button { color: #aabbb6; background: transparent; border: 0; padding: 5px 7px; cursor: pointer; }
+        .wl-icon-button:hover, .wl-icon-button:focus { color: #fff; outline: 1px solid #3f5b56; }
+
+        .wl-shell { display: flex; height: calc(100vh - 42px); }
+        .wl-sidebar { width: 250px; flex: none; background: #161c1b; overflow-y: auto; padding: 6px 0; }
+        .wl-section { width: 100%; color: #dcdcdc; padding: 7px 14px; text-align: left; font-size: 13px; background: #263938; border: 0; border-bottom: 1px solid #0d1a19; }
+        .wl-section .caret-mark { color: #7ec699; margin-right: 6px; }
+        .wl-section[aria-expanded="false"] .caret-mark { display: inline-block; transform: rotate(-90deg); }
+        .wl-folders { list-style: none; margin: 0; padding: 0; }
+        .wl-folders.collapsed { display: none; }
+        .wl-folders li a { display: block; color: #b9c7c3; text-decoration: none; padding: 5px 14px 5px 30px; font-size: 13px; }
+        .wl-folders li a:hover { background: #1b2a29; color: #fff; }
+        .wl-folders li a.selected { background: #38946B; color: #fff; font-style: italic; }
+        .wl-badge { float: right; background: #303939; color: #dcdcdc; border-radius: 9px; padding: 0 8px; font-size: 11px; }
+        .wl-badge.urgent { background: #8a1f1f; margin-left: 4px; }
+
+        .wl-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .wl-title { background: #38946B; color: #fff; padding: 7px 12px; font-size: 14px; }
+        .wl-title .wl-refresh { float: right; cursor: pointer; }
+        .wl-commandbar { height: 43px; background: #182a28; border-bottom: 1px solid #071311; padding: 3px 7px; }
+        .wl-command { width: 34px; height: 35px; margin-right: 3px; color: #c6d2cf; background: #223735; border: 1px solid #0b1a18; }
+        .wl-command:hover { background: #31514c; color: #fff; }
+        .wl-grid { flex: 1; overflow: auto; background: #122221; }
+        .worklist-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; }
+        .worklist-table th, .worklist-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #1b2a29; white-space: nowrap; }
+        .worklist-table thead th { background: #263938; color: #dcdcdc; font-weight: 600; position: sticky; top: 0; }
+        .worklist-table thead th.filter-cell { padding: 4px 6px; }
+        .worklist-table thead input { width: 100%; background: #0d1a19; border: 1px solid #303939; color: #dcdcdc; padding: 3px 6px; font-size: 12px; }
+        .worklist-table tbody tr { color: #cfd8d5; cursor: default; }
+        .worklist-table tbody tr:hover { background: #1b2a29; }
+        .worklist-table tbody tr.selected { background: #38946B; color: #fff; }
+        .worklist-table tbody tr a { color: inherit; text-decoration: none; display: block; }
+        .worklist-table .status-cell { width: 28px; padding: 6px 5px; text-align: center; color: #b8c8c4; }
+
+        .wl-footer { position: relative; background: #1d302e; color: #9fb3ad; font-size: 12px; padding: 6px 12px; border-top: 1px solid #0d1a19; text-align: center; }
+        .wl-footer .wl-stamp { float: right; }
+        .wl-footer .wl-scroll-left { float: left; }
+        .wl-notice { margin: 10px 12px 0; }
+        .wl-detail { margin: 10px 12px 0; background: #263938; border: 1px solid #38946B; }
+        .wl-detail h4 { background: #38946B; color: #fff; margin: 0; padding: 6px 10px; font-size: 13px; }
+        .wl-detail dl { margin: 0; padding: 10px; column-count: 2; column-gap: 30px; }
+        .wl-detail dt { color: #7ec699; font-size: 11px; text-transform: uppercase; }
+        .wl-detail dd { color: #dcdcdc; font-size: 13px; margin: 0 0 8px; }
+        .wl-detail .wl-close { float: right; color: #fff; text-decoration: none; }
+
+        #wl-context { display: none; position: absolute; z-index: 1000; background: #263938; border: 1px solid #0d1a19; list-style: none; margin: 0; padding: 4px 0; min-width: 200px; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+        #wl-context li a { display: block; color: #dcdcdc; text-decoration: none; padding: 4px 16px; font-size: 13px; }
+        #wl-context li a:hover { background: #38946B; color: #fff; }
+        #wl-context li { position: relative; }
+        #wl-context li.submenu > a::after { content: "\25B6"; float: right; margin-left: 18px; }
+        #wl-context li.disabled > a { color: #65716e; pointer-events: none; }
+        #wl-context .wl-submenu { display: none; position: absolute; left: 100%; top: -5px; min-width: 170px; list-style: none; padding: 4px 0; margin: 0; background: #263938; border: 1px solid #0d1a19; }
+        #wl-context li.submenu.open > .wl-submenu { display: block; }
     </style>
     {{ fingerprint_seam|safe }}
 </head>
@@ -22,48 +72,207 @@
     <nav class="navbar navbar-inverse navbar-fixed-top" style="position:fixed;">
         <div class="navbar-header">
             <span class="navbar-brand">
-                <img src="{{ url_for('static', filename='synapse/logo-fujifilm.png') }}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="logo" viewBox="0 0 130 20" preserveAspectRatio="xMinYMid meet">
+                    <path class="letters" d=""></path>
+                    <path class="stroke" d=""></path>
+                </svg>
             </span>
         </div>
-    </nav>
-    <div class="worklist-wrap">
-        <div class="row">
-            <div class="col-md-2">
-                <ul class="folder-nav list-unstyled">
-                    <li>&#128193; All Studies</li>
-                    <li>&#128193; Unread</li>
-                    <li>&#128193; Assigned to me</li>
-                    <li>&#128193; STAT</li>
-                </ul>
-            </div>
-            <div class="col-md-10">
-                <table class="worklist-table">
-                    <thead>
-                        <tr>
-                            <th>Patient Name</th>
-                            <th>Proc Description</th>
-                            <th>Study Date Time</th>
-                            <th>Modality</th>
-                            <th>Status</th>
-                            <th>Age</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in studies %}
-                        <tr>
-                            <td>{{ s.patient_name }}</td>
-                            <td>{{ s.description }}</td>
-                            <td>{{ s.study_datetime }}</td>
-                            <td>{{ s.modality }}</td>
-                            <td>{{ s.status }}</td>
-                            <td>{{ s.age }}</td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="6" style="color:#888">No studies.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="wl-tools">
+            {% for link in worklist.header_links %}
+            <button class="wl-icon-button" type="button" data-action="{{ link.label }}" data-result="{{ link.result|default('error') }}" title="{{ link.label }}" aria-label="{{ link.label }}">
+                <span class="glyphicon glyphicon-{{ link.icon }}" aria-hidden="true"></span>
+            </button>
+            {% endfor %}
         </div>
+        {% if username %}<div class="wl-user">{{ username|upper }}</div>{% endif %}
+    </nav>
+
+    <div class="wl-shell">
+        <aside class="wl-sidebar">
+            {% for section in worklist.sidebar %}
+            <button class="wl-section" type="button" aria-expanded="{{ 'true' if section.open|default(false) else 'false' }}" data-section="{{ section.label }}"><span class="caret-mark">&#9662;</span>{{ section.label }}</button>
+            <ul class="wl-folders{% if not section.open|default(false) %} collapsed{% endif %}">
+                {% for item in section.get('items') or [] %}
+                <li>
+                    <a href="?path={{ item.label|urlencode }}"
+                       class="{% if folder and folder.label == item.label %}selected{% endif %}">
+                        {% if 'urgent_count' in item %}<span class="wl-badge urgent">{{ item['urgent_count'] }}</span>{% endif %}
+                        {% if 'count' in item %}<span class="wl-badge">{{ item['count'] }}</span>{% endif %}
+                        {% if item.label in sidebar_counts %}<span class="wl-badge">{{ sidebar_counts[item.label] }}</span>{% endif %}
+                        {{ item.label }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+        </aside>
+
+        <main class="wl-main">
+            <div class="wl-title">
+                {{ folder.label if folder else worklist.title }}
+                <a class="wl-refresh" href="{{ refresh_url }}" title="Refresh">&#8635;</a>
+            </div>
+            <div class="wl-commandbar" role="toolbar" aria-label="Study actions">
+                {% for item in worklist.toolbar %}
+                <button class="wl-command" type="button" data-action="{{ item.label }}" data-result="{{ item.result|default('error') }}" title="{{ item.label }}" aria-label="{{ item.label }}">
+                    <span class="glyphicon glyphicon-{{ item.icon }}" aria-hidden="true"></span>
+                </button>
+                {% endfor %}
+            </div>
+
+            {% if action_message %}
+            <div class="wl-notice alert alert-danger"><strong>Error:</strong> {{ action_message }}</div>
+            {% endif %}
+
+            {% if detail %}
+            <div class="wl-detail">
+                <h4>{{ detail.patient_name }}<a class="wl-close" href="{{ refresh_url }}">&times;</a></h4>
+                <dl>
+                    {% for column in worklist.columns %}
+                    <dt>{{ column.label }}</dt><dd>{{ detail[column.key] }}</dd>
+                    {% endfor %}
+                    <dt>Study Instance UID</dt><dd>{{ detail.study_instance_uid }}</dd>
+                    <dt>Station</dt><dd>{{ detail.station_name }}</dd>
+                    <dt>Series Description</dt><dd>{{ detail.series_description }}</dd>
+                </dl>
+            </div>
+            {% endif %}
+
+            <div class="wl-grid">
+                <form method="get">
+                    <input type="hidden" name="path" value="{{ folder.label if folder else '' }}">
+                    <table class="worklist-table">
+                        <thead>
+                            <tr><th class="status-cell"></th><th class="status-cell"></th>{% for column in worklist.columns %}<th>{{ column.label }}</th>{% endfor %}</tr>
+                            <tr>
+                                <th class="status-cell"></th><th class="status-cell"></th>
+                                {% for column in worklist.columns %}
+                                <th class="filter-cell">
+                                    <input type="text" name="filter_{{ column.key }}"
+                                           value="{{ filters.get(column.key, '') }}" autocomplete="off">
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for study in studies %}
+                            <tr data-uid="{{ study.study_instance_uid }}"
+                                class="{% if detail and detail.study_instance_uid == study.study_instance_uid %}selected{% endif %}">
+                                <td class="status-cell"><span class="glyphicon glyphicon-camera" aria-label="Images available"></span></td>
+                                <td class="status-cell">{% if study.images|int > 1 %}<span class="glyphicon glyphicon-file" aria-label="Multiple images"></span>{% endif %}</td>
+                                {% for column in worklist.columns %}<td>{{ study[column.key] }}</td>{% endfor %}
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="{{ worklist.columns|length + 2 }}">No studies.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </form>
+            </div>
+
+            <div class="wl-footer">
+                <span class="wl-scroll-left">&#9664;</span>
+                <span id="wl-position">{{ 1 if studies else 0 }}</span> of {{ total_studies }} {{ worklist.footer.item_label }}
+                <span class="wl-stamp">{{ worklist.footer.refresh_label }} <span id="wl-clock"></span></span>
+            </div>
+        </main>
     </div>
+
+    <ul id="wl-context">
+        {% for item in worklist.context_menu %}
+        <li class="{% if item.get('result') == 'submenu' %}submenu{% elif item.get('result') == 'disabled' %}disabled{% endif %}">
+            <a href="#" data-result="{{ item.result|default('error') }}" data-label="{{ item.label }}">{{ item.label }}</a>
+            {% if item.get('items') %}<ul class="wl-submenu">{% for child in item.get('items') %}<li><a href="#" data-result="{{ child.result|default('error') }}" data-label="{{ child.label }}">{{ child.label }}</a></li>{% endfor %}</ul>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+
+    <script src="{{ url_for('static', filename='synapse/jquery-3.6.4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='synapse/moment.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='synapse/Logo.js') }}"></script>
+    <script nonce="{{ csp_nonce }}">
+        $(function () {
+            function updateClock() { $('#wl-clock').text(moment().format('HH:mm:ss')); }
+            updateClock();
+            window.setInterval(updateClock, 1000);
+
+            var menu = $('#wl-context');
+            var rows = $('.worklist-table tbody tr[data-uid]');
+            var selectedUid = rows.filter('.selected').data('uid') || '';
+            var basePath = {{ (folder.label if folder else '')|tojson }};
+
+            function selectRow(row) {
+                rows.removeClass('selected');
+                row.addClass('selected');
+                selectedUid = row.data('uid');
+                $('#wl-position').text(rows.index(row) + 1);
+            }
+
+            if (!selectedUid && rows.length) selectRow(rows.first());
+
+            function navigateAction(label, result) {
+                if (result === 'disabled' || result === 'submenu') return;
+                var query = 'path=' + encodeURIComponent(basePath);
+                query += '&action=' + encodeURIComponent(label);
+                if (result === 'detail' && selectedUid) {
+                    query += '&study=' + encodeURIComponent(selectedUid);
+                }
+                window.location.search = '?' + query;
+            }
+
+            rows.on('click', function () { selectRow($(this)); });
+            rows.on('dblclick', function () {
+                selectRow($(this));
+                navigateAction('Open Viewer', 'error');
+            });
+            $('.worklist-table tbody tr[data-uid]').on('contextmenu', function (e) {
+                e.preventDefault();
+                selectRow($(this));
+                menu.find('li.submenu').removeClass('open');
+                menu.css({ top: e.pageY + 'px', left: e.pageX + 'px' }).show();
+            });
+            $(document).on('click', function (e) {
+                if (!$(e.target).closest('#wl-context').length) menu.hide();
+            });
+
+            menu.on('click', 'a', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var result = $(this).data('result');
+                if (result === 'submenu') {
+                    $(this).parent().toggleClass('open').siblings().removeClass('open');
+                    return;
+                }
+                menu.hide();
+                navigateAction($(this).data('label'), result);
+            });
+
+            $('[data-action]').on('click', function () {
+                navigateAction($(this).data('action'), $(this).data('result'));
+            });
+
+            function readSectionState(key) {
+                try { return window.sessionStorage.getItem(key); } catch (_error) { return null; }
+            }
+            function saveSectionState(key, value) {
+                try { window.sessionStorage.setItem(key, value); } catch (_error) { return; }
+            }
+            $('.wl-section').each(function () {
+                var button = $(this);
+                var key = 'synapse.worklist.' + button.data('section');
+                var saved = readSectionState(key);
+                if (saved !== null) {
+                    button.attr('aria-expanded', saved);
+                    button.next('.wl-folders').toggleClass('collapsed', saved !== 'true');
+                }
+            }).on('click', function () {
+                var button = $(this);
+                var expanded = button.attr('aria-expanded') !== 'true';
+                button.attr('aria-expanded', expanded ? 'true' : 'false');
+                button.next('.wl-folders').toggleClass('collapsed', !expanded);
+                saveSectionState('synapse.worklist.' + button.data('section'), expanded ? 'true' : 'false');
+            });
+        });
+    </script>
 </body></html>

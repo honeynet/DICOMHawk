@@ -278,32 +278,21 @@ def test_malformed_records_are_skipped_without_crashing(profile, tmp_path):
     assert client.get("/api/attackers").status_code == 200
 
 
-def test_durable_snapshot_is_cached_until_file_changes(profile, tmp_path, monkeypatch):
-    logfile = tmp_path / "cached.log"
+def test_durable_views_stream_current_file_without_retaining_event_cache(
+    profile, tmp_path
+):
+    logfile = tmp_path / "streamed.log"
     logfile.write_text(ujson.dumps({"request_type": "ONE", "channel": "WEB"}) + "\n")
-    logger = logging.Logger("cached-file-bus")
+    logger = logging.Logger("streamed-file-bus")
     logger.addHandler(FileHandler(logfile))
     client = new_operator_api(profile, logger).test_client()
 
-    from web import operator_api
-
-    original = operator_api._read_paths
-    calls = 0
-
-    def counted(paths):
-        nonlocal calls
-        calls += 1
-        return original(paths)
-
-    monkeypatch.setattr(operator_api, "_read_paths", counted)
-    assert client.get("/api/stats").status_code == 200
-    assert client.get("/api/attackers").status_code == 200
-    assert calls == 1
+    assert "EVENT_CACHE" not in client.application.config
+    assert client.get("/api/stats").get_json()["total_events"] == 1
 
     with logfile.open("a") as stream:
         stream.write(ujson.dumps({"request_type": "TWO", "channel": "DIMSE"}) + "\n")
     assert client.get("/api/stats").get_json()["total_events"] == 2
-    assert calls == 2
 
 
 def test_filter_validation_paging_and_headers(profile, tmp_path):
@@ -321,7 +310,109 @@ def test_filter_validation_paging_and_headers(profile, tmp_path):
     assert response.headers["X-Total-Count"] == "3"
     assert response.get_json()[0]["request_type"] == "TYPE-1"
     assert client.get("/api/events?limit=0").status_code == 400
+    assert client.get("/api/events?offset=10001").status_code == 400
     assert client.get("/api/events?since=not-a-time").status_code == 400
+
+
+def test_attacker_controlled_aggregate_cardinality_is_bounded(
+    profile, tmp_path, monkeypatch
+):
+    from web import operator_api
+
+    monkeypatch.setattr(operator_api, "_MAX_AGGREGATE_KEYS", 2)
+    lines = [
+        {
+            "request_type": "WEB_LOGIN_ATTEMPT",
+            "channel": "WEB",
+            "ip": f"10.0.0.{index}",
+            "session_id": f"session-{index}",
+            "session_parameters": [f"Username: user-{index}", "Password: p"],
+            "timestamp": f"2026-07-19T10:0{index}:00",
+        }
+        for index in range(3)
+    ]
+    client = _durable_client(profile, tmp_path, lines)
+
+    stats = client.get("/api/stats").get_json()
+    assert stats["total_events"] == 3
+    assert stats["unique_source_ips"] == 2
+    assert stats["unique_source_ips_truncated"] is True
+    assert stats["unique_credentials"] == 2
+    assert stats["unique_credentials_truncated"] is True
+
+    attackers = client.get("/api/attackers")
+    assert len(attackers.get_json()) == 2
+    assert attackers.headers["X-Aggregation-Truncated"] == "true"
+    credentials = client.get("/api/credentials")
+    assert len(credentials.get_json()) == 2
+    assert credentials.headers["X-Aggregation-Truncated"] == "true"
+    sessions = client.get("/api/sessions")
+    assert len(sessions.get_json()) == 2
+    assert sessions.headers["X-Aggregation-Truncated"] == "true"
+    assert client.get("/api/overview").get_json()["truncated"] == {
+        "attackers": True,
+        "credentials": True,
+    }
+
+
+def test_credential_cap_evicts_a_non_honey_entry_to_admit_a_honey_hit(monkeypatch):
+    from web import operator_api
+
+    monkeypatch.setattr(operator_api, "_MAX_AGGREGATE_KEYS", 2)
+    events = [
+        {
+            "request_type": "WEB_LOGIN_ATTEMPT",
+            "channel": "WEB",
+            "session_parameters": ["Username: user-0", "Password: p"],
+            "timestamp": "2026-07-19T10:00:00",
+        },
+        {
+            "request_type": "WEB_LOGIN_ATTEMPT",
+            "channel": "WEB",
+            "session_parameters": ["Username: user-1", "Password: p"],
+            "timestamp": "2026-07-19T10:01:00",
+        },
+        {
+            "request_type": "WEB_HONEY_CREDENTIAL_USED",
+            "channel": "WEB",
+            "session_parameters": ["Username: test", "Password: test"],
+            "timestamp": "2026-07-19T10:02:00",
+        },
+    ]
+
+    creds = extract_credentials(events, honey_credentials=[("test", "test")])
+
+    assert len(creds) == 2
+    assert any(c["username"] == "test" and c["honey_hit"] for c in creds)
+
+
+def test_credential_cap_still_truncates_once_every_slot_is_a_honey_hit(monkeypatch):
+    from web import operator_api
+
+    monkeypatch.setattr(operator_api, "_MAX_AGGREGATE_KEYS", 1)
+    events = [
+        {
+            "request_type": "WEB_HONEY_CREDENTIAL_USED",
+            "channel": "WEB",
+            "session_parameters": ["Username: test", "Password: test"],
+            "timestamp": "2026-07-19T10:00:00",
+        },
+        {
+            "request_type": "WEB_HONEY_CREDENTIAL_USED",
+            "channel": "WEB",
+            "session_parameters": ["Username: decoy", "Password: decoy"],
+            "timestamp": "2026-07-19T10:01:00",
+        },
+    ]
+
+    creds = extract_credentials(
+        events, honey_credentials=[("test", "test"), ("decoy", "decoy")]
+    )
+
+    assert len(creds) == 1
+    assert (
+        creds[0]["username"] == "test"
+    )  # first-seen honey hit kept; no non-honey slot to evict
 
 
 def test_operator_security_headers_auth_and_redaction(bus):
@@ -348,4 +439,11 @@ def test_dashboard_and_overview_are_available(operator_client):
     assert b"Operator console" in dashboard.data
     assert operator_client.get("/static/operator.css").status_code == 200
     overview = operator_client.get("/api/overview").get_json()
-    assert set(overview) == {"stats", "attackers", "credentials", "uploads", "events"}
+    assert set(overview) == {
+        "stats",
+        "attackers",
+        "credentials",
+        "uploads",
+        "events",
+        "truncated",
+    }

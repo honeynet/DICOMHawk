@@ -38,7 +38,7 @@ def test_load_profile_generic_pacs_reuses_default_fallbacks():
     assert prof.web.upload_max_request_bytes == 50 * 1024 * 1024
     assert (
         prof.web.routes == default_profile().web.routes
-    )  # /portal/*, not /Synapse — the actual isolation fix
+    )  # /portal/*, not /Synapse; the actual isolation fix
     assert prof.web.cookies == default_profile().web.cookies
 
 
@@ -55,9 +55,11 @@ def test_load_profile_fujifilm():
         ("/Swat/", "login_redirect"),
         ("/api/WorkflowEngine/", "api_404"),
     ]
-    assert (
-        prof.web.honey_credentials == []
-    )  # left commented out: no disclosure channel on a verbatim-captured page
+    # Bait accounts are set, but the verbatim-captured sign-on page still discloses no hint.
+    assert prof.web.honey_credentials == [
+        ("svc_dicom", "svc_dicom"),
+        ("pacsadmin", "Password1"),
+    ]
     assert prof.web.routes["entry"] == "/Synapse"
     assert prof.web.routes["worklist"] == "/WorkflowUI/"
     assert prof.web.routes["login"] == "/SynapseSignOn/sts/login"
@@ -211,3 +213,151 @@ def test_profile_allows_explicitly_disabling_csp(tmp_path):
         "web:\n  enabled: true\n  templates_dir: generic-pacs\n  content_security_policy: null\n"
     )
     assert load_profile(str(custom)).web.content_security_policy is None
+
+
+# --- worklist shell config ---
+
+
+def test_default_worklist_config_is_vendor_neutral():
+    """A sparse profile must never inherit another vendor's folder or menu names."""
+    worklist = default_profile().web.worklist
+
+    assert worklist["sidebar"] == []
+    assert worklist["context_menu"] == []
+    assert worklist["header_links"] == []
+    assert not any(
+        token in repr(worklist).lower()
+        for token in ("synapse", "fujifilm", "workflowui")
+    )
+
+
+def test_default_worklist_placeholders_match_the_historical_literals():
+    # generic-pacs renders these, so changing them would silently alter its page.
+    assert default_profile().web.worklist["placeholders"] == {
+        "description": "—",
+        "status": "Unread",
+        "empty": "—",
+    }
+
+
+def test_generic_pacs_inherits_the_default_worklist():
+    assert load_profile("generic-pacs").web.worklist == default_profile().web.worklist
+    assert load_profile("generic-pacs").web.worklist_page_size == 100
+
+
+def test_fujifilm_worklist_config_is_parsed():
+    worklist = load_profile("fujifilm").web.worklist
+    sections = [section["label"] for section in worklist["sidebar"]]
+    folders = [
+        item["label"]
+        for section in worklist["sidebar"]
+        for item in section.get("items", [])
+    ]
+
+    assert worklist["title"] == "All Studies with Images"
+    assert worklist["placeholders"]["description"] == "UNKNOWN"
+    assert "Global Worklists" in sections
+    assert "Public Collections" in sections
+    assert "All Studies Global" in folders
+    assert any(
+        item["label"] == "Study Information" and item["result"] == "detail"
+        for item in worklist["toolbar"]
+    )
+
+
+def test_fujifilm_worklist_uses_only_a_live_sidebar_count():
+    # Copied static counts drift; a repository-derived count remains coherent.
+    worklist = load_profile("fujifilm").web.worklist
+    items = [
+        item for section in worklist["sidebar"] for item in section.get("items", [])
+    ]
+
+    assert not any("count" in item or "urgent_count" in item for item in items)
+    assert [
+        item["label"] for item in items if item.get("dynamic_count") == "studies"
+    ] == ["Unread Studies"]
+
+
+@pytest.mark.parametrize(
+    "worklist,match",
+    [
+        ({"columns": [{"key": "nope", "label": "X"}]}, "columns\\[0\\].key"),
+        ({"columns": []}, "must be a non-empty list"),
+        ({"columns": [{"key": "patient_name"}]}, "missing required key 'label'"),
+        (
+            {"sidebar": [{"label": "S", "items": [{"label": "F", "count": "many"}]}]},
+            "count' must be a non-negative integer",
+        ),
+        (
+            {"sidebar": [{"label": "S", "items": [{"label": "F", "count": True}]}]},
+            "count' must be a non-negative integer",
+        ),
+        (
+            {
+                "sidebar": [
+                    {
+                        "label": "S",
+                        "items": [{"label": "F", "filter": {"patient_id": "1"}}],
+                    }
+                ]
+            },
+            "filter keys: patient_id",
+        ),
+        (
+            {"context_menu": [{"label": "M", "result": "launch"}]},
+            "context_menu\\[0\\].result",
+        ),
+        ({"title": 42}, "title' must be a string"),
+        ({"header_links": "Home"}, "header_links' must be a list"),
+        # The pre-icon format, rejected by name so a third-party profile is told what to write.
+        ({"header_links": ["Messages"]}, r"write \{label: Messages\} instead"),
+        (
+            {
+                "sidebar": [
+                    {
+                        "label": "S",
+                        "items": [
+                            {
+                                "label": "F",
+                                "dynamic_count": "studies",
+                                "filter": {"modality": "CT"},
+                            }
+                        ],
+                    }
+                ]
+            },
+            "cannot set both dynamic_count and filter",
+        ),
+        ({"messages": {"action_failed": 7}}, "action_failed' must be a string"),
+    ],
+)
+def test_profile_rejects_a_malformed_worklist(worklist, match):
+    from profiles.profile import _parse_profile
+
+    with pytest.raises(ValueError, match=match):
+        _parse_profile(
+            {
+                "meta": {"name": "t", "kind": "pacs"},
+                "web": {"enabled": False, "worklist": worklist},
+            }
+        )
+
+
+@pytest.mark.parametrize("size", [0, 501])
+def test_profile_rejects_an_out_of_range_worklist_page_size(size):
+    from profiles.profile import _parse_profile
+
+    with pytest.raises(ValueError, match="web.worklist_page_size' must be 1-500"):
+        _parse_profile(
+            {
+                "meta": {"name": "t", "kind": "pacs"},
+                "web": {"enabled": False, "worklist_page_size": size},
+            }
+        )
+
+
+def test_only_the_vendor_profile_declares_the_web_tier_header():
+    # serve.py overrides X-Backendserver only where a profile ships it; an unconditional set leaked Synapse into generic-pacs.
+    assert "X-Backendserver" in load_profile("fujifilm").web.headers
+    assert "X-Backendserver" not in load_profile("generic-pacs").web.headers
+    assert "X-Backendserver" not in default_profile().web.headers

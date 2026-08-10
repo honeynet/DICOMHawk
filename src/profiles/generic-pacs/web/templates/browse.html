@@ -6,11 +6,14 @@
     <title>{{ title }}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-        .container { max-width: 1100px; margin: 40px auto; padding: 20px; background-color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .container { max-width: 1400px; margin: 40px auto; padding: 20px; background-color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #1f4e79; }
         .back { display: inline-block; margin-bottom: 10px; color: #007bff; text-decoration: none; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #d3d3d3; padding: 10px; text-align: left; font-size: 14px; word-break: break-all; }
+        th, td { border: 1px solid #d3d3d3; padding: 10px; text-align: left; font-size: 14px; }
+        /* Only a UID needs breaking mid-word, so let it break on demand rather than eagerly. */
+        td { overflow-wrap: anywhere; }
+        th { white-space: nowrap; }
         th { background-color: #e9eef2; color: #1f4e79; font-weight: 600; }
         tr:nth-child(even) { background-color: #f9fbfd; }
         .pagination { display: flex; justify-content: center; gap: 16px; margin-top: 20px; }

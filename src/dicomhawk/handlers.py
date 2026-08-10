@@ -1,4 +1,5 @@
 import copy
+import fnmatch
 import logging
 from functools import partial
 from logging import Logger
@@ -11,11 +12,11 @@ from pydicom.dataset import Dataset
 from pynetdicom.events import Event, EventHandlerType, EventType
 
 from .status import QRStatus
-from .repository import Repository, INDEX_REQUIRED_KEYS
+from .repository import Repository, INDEX_REQUIRED_KEYS, _ROLLUP_MAX_STUDIES
+from .storage import ArtifactSink, SubmittedArtifact
 from .bus import (
     InteractionEvent,
     SessionCache,
-    hash_request,
     _query_level,
     _extract_params,
 )
@@ -33,7 +34,7 @@ type EventHandler = Callable[
 ]
 type QRResult = Generator[tuple[int, Dataset | None], None, None]
 
-# NOTE: private pynetdicom internals — AttributeError guard degrades to no-op rather than crash.
+# NOTE: private pynetdicom internals; the AttributeError guard degrades to no-op rather than crash.
 try:
     _QR_MODEL_ATTRS: dict = {**_qrdb._PATIENT_ROOT, **_qrdb._STUDY_ROOT}
 except AttributeError:
@@ -62,6 +63,104 @@ _FIND_LEVEL_UID: dict[str, str] = {
     "STUDY": "study_instance_uid",
     "SERIES": "series_instance_uid",
 }
+
+
+# Attributes a real PACS answers C-FIND with, which pynetdicom's index has no column for.
+_ENRICHED_KEYWORDS: dict[str, str] = {
+    "PatientSex": "patient_sex",
+    "PatientBirthDate": "patient_birth_date",
+    "StudyDescription": "study_description",
+    "SeriesDescription": "series_description",
+    "BodyPartExamined": "body_part",
+    "InstitutionName": "institution_name",
+    "StationName": "station_name",
+    "ReferringPhysicianName": "referring_physician",
+    "Manufacturer": "manufacturer",
+    "ManufacturerModelName": "model",
+}
+# Derived per study rather than stored, so they are answered from the same rollups the web uses.
+_MODALITIES_IN_STUDY = "ModalitiesInStudy"
+_INSTANCE_COUNT = "NumberOfStudyRelatedInstances"
+
+
+def _enriched_match(value, query) -> bool:
+    """Single-value DICOM matching for keys filtered in Python, not by the SQL query."""
+    if query is None or str(query) == "":
+        return True
+    text, pattern = str(value or "").upper(), str(query).upper()
+    if "*" in pattern or "?" in pattern:
+        return fnmatch.fnmatchcase(text, pattern)
+    return text == pattern
+
+
+def _chunked(repo_call, uids: list[str]) -> dict:
+    """Rollups cap their UID list, so a large result set is read in bounded slices."""
+    merged: dict = {}
+    for start in range(0, len(uids), _ROLLUP_MAX_STUDIES):
+        merged.update(repo_call(uids[start : start + _ROLLUP_MAX_STUDIES]))
+    return merged
+
+
+def _enriched_request(idt: Dataset) -> dict[str, str]:
+    """Snapshot before repo.find(): db.search deletes in place every key its index lacks."""
+    keywords = list(_ENRICHED_KEYWORDS) + [_MODALITIES_IN_STUDY, _INSTANCE_COUNT]
+    return {kw: str(idt[kw].value or "") for kw in keywords if kw in idt}
+
+
+def _enrichment(repo: Repository, requested: dict[str, str], matches) -> dict:
+    """Fetch only what this query actually asked for; an unenriched query costs nothing."""
+    if not requested:
+        return {}
+    wanted = any(kw in requested for kw in _ENRICHED_KEYWORDS)
+    uids = list(dict.fromkeys(str(m.study_instance_uid) for m in matches))
+    return {
+        "details": _chunked(repo.study_details, uids) if wanted else {},
+        "modalities": (
+            _chunked(repo.study_modalities, uids)
+            if _MODALITIES_IN_STUDY in requested
+            else {}
+        ),
+        "counts": (
+            _chunked(repo.count_instances, uids) if _INSTANCE_COUNT in requested else {}
+        ),
+    }
+
+
+def _enriched_filtered(requested: dict[str, str], matches, enrichment: dict) -> list:
+    """Drop matches contradicting a requested value, so a filtered query stays coherent."""
+    filters = {
+        kw: value
+        for kw, value in requested.items()
+        if value != "" and kw in _ENRICHED_KEYWORDS
+    }
+    if not filters:
+        return list(matches)
+    details = enrichment.get("details", {})
+    kept = []
+    for m in matches:
+        detail = details.get(str(getattr(m, "study_instance_uid", "") or ""), {})
+        if all(
+            _enriched_match(detail.get(_ENRICHED_KEYWORDS[kw], ""), value)
+            for kw, value in filters.items()
+        ):
+            kept.append(m)
+    return kept
+
+
+def _apply_enrichment(
+    res: Dataset, requested: dict[str, str], match, enrichment: dict
+) -> None:
+    if not enrichment:
+        return
+    uid = str(getattr(match, "study_instance_uid", "") or "")
+    detail = enrichment.get("details", {}).get(uid, {})
+    for keyword, column in _ENRICHED_KEYWORDS.items():
+        if keyword in requested:
+            setattr(res, keyword, detail.get(column, ""))
+    if _MODALITIES_IN_STUDY in requested:
+        setattr(res, _MODALITIES_IN_STUDY, enrichment["modalities"].get(uid, []))
+    if _INSTANCE_COUNT in requested:
+        setattr(res, _INSTANCE_COUNT, enrichment["counts"].get(uid, 0))
 
 
 def _strip_sublevel_tags(ds: Dataset, model) -> tuple[Dataset, list[str]]:
@@ -103,7 +202,7 @@ def handle_associate(
             if v:
                 cache.cache_version(event.assoc, v.strip())
             break
-    # Logged before AE-title auth can reject the association — only place these are seen.
+    # Logged before AE-title auth can reject the association; the only place these are seen.
     params = [
         f"Called: {event.primitive.called_ae_title}",
         f"Calling: {event.primitive.calling_ae_title}",
@@ -192,7 +291,7 @@ def _is_healthcheck(event: Event) -> bool:
 def handle_connect(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
-    # Fires on TCP accept — captures probes that never send a valid A-ASSOCIATE-RQ & skips loopback probes.
+    # Fires on TCP accept; captures probes that never send a valid A-ASSOCIATE-RQ & skips loopback probes.
     addr = getattr(event, "address", None)
     if addr and addr[0] in _LOOPBACK:
         return
@@ -229,6 +328,8 @@ def handle_find(
     params = _extract_params(idt)
     if stripped:
         params = (params or []) + [f"Stripped: {', '.join(stripped)}"]
+    # Captured first: repo.find() hands the identifier to db.search, which deletes these.
+    requested = _enriched_request(idt)
 
     result = repo.find(idt, model)
     if (err := result.error) is not None:
@@ -259,6 +360,10 @@ def handle_find(
                 deduped.append(m)
         matches = deduped
 
+    # The web worklist shows these; C-FIND must agree or the two surfaces contradict.
+    enrichment = _enrichment(repo, requested, matches)
+    matches = _enriched_filtered(requested, matches, enrichment)
+
     bus.info(
         InteractionEvent(
             event,
@@ -275,6 +380,7 @@ def handle_find(
             yield (QRStatus.CANCEL, None)
             return
         res = m.as_identifier(idt, model)
+        _apply_enrichment(res, requested, m, enrichment)
         res.RetrieveAETitle = event.assoc.ae.ae_title
         yield (QRStatus.PENDING, res)
 
@@ -391,6 +497,47 @@ def handle_move(
     yield (None, None)
 
 
+def _submit_artifact(
+    sink: ArtifactSink,
+    event: Event,
+    cache: SessionCache,
+    capture,
+    *,
+    request_type: str,
+    disposition: str,
+    sop_class_uid: str | None = None,
+    sop_instance_uid: str | None = None,
+) -> None:
+    assoc = event.assoc
+    addr = getattr(event, "address", None)
+    ip, _port = (
+        (addr[0], addr[1])
+        if addr is not None
+        else (assoc.requestor.address, assoc.requestor.port)
+    )
+    context = getattr(event, "context", None)
+    try:
+        sink(
+            SubmittedArtifact(
+                capture,
+                channel="DIMSE",
+                request_type=request_type,
+                disposition=disposition,
+                source_encoding="dimse-dataset",
+                session_id=cache.get_session_id(assoc),
+                ip=ip,
+                local_port=getattr(assoc.acceptor, "port", None),
+                sop_class_uid=sop_class_uid,
+                sop_instance_uid=sop_instance_uid,
+                # The association already negotiated this, so pass it through instead of guessing.
+                transfer_syntax_uid=str(context.transfer_syntax) if context else None,
+            )
+        )
+    except Exception:
+        # Analysis must never change what the peer sees; the payload is already captured.
+        logger.exception("Artifact sink failed for %s", capture.artifact_id)
+
+
 def handle_store(
     repo: Repository,
     bus: Logger,
@@ -398,6 +545,7 @@ def handle_store(
     event: Event,
     *,
     max_store_bytes: int | None = None,
+    sink: ArtifactSink | None = None,
 ) -> QRResult:
     try:
         raw = event.request.DataSet
@@ -418,6 +566,7 @@ def handle_store(
                     "filename": None,
                     "bytes": None,
                     "sha256": None,
+                    "artifact_id": None,
                     "sop_instance_uid": None,
                     "sop_class_uid": None,
                     "captured": False,
@@ -441,6 +590,7 @@ def handle_store(
                     "filename": None,
                     "bytes": request_bytes,
                     "sha256": None,
+                    "artifact_id": None,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
                     "captured": False,
@@ -452,29 +602,30 @@ def handle_store(
         yield (QRStatus.STORE_ERROR, None)
         return
     try:
-        file_hash = hash_request(event)
+        capture = repo.storage.capture_fileobj(raw)
     except Exception as exc:
         bus.error(
             InteractionEvent(
                 event,
                 cache,
                 "C-STORE",
-                session_parameters=[f"Hash error: {exc}"],
-                status=QRStatus.FAILURE,
+                session_parameters=[f"Capture failure: {exc}"],
+                status=QRStatus.STORE_ERROR,
                 log_level="ERROR",
                 artifact={
                     "filename": None,
                     "bytes": request_bytes,
                     "sha256": None,
+                    "artifact_id": None,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
                     "captured": False,
                     "disposition": "rejected",
-                    "reject_reason": f"Hash error: {exc}",
+                    "reject_reason": f"Failed to quarantine incoming payload: {exc}",
                 },
             )
         )
-        yield (QRStatus.FAILURE, None)
+        yield (QRStatus.STORE_ERROR, None)
         return
 
     try:
@@ -489,36 +640,48 @@ def handle_store(
                 status=QRStatus.FAILURE,
                 log_level="ERROR",
                 artifact={
-                    "filename": None,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": None,
                     "sop_class_uid": str(event.request.AffectedSOPClassUID),
-                    "captured": False,
+                    "captured": True,
                     "disposition": "rejected",
                     "reject_reason": f"Dataset error: {exc}",
                 },
             )
         )
+        if sink is not None:
+            _submit_artifact(
+                sink,
+                event,
+                cache,
+                capture,
+                request_type="C-STORE",
+                disposition="rejected",
+                sop_class_uid=str(event.request.AffectedSOPClassUID),
+            )
         yield (QRStatus.FAILURE, None)
         return
 
-    if (err := repo.store(ds)) is not None:
+    if (err := repo.store(ds, capture=False)) is not None:
         bus.error(
             InteractionEvent(
                 event,
                 cache,
                 "C-STORE",
                 session_parameters=[
-                    f"SHA256: {file_hash}",
+                    f"SHA256: {capture.sha256}",
                     f"Error: {err.error}",
                 ],
                 status=err.status,
                 log_level="ERROR",
                 artifact={
-                    "filename": None,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": str(getattr(ds, "SOPInstanceUID", "")) or None,
                     "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
                     or str(event.request.AffectedSOPClassUID),
@@ -530,14 +693,26 @@ def handle_store(
                 },
             )
         )
+        if sink is not None:
+            _submit_artifact(
+                sink,
+                event,
+                cache,
+                capture,
+                request_type="C-STORE",
+                disposition="rejected",
+                sop_class_uid=str(getattr(ds, "SOPClassUID", ""))
+                or str(event.request.AffectedSOPClassUID),
+                sop_instance_uid=str(getattr(ds, "SOPInstanceUID", "")) or None,
+            )
         yield (err.status, None)
         return
 
     params = [
-        f"SHA256: {file_hash}",
+        f"SHA256: {capture.sha256}",
         f"SOPInstanceUID: {ds.SOPInstanceUID}",
     ]
-    # Missing identity keys: quarantined but unindexed — surface it, it's a signal.
+    # Missing identity keys: quarantined but unindexed; surface it, it is a signal.
     missing = [kw for kw in INDEX_REQUIRED_KEYS if kw not in ds]
     if missing:
         params.append(f"Not indexed (missing {', '.join(missing)})")
@@ -550,9 +725,10 @@ def handle_store(
                 status=QRStatus.SUCCESS,
                 log_level="WARNING",
                 artifact={
-                    "filename": None,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": str(ds.SOPInstanceUID),
                     "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
                     or str(event.request.AffectedSOPClassUID),
@@ -571,9 +747,10 @@ def handle_store(
                 session_parameters=params,
                 status=QRStatus.SUCCESS,
                 artifact={
-                    "filename": None,
+                    "filename": capture.path.name,
                     "bytes": request_bytes,
-                    "sha256": file_hash,
+                    "sha256": capture.sha256,
+                    "artifact_id": capture.artifact_id,
                     "sop_instance_uid": str(ds.SOPInstanceUID),
                     "sop_class_uid": str(getattr(ds, "SOPClassUID", ""))
                     or str(event.request.AffectedSOPClassUID),
@@ -582,6 +759,18 @@ def handle_store(
                     "reject_reason": None,
                 },
             )
+        )
+    if sink is not None:
+        _submit_artifact(
+            sink,
+            event,
+            cache,
+            capture,
+            request_type="C-STORE",
+            disposition="stored-unindexed" if missing else "stored",
+            sop_class_uid=str(getattr(ds, "SOPClassUID", ""))
+            or str(event.request.AffectedSOPClassUID),
+            sop_instance_uid=str(ds.SOPInstanceUID),
         )
     yield (QRStatus.SUCCESS, None)
 
@@ -636,14 +825,17 @@ _handlers: list[tuple[str, EventType, EventHandler]] = [
 
 
 def new_dimse_factory(
-    repo: Repository, bus: Logger, max_store_bytes: int | None = None
+    repo: Repository,
+    bus: Logger,
+    max_store_bytes: int | None = None,
+    sink: ArtifactSink | None = None,
 ) -> dict[str, EventHandlerType]:
     """Map handler name -> (event type, pynetdicom callback). One SessionCache shared by all."""
     cache = SessionCache()
     handlers: dict[str, EventHandlerType] = {}
     for n, t, h in _handlers:
         if n == "store":
-            h = partial(h, max_store_bytes=max_store_bytes)
+            h = partial(h, max_store_bytes=max_store_bytes, sink=sink)
         if t in _ACSE_EVENTS or t == evt.EVT_CONN_OPEN:
             binder = bind_acse(h, repo, bus, cache)
         elif t in _QR_EVENTS:

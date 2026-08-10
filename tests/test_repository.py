@@ -66,6 +66,21 @@ def test_store_unsafe_quarantines_and_keeps_a_raw_capture(repo):
     assert any(repo.storage.traces_dir.glob("*.dcm.gz"))  # raw pre-parse forensic copy
 
 
+def test_store_writes_part10_canonical_file_atomically(repo):
+    ds = _ct_dataset()
+    ds.file_meta = FileMetaDataset()
+
+    assert repo.store(ds, safe=False) is None
+
+    path = repo.storage.quarantine_dir / str(ds.SOPInstanceUID)
+    assert path.read_bytes()[128:132] == b"DICM"
+    stored = dcmread(path)
+    assert stored.SOPInstanceUID == ds.SOPInstanceUID
+    assert stored.file_meta.MediaStorageSOPInstanceUID == ds.SOPInstanceUID
+    assert stored.file_meta.TransferSyntaxUID == ExplicitVRLittleEndian
+    assert not list(repo.storage.quarantine_dir.glob(".*.tmp"))
+
+
 def test_store_does_not_report_success_when_forensic_capture_fails(repo, monkeypatch):
     def fail_capture(*_args, **_kwargs):
         raise OSError("disk full")
@@ -83,6 +98,15 @@ def test_store_rejects_missing_sop_instance_uid(repo):
     err = repo.store(ds, safe=True)
     assert err is not None
     assert err.status == QRStatus.STORE_ERROR
+
+
+def test_store_rejects_missing_sop_class_uid(repo):
+    ds = _ct_dataset()
+    del ds.SOPClassUID
+    err = repo.store(ds, safe=True)
+    assert err is not None
+    assert err.status == QRStatus.STORE_ERROR
+    assert "SOPClassUID" in err.error
 
 
 def test_store_blocks_path_traversal_in_sop_instance_uid(repo):
@@ -175,6 +199,202 @@ def test_find_page_limits_at_the_database_and_deduplicates(repo):
 
     assert result.error is None
     assert len(result.matches) == 1
+
+
+def test_find_page_default_ordering_is_unchanged(repo):
+    """The new order_col/descending params must be additive for every existing caller."""
+    for study_date in ("20200101", "20220202", "20210303"):
+        ds = _ct_dataset()
+        ds.StudyDate = study_date
+        repo.store(ds, safe=True)
+
+    query = Dataset()
+    query.QueryRetrieveLevel = "STUDY"
+    query.StudyInstanceUID = ""
+    query.StudyDate = ""
+    default = repo.find_page(
+        query,
+        StudyRootQueryRetrieveInformationModelFind,
+        dedup_col="study_instance_uid",
+        offset=0,
+        limit=10,
+    )
+    explicit = repo.find_page(
+        query,
+        StudyRootQueryRetrieveInformationModelFind,
+        dedup_col="study_instance_uid",
+        offset=0,
+        limit=10,
+        order_col=None,
+        descending=False,
+    )
+
+    assert [m.study_instance_uid for m in default.matches] == [
+        m.study_instance_uid for m in explicit.matches
+    ]
+
+
+def test_find_page_orders_by_another_column_descending(repo):
+    for study_date in ("20200101", "20220202", "20210303"):
+        ds = _ct_dataset()
+        ds.StudyDate = study_date
+        repo.store(ds, safe=True)
+
+    query = Dataset()
+    query.QueryRetrieveLevel = "STUDY"
+    query.StudyInstanceUID = ""
+    query.StudyDate = ""
+    result = repo.find_page(
+        query,
+        StudyRootQueryRetrieveInformationModelFind,
+        dedup_col="study_instance_uid",
+        offset=0,
+        limit=10,
+        order_col="study_date",
+        descending=True,
+    )
+
+    assert result.error is None
+    assert [m.study_date for m in result.matches] == [
+        "20220202",
+        "20210303",
+        "20200101",
+    ]
+
+
+# --- worklist rollups ---
+
+
+def test_count_studies_counts_distinct_studies(repo):
+    study_uid = generate_uid()
+    repo.store(_ct_dataset(study_uid=study_uid), safe=True)
+    repo.store(_ct_dataset(study_uid=study_uid), safe=True)
+    repo.store(_ct_dataset(), safe=True)
+
+    assert repo.count_studies() == 2
+
+
+def test_count_instances_groups_by_study(repo):
+    busy, quiet = generate_uid(), generate_uid()
+    for _ in range(3):
+        repo.store(_ct_dataset(study_uid=busy), safe=True)
+    repo.store(_ct_dataset(study_uid=quiet), safe=True)
+
+    assert repo.count_instances([str(busy), str(quiet)]) == {
+        str(busy): 3,
+        str(quiet): 1,
+    }
+
+
+def test_count_instances_ignores_empty_and_unknown_uids(repo):
+    repo.store(_ct_dataset(), safe=True)
+
+    assert repo.count_instances([]) == {}
+    assert repo.count_instances(["1.2.3.not.stored"]) == {}
+
+
+def test_count_instances_truncates_an_oversized_uid_list(repo):
+    """A real UID pushed past the cap must be dropped, proving the IN list is bounded."""
+    study_uid = str(generate_uid())
+    repo.store(_ct_dataset(study_uid=study_uid), safe=True)
+
+    padding = [f"1.2.3.{i}" for i in range(5000)]
+    within_cap = repo.count_instances([study_uid] + padding)
+    beyond_cap = repo.count_instances(padding + [study_uid])
+
+    assert within_cap == {study_uid: 1}
+    assert beyond_cap == {}
+
+
+def test_study_modalities_dedups_per_study(repo):
+    study_uid = generate_uid()
+    first = _ct_dataset(study_uid=study_uid)
+    second = _ct_dataset(study_uid=study_uid)
+    second.Modality = "MR"
+    third = _ct_dataset(study_uid=study_uid)
+    for ds in (first, second, third):
+        repo.store(ds, safe=True)
+
+    assert repo.study_modalities([str(study_uid)]) == {str(study_uid): ["CT", "MR"]}
+
+
+def test_rollups_degrade_to_empty_when_the_query_fails(repo):
+    study_uid = str(generate_uid())
+    repo.store(_ct_dataset(study_uid=study_uid), safe=True)
+    repo.stop()
+
+    # A dead engine must never surface as an exception on an attacker-visible page.
+    assert repo.count_studies() == 0
+    assert repo.count_instances([study_uid]) == {}
+    assert repo.study_modalities([study_uid]) == {}
+    assert repo.study_details([study_uid]) == {}
+
+
+# --- study detail index ---
+
+
+def test_store_indexes_attributes_the_qr_schema_cannot_hold(repo):
+    ds = _ct_dataset()
+    ds.PatientSex = "F"
+    ds.PatientBirthDate = "19670202"
+    ds.StudyDescription = "CT CHEST W/O CONTRAST"
+    ds.BodyPartExamined = "CHEST"
+    ds.InstitutionName = "Riverside General Hospital"
+    ds.StationName = "CT03"
+    ds.ReferringPhysicianName = "Robles^Joshua"
+    repo.store(ds, safe=True)
+
+    detail = repo.study_details([str(ds.StudyInstanceUID)])[str(ds.StudyInstanceUID)]
+
+    assert detail["patient_sex"] == "F"
+    assert detail["patient_birth_date"] == "19670202"
+    assert detail["study_description"] == "CT CHEST W/O CONTRAST"
+    assert detail["body_part"] == "CHEST"
+    assert detail["institution_name"] == "Riverside General Hospital"
+    assert detail["station_name"] == "CT03"
+    assert detail["referring_physician"] == "Robles^Joshua"
+
+
+def test_store_upserts_the_detail_row_instead_of_duplicating_it(repo):
+    study_uid = generate_uid()
+    first = _ct_dataset(study_uid=study_uid)
+    first.InstitutionName = "First Hospital"
+    repo.store(first, safe=True)
+    second = _ct_dataset(study_uid=study_uid)
+    second.InstitutionName = "Second Hospital"
+    repo.store(second, safe=True)
+
+    details = repo.study_details([str(study_uid)])
+
+    assert len(details) == 1
+    assert details[str(study_uid)]["institution_name"] == "Second Hospital"
+
+
+def test_store_bounds_an_oversized_detail_value(repo):
+    ds = _ct_dataset()
+    ds.StudyDescription = "A" * 5000
+    repo.store(ds, safe=True)
+
+    detail = repo.study_details([str(ds.StudyInstanceUID)])[str(ds.StudyInstanceUID)]
+
+    assert len(detail["study_description"]) == 64
+
+
+def test_study_details_returns_empty_strings_for_absent_attributes(repo):
+    ds = _ct_dataset()
+    repo.store(ds, safe=True)
+
+    detail = repo.study_details([str(ds.StudyInstanceUID)])[str(ds.StudyInstanceUID)]
+
+    assert detail["study_description"] == ""
+    assert detail["patient_sex"] == ""
+
+
+def test_study_details_ignores_empty_and_unknown_uids(repo):
+    repo.store(_ct_dataset(), safe=True)
+
+    assert repo.study_details([]) == {}
+    assert repo.study_details(["1.2.3.not.stored"]) == {}
 
 
 # --- eval_qr() ---

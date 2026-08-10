@@ -10,6 +10,8 @@ services:
     environment:
       DICOMHAWK_PROFILE: "${DICOMHAWK_PROFILE:-}"
       DICOMHAWK_AE_TITLE: "${DICOMHAWK_AE_TITLE:-}"
+      # Writable cache on the persistent state volume (rootfs is read-only, so ~/.cache fails).
+      DICOMHAWK_CACHE_DIR: /opt/dicomhawk/state/cache
       DICOMHAWK_PORTS: "${DICOMHAWK_PORTS:-104}"
     ports:
       - "104:104"               # standard unencrypted DICOM port; use host privileges/capabilities as required
@@ -32,6 +34,10 @@ services:
       - "${DICOMHAWK_AE_TITLE:-}"       # empty = use the profile's AE title; set to override it
       - -db
       - "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}"   # own volume, off the flood-prone traces volume
+      - --analysis-db
+      - "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}"
+      - --fingerprint-db
+      - "${DICOMHAWK_FINGERPRINT_DB:-/opt/dicomhawk/state/fingerprint.db}"
       - -t
       - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
       - -l
@@ -107,6 +113,5 @@ volumes:
 
 networks:
   dicomhawk_net:
-    # Externally routable (attackers need inbound); drop egress at the host firewall, not via
-    # `internal: true` which also breaks the published-port return path. See docs/deployment.md.
+    # Externally routable; drop egress at the host firewall, not via `internal: true`.
     driver: bridge

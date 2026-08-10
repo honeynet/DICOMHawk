@@ -4,12 +4,16 @@ import signal
 import sys
 
 import typer
+from analysis.component import new_analysis_component
+from analysis.config import new_analysis_config
 from dicomhawk.app import new_dicomhawk
 from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
 from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
 from dicomhawk.storage import new_store
+from fingerprint.component import new_fingerprint_component
+from fingerprint.config import new_fingerprint_config
 
 from profiles.profile import load_profile
 from web.component import new_dicomweb_component, new_web_component
@@ -18,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 serve_app = typer.Typer(help="dicomhawk runner")
 
-# ACSE/connection lifecycle handlers are always on — `operations` only gates DIMSE ops.
+# ACSE/connection lifecycle handlers are always on; `operations` only gates DIMSE ops.
 _ALWAYS_ON_HANDLERS: tuple[str, ...] = (
     "associate",
     "reject",
@@ -26,6 +30,23 @@ _ALWAYS_ON_HANDLERS: tuple[str, ...] = (
     "abort",
     "connect",
 )
+
+
+# Over plain HTTP a browser discards the Secure session cookie, so the decoy login silently resets.
+def _warn_unusable_login(prof, trusted_proxy: str | None) -> None:
+    web = prof.web
+    if not web.secure_cookies:
+        return
+    if web.grant_access == "none":
+        return
+    # Only a trusted proxy forwarding the scheme makes the arriving request itself https.
+    if trusted_proxy:
+        return
+    logger.warning(
+        "web.secure_cookies is on without TLS in front: browsers will drop the session cookie "
+        "over plain HTTP and the decoy login will silently fail. Set DICOMHAWK_SECURE_COOKIES=false "
+        "for a plaintext deployment, or terminate TLS and set --trusted-proxy/--public-base-url."
+    )
 
 
 @serve_app.command()
@@ -118,6 +139,12 @@ def serve(
         envvar="DICOMHAWK_BACKEND_SERVER",
         help="Per-deployment X-Backendserver value for web profiles that expose it",
     ),
+    secure_cookies: bool | None = typer.Option(
+        None,
+        "--secure-cookies/--no-secure-cookies",
+        envvar="DICOMHAWK_SECURE_COOKIES",
+        help="Override the profile's Secure cookie flag; browsers drop Secure cookies over plain HTTP",
+    ),
     public_base_url: str | None = typer.Option(
         None,
         "--public-base-url",
@@ -129,6 +156,72 @@ def serve(
         "--verbose",
         "-v",
         help="Print a compact colored event summary to stdout (auto-enabled when stdout is a TTY)",
+    ),
+    analysis: bool = typer.Option(
+        True,
+        "--analysis/--no-analysis",
+        envvar="DICOMHAWK_ANALYSIS",
+        help="Run captured payloads through the static analysis pipeline",
+    ),
+    analysis_db: str = typer.Option(
+        "analysis.db",
+        "--analysis-db",
+        envvar="DICOMHAWK_ANALYSIS_DB",
+        help="SQLite path for the durable artifact/analysis-job table",
+    ),
+    analysis_rules: str | None = typer.Option(
+        None,
+        "--analysis-rules",
+        envvar="DICOMHAWK_ANALYSIS_RULES",
+        help="Directory of additional operator .yar files (beyond the shipped starters)",
+    ),
+    analysis_timeout: float = typer.Option(
+        10.0,
+        "--analysis-timeout",
+        envvar="DICOMHAWK_ANALYSIS_TIMEOUT",
+        help="Hard wall-clock deadline per analysis job, in seconds",
+    ),
+    analysis_max_bytes: int = typer.Option(
+        64 * 1024 * 1024,
+        "--analysis-max-bytes",
+        envvar="DICOMHAWK_ANALYSIS_MAX_BYTES",
+        help="Bounded read/extraction cap per analyzed capture",
+    ),
+    analysis_queue_size: int = typer.Option(
+        256,
+        "--analysis-queue-size",
+        envvar="DICOMHAWK_ANALYSIS_QUEUE_SIZE",
+        help="In-memory wake-up queue bound; the durable job table is the source of truth",
+    ),
+    fingerprint: bool = typer.Option(
+        True,
+        "--fingerprint/--no-fingerprint",
+        envvar="DICOMHAWK_FINGERPRINT",
+        help="Serve the browser fingerprint collector on profiles whose web.fingerprint is enabled",
+    ),
+    fingerprint_db: str = typer.Option(
+        "fingerprint.db",
+        "--fingerprint-db",
+        envvar="DICOMHAWK_FINGERPRINT_DB",
+        help="SQLite path for collected browser fingerprints (its own store, separate from every other)",
+    ),
+    fingerprint_max_bytes: int = typer.Option(
+        64 * 1024,
+        "--fingerprint-max-bytes",
+        envvar="DICOMHAWK_FINGERPRINT_MAX_BYTES",
+        help="Hard cap on one collector submission body",
+    ),
+    fingerprint_max_per_session: int = typer.Option(
+        20,
+        "--fingerprint-max-per-session",
+        envvar="DICOMHAWK_FINGERPRINT_MAX_PER_SESSION",
+        help="Submissions stored per web session before further ones are dropped",
+    ),
+    fingerprint_max_per_ip: int = typer.Option(
+        500,
+        "--fingerprint-max-per-ip",
+        envvar="DICOMHAWK_FINGERPRINT_MAX_PER_IP",
+        help="Submissions stored per source address, so rotating sessions cannot bypass the cap",
     ),
 ):
 
@@ -150,6 +243,20 @@ def serve(
         raise typer.BadParameter("log-max-bytes and log-backups cannot be negative")
     if log_max_bytes and log_backups < 1:
         raise typer.BadParameter("rotating logs require at least one backup")
+    if analysis_timeout <= 0:
+        raise typer.BadParameter("analysis-timeout must be positive")
+    if analysis_max_bytes < 1:
+        raise typer.BadParameter("analysis-max-bytes must be positive")
+    if analysis_queue_size < 1:
+        raise typer.BadParameter("analysis-queue-size must be positive")
+    if fingerprint_max_bytes < 1:
+        raise typer.BadParameter("fingerprint-max-bytes must be positive")
+    if fingerprint_max_per_session < 1:
+        raise typer.BadParameter("fingerprint-max-per-session must be positive")
+    if fingerprint_max_per_ip < fingerprint_max_per_session:
+        raise typer.BadParameter(
+            "fingerprint-max-per-ip cannot be below fingerprint-max-per-session"
+        )
     try:
         operator_is_loopback = (
             operator_host == "localhost"
@@ -168,7 +275,10 @@ def serve(
             raise typer.BadParameter(
                 "trusted-proxy must be one exact IP address"
             ) from exc
-    if backend_server:
+    if secure_cookies is not None:
+        prof.web.secure_cookies = secure_cookies
+    # Only override a header the profile already ships; injecting it elsewhere leaks one vendor into another.
+    if backend_server and "X-Backendserver" in prof.web.headers:
         prof.web.headers["X-Backendserver"] = backend_server
     if public_base_url:
         from urllib.parse import urlsplit
@@ -250,7 +360,60 @@ def serve(
     if trusted_proxy:
         logger.info("Trusted HTTP proxy: %s", trusted_proxy)
 
-    dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes)
+    components = []
+    sink = None
+    analysis_store = None
+    if analysis:
+        analysis_component = new_analysis_component(
+            new_analysis_config(
+                db_path=analysis_db,
+                rules_dir=analysis_rules,
+                timeout=analysis_timeout,
+                max_bytes=analysis_max_bytes,
+                queue_size=analysis_queue_size,
+            ),
+            bus,
+        )
+        # First in `components` -> starts before ingress listeners, stops after they close.
+        components.append(analysis_component)
+        sink = analysis_component.sink
+        analysis_store = analysis_component.store
+        logger.info(
+            "Analysis: enabled, rules=%s", analysis_rules or "shipped starters only"
+        )
+    else:
+        logger.info("Analysis: disabled (--no-analysis)")
+
+    fingerprint_sink = None
+    fingerprint_store = None
+    if not fingerprint:
+        # The flag overrides the profile, so no collector is served and no route is registered.
+        prof.web.fingerprint.enabled = False
+    # Only build the store when a profile actually serves a collector, so nothing is created unused.
+    if (
+        fingerprint
+        and prof.kind == "pacs"
+        and prof.web.enabled
+        and prof.web.fingerprint.enabled
+    ):
+        fingerprint_component = new_fingerprint_component(
+            new_fingerprint_config(
+                db_path=fingerprint_db,
+                max_body_bytes=fingerprint_max_bytes,
+                max_per_session=fingerprint_max_per_session,
+                max_per_ip=fingerprint_max_per_ip,
+            )
+        )
+        components.append(fingerprint_component)
+        fingerprint_sink = fingerprint_component.sink
+        fingerprint_store = fingerprint_component.store
+        logger.info(
+            "Fingerprinting: signals=%s", ",".join(prof.web.fingerprint.signals)
+        )
+    else:
+        logger.info("Fingerprinting: disabled")
+
+    dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes, sink=sink)
 
     handlers = []
     for op in prof.dicom.operations:
@@ -260,8 +423,8 @@ def serve(
         if h := dimse_fact.get(always_on):
             handlers.append(h)
 
-    components = []
     if prof.kind == "pacs" and prof.web.enabled:
+        _warn_unusable_login(prof, trusted_proxy)
         components.append(
             new_web_component(
                 prof,
@@ -273,11 +436,17 @@ def serve(
                 operator_host,
                 operator_token,
                 trusted_proxy,
+                sink,
+                analysis_store,
+                fingerprint_sink,
+                fingerprint_store,
             )
         )
     # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.
     if prof.kind == "pacs" and prof.dicomweb.enabled:
-        components.append(new_dicomweb_component(prof, repo, bus, host, trusted_proxy))
+        components.append(
+            new_dicomweb_component(prof, repo, bus, host, trusted_proxy, sink)
+        )
 
     srv = new_server(bus, config, handlers)
     hp = new_dicomhawk(srv, components)

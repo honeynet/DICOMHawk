@@ -2,6 +2,7 @@ import io
 import logging
 import random
 import threading
+from collections.abc import Callable
 from datetime import date
 
 from pydicom import dcmread
@@ -13,6 +14,7 @@ from honeytoken.injector import Middleware
 from .fallback import load_fallback_datasets
 from .locations import Location, load_locations
 from .names import NamePools, _patch_location, faker_pools
+from .procedures import Procedures, load_procedures
 from .tcia import TciaClient
 
 logger = logging.getLogger(__name__)
@@ -61,7 +63,7 @@ class SeedScheduler(threading.Thread):
 
     def run(self) -> None:
         logger.info(
-            f"Seed scheduler started — interval: {self._interval // 60}m, "
+            f"Seed scheduler started, interval: {self._interval // 60}m, "
             f"collections: {self._collections}, modalities: {self._modalities}, "
             f"rotate: {self._rotate}"
         )
@@ -86,13 +88,14 @@ class Seeder:
         locale: str = "en_US",
         name_pools: NamePools | None = None,
         honeytoken: Middleware | None = None,
+        procedures: Procedures | None = None,
     ):
         self._repo = repo
         self._client = TciaClient()
         self._locations = locations or load_locations(None)
-        self._male_pool, self._female_pool, self._physician_pool = (
-            name_pools or faker_pools(locale)
-        )
+        self._procedures = procedures or load_procedures(None)
+        self._locale = locale
+        self._name_pools = name_pools
         self._honeytoken = honeytoken
         self._honeytoken_planted = False
 
@@ -109,10 +112,12 @@ class Seeder:
         max_images: int = 30,
         modality: str = "CT",
         epoch: str = "",
+        on_progress: Callable[[int, int, int], None] | None = None,
     ) -> int:
         # Seeded sampling compensates for getSeries lacking instance counts.
         rng = random.Random(epoch or collection)
         loc = rng.choice(self._locations)
+        pools = self._name_pools or faker_pools(self._locale, epoch)
         series_list = self._client.get_series(collection, modality)
 
         download_requested = max_series > 0 and max_images > 0
@@ -122,12 +127,16 @@ class Seeder:
         if series_list and download_requested:
             uids = [uid for s in series_list if (uid := s.get("SeriesInstanceUID"))]
             rng.shuffle(uids)
-            for uid in uids[:max_series]:
-                stored += self._ingest_series(uid, loc, max_images, epoch)
+            selected = uids[:max_series]
+            for index, uid in enumerate(selected, 1):
+                # Reported before the download so a caller can show movement, not just results.
+                if on_progress is not None:
+                    on_progress(index, len(selected), stored)
+                stored += self._ingest_series(uid, loc, max_images, epoch, pools)
 
         if stored == 0 and download_requested:
             # TCIA unreachable, empty, or every download failed → bundled offline dataset.
-            stored = self._seed_fallback(loc, modality, epoch)
+            stored = self._seed_fallback(loc, modality, epoch, pools)
             if stored:
                 logger.warning(
                     f"TCIA unavailable for '{collection}' ({modality}); "
@@ -146,9 +155,15 @@ class Seeder:
         return stored
 
     def _ingest_series(
-        self, series_uid: str, loc: Location, max_images: int, epoch: str
+        self,
+        series_uid: str,
+        loc: Location,
+        max_images: int,
+        epoch: str,
+        pools: NamePools,
     ) -> int:
         sop_uids = self._client.get_sop_uids(series_uid)
+        male, female, physician = pools
 
         stored = 0
         for sop_uid in sop_uids[:max_images]:
@@ -161,7 +176,7 @@ class Seeder:
                 logger.error(f"Error reading {sop_uid}: {exc}")
                 continue
             ds = _patch_location(
-                ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
+                ds, loc, male, female, physician, epoch, self._procedures
             )
             ds, tagged = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
@@ -174,11 +189,14 @@ class Seeder:
 
         return stored
 
-    def _seed_fallback(self, loc: Location, modality: str, epoch: str) -> int:
+    def _seed_fallback(
+        self, loc: Location, modality: str, epoch: str, pools: NamePools | None = None
+    ) -> int:
+        male, female, physician = pools or faker_pools(self._locale, epoch)
         stored = 0
         for ds in load_fallback_datasets(modality):
             ds = _patch_location(
-                ds, loc, self._male_pool, self._female_pool, self._physician_pool, epoch
+                ds, loc, male, female, physician, epoch, self._procedures
             )
             ds, tagged = self._tag_honeytoken(ds)
             err = self._repo.store(ds, safe=True)
@@ -197,6 +215,7 @@ def new_seeder(
     locale: str = "en_US",
     name_pools: NamePools | None = None,
     honeytoken: Middleware | None = None,
+    procedures: Procedures | None = None,
 ) -> Seeder:
     return Seeder(
         repo,
@@ -204,4 +223,5 @@ def new_seeder(
         locale=locale,
         name_pools=name_pools,
         honeytoken=honeytoken,
+        procedures=procedures,
     )

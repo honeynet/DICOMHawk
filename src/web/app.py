@@ -33,12 +33,19 @@ from werkzeug.serving import WSGIRequestHandler
 from dicomhawk.bus import InteractionEvent
 from dicomhawk.handlers import _FIND_LEVEL_UID
 from dicomhawk.repository import Repository
+from dicomhawk.storage import ArtifactSink, SubmittedArtifact
 from profiles.profile import ProfileConfig
+
+logger = logging.getLogger(__name__)
 
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOG_FIELD_LIMIT = 4096
 _WEB_SESSION_TTL_SECONDS = 8 * 60 * 60
 _WEB_MAX_SESSIONS = 10_000
+# A rendered name, not a log field, so the 4096-char log bound would be far too generous.
+_WEB_USERNAME_LIMIT = 64
+# Worklist query parameters are attacker-chosen; keep the rendered/logged forms short.
+_WORKLIST_PARAM_LIMIT = 120
 _BROWSE_MAX_OFFSET = 20_000
 
 
@@ -228,7 +235,15 @@ def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
     )
 
 
-def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifact=None):
+def _log_probe(
+    request_type,
+    params=None,
+    *,
+    matches=None,
+    level="INFO",
+    artifact=None,
+    fingerprint_hash=None,
+):
     """Log a bare honeytrap/scan/browse hit (no credentials), same channel=WEB path as _capture."""
     log = current_app.config["BUS"]
     emit = log.warning if level == "WARNING" else log.info
@@ -247,38 +262,93 @@ def _log_probe(request_type, params=None, *, matches=None, level="INFO", artifac
             path=_bounded(request.full_path.rstrip("?")),
             user_agent=_bounded(request.headers.get("User-Agent", "")),
             artifact=artifact,
+            fingerprint_hash=fingerprint_hash,
         )
     )
 
 
-def _issue_session() -> str:
+def _local_port() -> int | None:
+    try:
+        return int(request.environ.get("SERVER_PORT"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _submit_artifact(
+    capture,
+    *,
+    request_type: str,
+    disposition: str,
+    sop_class_uid: str | None = None,
+    sop_instance_uid: str | None = None,
+) -> None:
+    sink: ArtifactSink = current_app.config["ARTIFACT_SINK"]
+    try:
+        sink(
+            SubmittedArtifact(
+                capture,
+                channel="WEB",
+                request_type=request_type,
+                disposition=disposition,
+                source_encoding="part10",  # the browse upload only ever accepts .dcm Part-10 files
+                session_id=_http_session_id(),
+                ip=request.remote_addr,
+                local_port=_local_port(),
+                sop_class_uid=sop_class_uid,
+                sop_instance_uid=sop_instance_uid,
+            )
+        )
+    except Exception:
+        # Analysis must never change what the peer sees; the payload is already captured.
+        logger.exception("Artifact sink failed for %s", capture.artifact_id)
+
+
+def _display_name(value) -> str:
+    """Bounded, control-character-free rendering of a name the peer chose themselves."""
+    text = "".join(ch for ch in str(value or "") if ord(ch) >= 32)
+    return text[:_WEB_USERNAME_LIMIT]
+
+
+def _issue_session(username: str = "") -> str:
     token = _protected_blob(32)
     now = time.monotonic()
-    sessions: dict[str, float] = current_app.config["WEB_SESSIONS"]
+    sessions: dict[str, tuple[float, str]] = current_app.config["WEB_SESSIONS"]
     lock: threading.Lock = current_app.config["WEB_SESSIONS_LOCK"]
     with lock:
-        for expired in [key for key, deadline in sessions.items() if deadline <= now]:
+        for expired in [
+            key for key, (deadline, _name) in sessions.items() if deadline <= now
+        ]:
             sessions.pop(expired, None)
         while len(sessions) >= _WEB_MAX_SESSIONS:
             sessions.pop(next(iter(sessions)))
-        sessions[token] = now + _WEB_SESSION_TTL_SECONDS
+        sessions[token] = (now + _WEB_SESSION_TTL_SECONDS, _display_name(username))
     return token
 
 
-def _session_ok() -> bool:
+def _session_entry() -> tuple[float, str] | None:
     token = request.cookies.get(_web().cookies["session"])
     if not token:
-        return False
-    sessions: dict[str, float] = current_app.config["WEB_SESSIONS"]
+        return None
+    sessions: dict[str, tuple[float, str]] = current_app.config["WEB_SESSIONS"]
     lock: threading.Lock = current_app.config["WEB_SESSIONS_LOCK"]
     with lock:
-        deadline = sessions.get(token)
-        if deadline is None:
-            return False
-        if deadline <= time.monotonic():
+        entry = sessions.get(token)
+        if entry is None:
+            return None
+        if entry[0] <= time.monotonic():
             sessions.pop(token, None)
-            return False
-    return True
+            return None
+    return entry
+
+
+def _session_ok() -> bool:
+    return _session_entry() is not None
+
+
+def _session_user() -> str:
+    """The name the peer signed in with; the page echoes it, so it is never trusted input."""
+    entry = _session_entry()
+    return entry[1] if entry else ""
 
 
 def _revoke_session() -> None:
@@ -289,15 +359,15 @@ def _revoke_session() -> None:
         current_app.config["WEB_SESSIONS"].pop(token, None)
 
 
-def _grant():
+def _grant(username: str = ""):
     """Grant response: redirect into the decoy landing (browse console if enabled) with the session cookie set."""
     web = _web()
-    landing = web.routes["console"] if web.browse else web.routes["worklist"]
+    landing = _landing_url(web)
     resp = make_response(redirect(landing, code=302))
     secure = web.secure_cookies or request.is_secure
     resp.set_cookie(
         web.cookies["session"],
-        _issue_session(),
+        _issue_session(username),
         secure=secure,
         httponly=True,
         samesite="None" if secure else "Lax",
@@ -305,47 +375,108 @@ def _grant():
     return resp
 
 
-def _worklist_studies():
-    """Real seeded studies via repo.find(), collapsed to one row per study (as handle_find does)."""
+def _display_age(birth_date: str, study_date: str) -> str:
+    """Age the patient was on the study date; a PACS shows this, not a raw birth date."""
+    born, studied = str(birth_date or ""), str(study_date or "")
+    if len(born) < 8 or len(studied) < 8 or not (born.isdigit() and studied.isdigit()):
+        return ""
+    years = int(studied[:4]) - int(born[:4]) - (studied[4:8] < born[4:8])
+    return f"{years}Y" if 0 <= years <= 150 else ""
+
+
+def _format_person_name(value) -> str:
+    """DICOM PN is Family^Given^...; no PACS shows the caret, they show 'Family, Given'."""
+    parts = [part.strip() for part in str(value or "").split("^")]
+    named = [part for part in parts[:2] if part]
+    return ", ".join(named)
+
+
+# STUDY-level keywords the worklist queries; Modality and the rest come from rollups.
+_WORKLIST_KEYWORDS = (
+    "StudyInstanceUID",
+    "StudyDate",
+    "StudyTime",
+    "AccessionNumber",
+    "StudyID",
+    "PatientID",
+    "PatientName",
+)
+
+
+def _worklist_rows(modality: str = "") -> list[dict]:
+    """One bounded page of studies; four queries total, whatever the study count."""
+    web = _web()
     repo: Repository = current_app.config["REPO"]
     model = StudyRootQueryRetrieveInformationModelFind
-    ds = Dataset()
-    ds.QueryRetrieveLevel = "SERIES"
-    for kw in (
-        "StudyInstanceUID",
-        "StudyDate",
-        "StudyTime",
-        "PatientID",
-        "PatientName",
-        "SeriesInstanceUID",
-        "Modality",
-    ):
-        setattr(ds, kw, "")
+    placeholders = web.worklist.get("placeholders", {})
+    empty = placeholders.get("empty", "")
 
-    result = repo.find(ds, model)
+    ds = Dataset()
+    ds.QueryRetrieveLevel = "STUDY"
+    for kw in _WORKLIST_KEYWORDS:
+        setattr(ds, kw, "")
+    if modality:
+        # A SERIES attribute, so it narrows via the join build_query already performs.
+        ds.QueryRetrieveLevel = "SERIES"
+        ds.SeriesInstanceUID = ""
+        ds.Modality = modality
+
+    result = repo.find_page(
+        ds,
+        model,
+        dedup_col="study_instance_uid",
+        offset=0,
+        limit=web.worklist_page_size,
+        order_col="study_date",
+        descending=True,
+    )
     if result.error is not None:
         return []
 
-    seen, studies = set(), []
-    for m in result.matches:
-        uid = getattr(m, _FIND_LEVEL_UID["STUDY"], None)
-        if uid in seen:
-            continue
-        seen.add(uid)
-        idt = m.as_identifier(ds, model)
+    uids = [str(m.study_instance_uid) for m in result.matches]
+    counts = repo.count_instances(uids)
+    modalities = repo.study_modalities(uids)
+    details = repo.study_details(uids)
+
+    rows = []
+    for match in result.matches:
+        uid = str(match.study_instance_uid)
+        idt = match.as_identifier(ds, model)
+        detail = details.get(uid, {})
         date = str(getattr(idt, "StudyDate", "") or "")
-        time = str(getattr(idt, "StudyTime", "") or "")
-        studies.append(
+        clock = str(getattr(idt, "StudyTime", "") or "")
+        rows.append(
             {
-                "patient_name": str(getattr(idt, "PatientName", "") or "—"),
-                "description": "—",
-                "study_datetime": f"{date} {time}".strip() or "—",
-                "modality": str(getattr(idt, "Modality", "") or "—"),
-                "status": "Unread",
-                "age": "—",
+                "patient_name": _format_person_name(getattr(idt, "PatientName", ""))
+                or empty,
+                "patient_id": str(getattr(idt, "PatientID", "") or "") or empty,
+                "description": detail.get("study_description")
+                or placeholders.get("description", ""),
+                "modality": ", ".join(modalities.get(uid, [])) or empty,
+                "images": counts.get(uid, 0),
+                "study_date": date,
+                "study_time": clock,
+                "study_datetime": f"{date} {clock}".strip() or empty,
+                "accession_number": str(getattr(idt, "AccessionNumber", "") or "")
+                or empty,
+                "study_id": str(getattr(idt, "StudyID", "") or "") or empty,
+                "study_instance_uid": uid,
+                "patient_sex": detail.get("patient_sex") or empty,
+                "patient_birth_date": detail.get("patient_birth_date") or empty,
+                "body_part": detail.get("body_part") or empty,
+                "series_description": detail.get("series_description") or empty,
+                "institution_name": detail.get("institution_name") or empty,
+                "station_name": detail.get("station_name") or empty,
+                "referring_physician": _format_person_name(
+                    detail.get("referring_physician")
+                )
+                or empty,
+                "status": placeholders.get("status", ""),
+                "age": _display_age(detail.get("patient_birth_date", ""), date)
+                or empty,
             }
         )
-    return studies
+    return rows
 
 
 def _make_nonce():
@@ -360,12 +491,16 @@ def _apply_request_limit():
 
 
 def _inject_context():
-    # fingerprint_seam is the Weeks 5-6 injection point; empty unless web.fingerprint_script is set.
+    # The collector reads its enabled categories from data-signals, so the asset itself stays static.
     nonce = g.get("csp_nonce", "")
+    web = _web()
     seam = ""
-    script = _web().fingerprint_script
-    if script:
-        seam = f'<script nonce="{nonce}" src="{url_for("static", filename=script)}"></script>'
+    if web.fingerprint.enabled:
+        seam = (
+            f'<script nonce="{nonce}" src="{web.routes["fingerprint_script"]}" '
+            f'data-signals="{",".join(web.fingerprint.signals)}" '
+            f'data-ingest="{web.routes["fingerprint_ingest"]}" defer></script>'
+        )
     return {"csp_nonce": nonce, "fingerprint_seam": seam}
 
 
@@ -391,6 +526,39 @@ def favicon():
     return send_from_directory(
         current_app.static_folder, _web().favicon, mimetype="image/x-icon"
     )
+
+
+def fingerprint_script():
+    # Served from the fingerprint package, so one collector covers every profile that opts in.
+    return send_from_directory(
+        os.path.join(_SRC, "fingerprint", "static"),
+        "collector.js",
+        mimetype="application/javascript",
+    )
+
+
+def fingerprint_ingest():
+    """Absorb one collector submission. Always answers 204, whatever the store does."""
+    fingerprint_hash = None
+    try:
+        sink = current_app.config["FINGERPRINT_SINK"]
+        fingerprint_hash = sink(
+            request.get_data(cache=False),
+            session_id=_http_session_id(),
+            ip=request.remote_addr,
+            local_port=_local_port(),
+            path=_bounded(request.path),
+            user_agent=_bounded(request.headers.get("User-Agent", "")) or None,
+        )
+    except Exception:
+        # Fingerprinting must never change what the peer sees; the response below is unconditional.
+        logger.exception("Fingerprint sink failed")
+    _log_probe(
+        "WEB_FINGERPRINT",
+        params=["Stored: yes" if fingerprint_hash else "Stored: no"],
+        fingerprint_hash=fingerprint_hash,
+    )
+    return ("", 204)
 
 
 def robots_txt():
@@ -450,20 +618,134 @@ def entry():
     # Fujifilm launches the authenticated shell under WorkflowUI.
     web = _web()
     if _session_ok():
-        landing = web.routes["console"] if web.browse else web.routes["worklist"]
-        return redirect(landing, code=302)
+        return redirect(_landing_url(web), code=302)
     signin = secrets.token_hex(16)
     return redirect(f"{web.routes['login']}?signin={signin}", code=302)
+
+
+def _worklist_folders(worklist: dict) -> list[dict]:
+    return [
+        item
+        for section in worklist.get("sidebar", [])
+        for item in section.get("items") or []
+    ]
+
+
+def _landing_url(web) -> str:
+    if web.browse:
+        return web.routes["console"]
+    return f"{web.routes['worklist']}?path="
+
+
+def _selected_folder(worklist: dict, requested: str) -> dict | None:
+    """Resolve against the profile's own labels; an unknown folder falls back, never reflects."""
+    for item in _worklist_folders(worklist):
+        if item["label"] == requested:
+            return item
+    return None
+
+
+def _worklist_sidebar_counts(worklist: dict) -> dict[str, int]:
+    """Live study totals for folders that asked; the schema forbids them on a filtered folder."""
+    wanted = [
+        item
+        for item in _worklist_folders(worklist)
+        if item.get("dynamic_count") == "studies"
+    ]
+    if not wanted:
+        return {}
+    total = current_app.config["REPO"].count_studies()
+    return {item["label"]: total for item in wanted}
+
+
+def _selected_action(worklist: dict, requested: str) -> dict | None:
+    """Resolve against every declared action at any submenu depth, never reflecting input."""
+    pending = [
+        *worklist.get("context_menu", []),
+        *worklist.get("toolbar", []),
+        *worklist.get("header_links", []),
+    ]
+    while pending:
+        item = pending.pop()
+        if not isinstance(item, dict):
+            continue
+        if item.get("label") == requested:
+            return item
+        pending.extend(item.get("items", []))
+    return None
+
+
+def _worklist_filters(worklist: dict) -> dict[str, str]:
+    """Column filter boxes; keyed by column so an unknown parameter is simply ignored."""
+    filters = {}
+    for column in worklist.get("columns", []):
+        value = request.args.get(f"filter_{column['key']}", "")
+        if value:
+            filters[column["key"]] = value[:_WORKLIST_PARAM_LIMIT]
+    return filters
+
+
+def _filter_worklist_rows(rows: list[dict], filters: dict[str, str]) -> list[dict]:
+    for key, value in filters.items():
+        needle = value.casefold()
+        rows = [row for row in rows if needle in str(row.get(key, "")).casefold()]
+    return rows
 
 
 def worklist(subpath=None):
     web = _web()
     if not _session_ok():
         return redirect(web.routes["entry"], code=302)
-    _log_probe("WEB_WORKLIST_VIEW")
+
+    config = web.worklist
+    folder = _selected_folder(config, request.args.get("path", ""))
+    action = _selected_action(config, request.args.get("action", ""))
+    filters = _worklist_filters(config)
+    rows = _worklist_rows((folder or {}).get("filter", {}).get("modality", ""))
+    rows = _filter_worklist_rows(rows, filters)
+
+    # Only a study already on this page opens, so the parameter cannot probe for others.
+    wanted = request.args.get("study", "")[:_WORKLIST_PARAM_LIMIT]
+    detail = next((r for r in rows if r["study_instance_uid"] == wanted), None)
+    if action is not None and action.get("result") != "detail":
+        detail = None
+
+    # Rebuilt from resolved values only, so no raw query parameter is ever echoed back.
+    query = {"path": folder["label"] if folder else ""}
+    query.update({f"filter_{key}": value for key, value in filters.items()})
+
+    params = [f"Studies: {len(rows)}"]
+    if folder is not None:
+        params.append(f"Folder: {folder['label']}")
+    if action is not None:
+        params.append(f"Action: {action['label']}")
+    if detail is not None:
+        params.append(f"Study: {detail['study_instance_uid']}")
+    for key, value in filters.items():
+        params.append(f"Filter {key}: {value}")
+    _log_probe("WEB_WORKLIST_VIEW", params=params)
+
     return render_template(
         "worklist.html",
-        studies=_worklist_studies(),
+        studies=rows,
+        worklist=config,
+        username=_session_user(),
+        total_studies=(
+            len(rows)
+            if folder is not None or filters
+            else current_app.config["REPO"].count_studies()
+        ),
+        sidebar_counts=_worklist_sidebar_counts(config),
+        folder=folder,
+        detail=detail,
+        filters=filters,
+        refresh_url="?" + urlencode(query),
+        # Never the raw parameter: an unknown action still renders the configured message.
+        action_message=(
+            config.get("messages", {}).get("action_failed", "")
+            if request.args.get("action") and detail is None
+            else ""
+        ),
         routes=web.routes,
         browse=web.browse,
     )
@@ -529,6 +811,14 @@ def _page_url(page: int) -> str:
     return f"{request.path}?{urlencode(args)}"
 
 
+def _browse_value(identifier, keyword: str) -> str:
+    # The worklist already renders PN as "Family, Given"; a raw caret here would contradict it.
+    value = str(getattr(identifier, keyword, "") or "")
+    if keyword in identifier and identifier[keyword].VR == "PN":
+        return _format_person_name(value)
+    return value
+
+
 def _browse_rows(level, keys, dedup_col, page, match=None):
     """Rows for a browse level via repo.find(), deduped by the level's UID (as handle_find does)."""
     repo: Repository = current_app.config["REPO"]
@@ -556,7 +846,7 @@ def _browse_rows(level, keys, dedup_col, page, match=None):
             continue
         seen.add(uid)
         idt = m.as_identifier(ds, model)
-        rows.append({kw: str(getattr(idt, kw, "") or "") for kw in keys})
+        rows.append({kw: _browse_value(idt, kw) for kw in keys})
     return rows, len(result.matches) > page_size, None
 
 
@@ -652,12 +942,11 @@ def upload_get():
     )
 
 
-def _capture_rejected_upload(repo: Repository, raw: bytes) -> str | None:
+def _capture_rejected_upload(repo: Repository, raw: bytes):
     try:
-        repo.storage.capture(raw, suffix=".web-upload")
+        return repo.storage.capture(raw, suffix=".web-upload"), None
     except Exception as exc:
-        return str(exc)
-    return None
+        return None, str(exc)
 
 
 def _validate_upload_dataset(ds: Dataset) -> str:
@@ -709,7 +998,7 @@ def upload_post():
         for f in files[max_files:]:
             raw = f.stream.read()
             digest = hashlib.sha256(raw).hexdigest()
-            capture_error = _capture_rejected_upload(repo, raw)
+            capture, capture_error = _capture_rejected_upload(repo, raw)
             params = [
                 f"File: {_bounded(f.filename)}",
                 f"Bytes: {len(raw)}",
@@ -727,13 +1016,18 @@ def upload_post():
                     "filename": _bounded(f.filename),
                     "bytes": len(raw),
                     "sha256": digest,
+                    "artifact_id": capture.artifact_id if capture else None,
                     "sop_instance_uid": None,
                     "sop_class_uid": None,
-                    "captured": capture_error is None,
+                    "captured": capture is not None,
                     "disposition": "rejected",
                     "reject_reason": "file-count limit",
                 },
             )
+            if capture is not None:
+                _submit_artifact(
+                    capture, request_type="WEB_UPLOAD", disposition="rejected"
+                )
     seen_sops = set()
     for f in files[:max_files]:
         raw = f.stream.read()
@@ -751,7 +1045,7 @@ def upload_post():
             seen_sops.add(sop)
         except Exception as exc:
             failed += 1
-            capture_error = _capture_rejected_upload(repo, raw)
+            capture, capture_error = _capture_rejected_upload(repo, raw)
             params = base_params + [f"Rejected: {_bounded(exc)}"]
             if capture_error:
                 params.append(f"Capture failure: {_bounded(capture_error)}")
@@ -764,16 +1058,23 @@ def upload_post():
                     "filename": _bounded(f.filename),
                     "bytes": len(raw),
                     "sha256": digest,
+                    "artifact_id": capture.artifact_id if capture else None,
                     "sop_instance_uid": None,
                     "sop_class_uid": None,
-                    "captured": capture_error is None,
+                    "captured": capture is not None,
                     "disposition": "rejected",
                     "reject_reason": _bounded(exc),
                 },
             )
+            if capture is not None:
+                _submit_artifact(
+                    capture, request_type="WEB_UPLOAD", disposition="rejected"
+                )
             continue
         # safe=False -> quarantined; raw_bytes preserves the exact attacker payload.
-        err = repo.store(ds, raw_bytes=raw)
+        part_captures = []
+        err = repo.store(ds, raw_bytes=raw, on_captured=part_captures.append)
+        part_capture = part_captures[0] if part_captures else None
         if err is None:
             stored += 1
         else:
@@ -789,14 +1090,22 @@ def upload_post():
                 "filename": _bounded(f.filename),
                 "bytes": len(raw),
                 "sha256": digest,
+                "artifact_id": part_capture.artifact_id if part_capture else None,
                 "sop_instance_uid": _bounded(sop),
                 "sop_class_uid": _bounded(ds.SOPClassUID),
-                "captured": err is None
-                or not err.error.startswith("Failed to quarantine incoming payload"),
+                "captured": part_capture is not None,
                 "disposition": "rejected" if err else "stored",
                 "reject_reason": _bounded(err.error) if err else None,
             },
         )
+        if part_capture is not None:
+            _submit_artifact(
+                part_capture,
+                request_type="WEB_UPLOAD",
+                disposition="rejected" if err else "stored",
+                sop_class_uid=_bounded(ds.SOPClassUID),
+                sop_instance_uid=_bounded(sop),
+            )
     message = (
         f"{stored} file(s) received, {failed} rejected."
         if (stored or failed)
@@ -831,15 +1140,16 @@ def login_post():
     username = request.form.get("username", "")
     password = request.form.get("password", "")
 
-    if (username, password) in _web().honey_credentials:
-        # Bait, not a real account: grants unconditionally (unlike grant_access) and logs distinctly.
+    access = _web().grant_access
+    if access != "none" and (username, password) in _web().honey_credentials:
+        # Bait, not a real account: works whenever any login does, and logs distinctly.
         _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
-        return _grant()
+        return _grant(username)
 
     _capture(username, password)
     signin = request.args.get("signin") or secrets.token_hex(16)
-    if _web().grant_access:
-        return _grant()
+    if access == "any":
+        return _grant(username)
     # Deny: re-render the sign-on page with the real error banner.
     return render_template(
         "login.html", **_login_context(signin, "Username or password is incorrect")
@@ -875,7 +1185,7 @@ def csp_report():
 
 
 def translated_items(item_id):
-    # translation.js reads data['Text1']/['Text2']/['Text3'] — real ASP.NET PascalCase wire format.
+    # translation.js reads data['Text1']/['Text2']/['Text3']: real ASP.NET PascalCase wire format.
     m = _web().winauth_messages
     return {
         "Text1": m.get("text1", ""),
@@ -942,13 +1252,14 @@ def winauth_login():
         return _winauth_challenge()
     username, password = auth.username or "", auth.password or ""
 
-    if (username, password) in _web().honey_credentials:
+    access = _web().grant_access
+    if access != "none" and (username, password) in _web().honey_credentials:
         _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
-        return _grant()
+        return _grant(username)
 
     _capture(username, password, request_type="WEB_WINAUTH_ATTEMPT")
-    if _web().grant_access:
-        return _grant()
+    if access == "any":
+        return _grant(username)
     return (
         _winauth_challenge()
     )  # deny -> dialog reappears, as if credentials were wrong
@@ -962,8 +1273,14 @@ class _SpoofHandler(WSGIRequestHandler):
         self.send_response_only(code, message)
 
 
-def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
-    """Build the attacker-facing Flask app for `profile` — routes/cookies come from its own web config."""
+def new_web(
+    profile: ProfileConfig,
+    repo: Repository,
+    bus: Logger,
+    sink: ArtifactSink | None = None,
+    fingerprint_sink=None,
+) -> Flask:
+    """Build the attacker-facing Flask app for `profile`; routes and cookies come from its own web config."""
     profile_dir = profile.web.assets_dir or os.path.join(
         _SRC, "profiles", profile.web.templates_dir, "web"
     )
@@ -975,6 +1292,8 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
     app.config["WEB"] = profile.web
     app.config["BUS"] = bus
     app.config["REPO"] = repo
+    app.config["ARTIFACT_SINK"] = sink or (lambda _artifact: None)
+    app.config["FINGERPRINT_SINK"] = fingerprint_sink or (lambda _body, **_kwargs: None)
     app.config["WEB_SESSIONS"] = {}
     app.config["WEB_SESSIONS_LOCK"] = threading.Lock()
     app.config["WEB_STORAGE_CLASSES"] = {
@@ -1026,6 +1345,18 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
         methods=["POST"],
     )
 
+    # A profile that never opts in gets no collector asset and no ingest endpoint at all.
+    if profile.web.fingerprint.enabled:
+        app.add_url_rule(
+            routes["fingerprint_script"], "fingerprint_script", fingerprint_script
+        )
+        app.add_url_rule(
+            routes["fingerprint_ingest"],
+            "fingerprint_ingest",
+            fingerprint_ingest,
+            methods=["POST"],
+        )
+
     # Capture-only profiles do not register browse routes.
     if profile.web.browse:
         app.add_url_rule(routes["console"], "console", console)
@@ -1038,7 +1369,7 @@ def new_web(profile: ProfileConfig, repo: Repository, bus: Logger) -> Flask:
         app.add_url_rule(routes["upload"], "upload_post", upload_post, methods=["POST"])
         app.add_url_rule(routes["logout"], "logout", logout, methods=["POST"])
 
-    # Per-profile data, not engine code — a profile with none stays a plain 404 via _iis_404 above.
+    # Per-profile data, not engine code; a profile with none stays a plain 404 via _iis_404 above.
     for i, (path, kind) in enumerate(profile.web.honeytraps):
         prefix = path.rstrip("/")
         view = _honeytrap_view(kind)

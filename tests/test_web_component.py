@@ -5,7 +5,7 @@ import pytest
 from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
-from web.component import new_web_component
+from web.component import _QueueDepthFilter, new_web_component
 
 
 class _Dispatcher:
@@ -38,6 +38,37 @@ def _component(tmp_path):
         18080,
         18081,
     )
+
+
+def test_waitress_queue_filter_keeps_only_pressure_milestones():
+    now = [100.0]
+    queue_filter = _QueueDepthFilter(clock=lambda: now[0])
+    emitted = []
+    for depth in (1, 2, 4, 5, 6, 10, 11, 24, 25, 26):
+        record = logging.LogRecord(
+            "waitress.queue",
+            logging.WARNING,
+            "",
+            0,
+            "Task queue depth is %d",
+            (depth,),
+            None,
+        )
+        if queue_filter.filter(record):
+            emitted.append(depth)
+    assert emitted == [1, 5, 10, 25]
+
+    now[0] += 11
+    record = logging.LogRecord(
+        "waitress.queue",
+        logging.WARNING,
+        "",
+        0,
+        "Task queue depth is %d",
+        (2,),
+        None,
+    )
+    assert queue_filter.filter(record)
 
 
 def test_web_component_surfaces_bind_failure_and_closes_first(monkeypatch, tmp_path):
@@ -125,3 +156,79 @@ def test_trusted_proxy_applies_only_to_attacker_facing_server(monkeypatch, tmp_p
         "x-forwarded-proto",
     }
     assert "trusted_proxy" not in calls[1]
+
+
+# --- shutdown race: stop() closes the socket asyncore is polling ---
+
+
+def _run_serve(run, stopping_set):
+    """Drive _serve directly; the real race is too narrow to trigger on demand."""
+    import threading
+
+    from web.component import _serve
+
+    class _Server:
+        def run(self):
+            run()
+
+    stopping = threading.Event()
+    if stopping_set:
+        stopping.set()
+    _serve("dicomweb-9080", _Server(), stopping)
+
+
+def test_serve_absorbs_the_bad_file_descriptor_raised_by_stop():
+    import errno
+
+    def closed_mid_select():
+        raise OSError(errno.EBADF, "Bad file descriptor")
+
+    # Must not escape as an unhandled thread exception and print a traceback.
+    _run_serve(closed_mid_select, stopping_set=True)
+
+
+def test_serve_still_raises_a_bad_file_descriptor_outside_shutdown():
+    import errno
+
+    def closed_unexpectedly():
+        raise OSError(errno.EBADF, "Bad file descriptor")
+
+    # The same error while running is a real failure and must not be swallowed.
+    with pytest.raises(OSError):
+        _run_serve(closed_unexpectedly, stopping_set=False)
+
+
+def test_serve_still_raises_other_errors_during_shutdown():
+    import errno
+
+    def out_of_memory():
+        raise OSError(errno.ENOMEM, "Cannot allocate memory")
+
+    with pytest.raises(OSError):
+        _run_serve(out_of_memory, stopping_set=True)
+
+
+def test_listener_threads_survive_a_real_start_stop_cycle(tmp_path):
+    import threading
+
+    caught = []
+    previous = threading.excepthook
+    threading.excepthook = lambda args: caught.append(args.exc_type.__name__)
+    try:
+        repo = new_repo(None, new_store(str(tmp_path / "traces")))
+        repo.start()
+        component = new_web_component(
+            load_profile("generic-pacs"),
+            repo,
+            logging.getLogger("bus"),
+            "127.0.0.1",
+            0,
+            0,
+        )
+        component.start()
+        component.stop()
+        repo.stop()
+    finally:
+        threading.excepthook = previous
+
+    assert caught == []

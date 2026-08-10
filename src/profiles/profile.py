@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 _DATA_PKG = "profiles"
 _OPERATIONS = frozenset({"echo", "find", "get", "move", "store"})
 _HONEYTRAP_RESPONSES = frozenset({"login_redirect", "api_404", "unauthorized_page"})
+_FINGERPRINT_SIGNALS = frozenset({"browser", "rendering", "math", "screen", "bot"})
 _DICOMWEB_SERVICES = frozenset({"qido", "wado_rs", "stow", "wado_uri"})
 _REQUIRED_TEMPLATES = frozenset(
     {
@@ -27,7 +28,37 @@ _REQUIRED_TEMPLATES = frozenset(
 )
 _BROWSE_TEMPLATES = frozenset({"console.html", "browse.html", "upload.html"})
 
-# (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so core dicomhawk/ never imports this package.
+# Row keys the worklist builder emits; a column may only name one of these.
+_WORKLIST_ROW_KEYS = frozenset(
+    {
+        "patient_name",
+        "patient_id",
+        "patient_sex",
+        "patient_birth_date",
+        "description",
+        "modality",
+        "images",
+        "body_part",
+        "series_description",
+        "institution_name",
+        "station_name",
+        "referring_physician",
+        "study_date",
+        "study_time",
+        "study_datetime",
+        "accession_number",
+        "study_id",
+        "study_instance_uid",
+        "status",
+        "age",
+    }
+)
+# Sidebar folders may narrow the study list only on these identifier keywords.
+_WORKLIST_FILTER_KEYS = frozenset({"modality"})
+# What a context-menu entry does: show the study we already loaded, or refuse plausibly.
+_WORKLIST_RESULTS = frozenset({"detail", "disabled", "error", "submenu"})
+
+# (abstract_syntax_uid, [transfer_syntax_uids]); a plain tuple so core dicomhawk/ never imports this package.
 type SopClass = tuple[str, list[str]]
 
 # _QR_CLASSES class-name suffix -> operation name in `operations`/`qr_classes`.
@@ -58,10 +89,21 @@ class DicomConfig:
 
 
 @dataclass
+class FingerprintConfig:
+    # Signal categories the served collector is allowed to run; an empty list means off.
+    enabled: bool = False
+    signals: list[str] = field(default_factory=list)
+
+
+_GRANT_ACCESS_LEVELS = frozenset({"none", "bait", "any"})
+
+
+@dataclass
 class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
-    grant_access: bool = False
+    # none = deny every login; bait = only honey_credentials; any = accept anything.
+    grant_access: str = "none"
     # Post-login DICOM browse console (patients/studies/series/instances/upload).
     browse: bool = False
     headers: dict[str, str] = field(default_factory=dict)
@@ -77,9 +119,8 @@ class WebConfig:
     )
     # (path, response_kind); a profile with none declared gets no honeytrap routes at all.
     honeytraps: list[tuple[str, str]] = field(default_factory=list)
-    fingerprint_script: str | None = (
-        None  # static-asset filename; Weeks 5-6 injection seam only, no collector yet
-    )
+    # Browser-fingerprint collector; its two URL paths live in `routes` like every other route.
+    fingerprint: FingerprintConfig = field(default_factory=FingerprintConfig)
     # (username, password) bait pairs; using one grants access unconditionally (see login_post).
     honey_credentials: list[tuple[str, str]] = field(default_factory=list)
     # URL paths for every route the engine serves; keeps one profile's identity out of another's address bar.
@@ -93,6 +134,9 @@ class WebConfig:
     upload_max_request_bytes: int = 50 * 1024 * 1024
     upload_max_files: int = 10
     browse_page_size: int = 100
+    # Post-login worklist shell: title, sidebar, columns, context menu: all profile data.
+    worklist: dict = field(default_factory=dict)
+    worklist_page_size: int = 100
     assets_dir: str | None = None
     # Deployment topology comes from CLI/env, never profile YAML.
     public_base_url: str | None = None
@@ -154,7 +198,7 @@ def default_profile() -> ProfileConfig:
             if name.endswith(suffix):
                 qr_classes[op].append((uid, DEFAULT_TRANSFER_SYNTAXES))
                 break
-        # else: RepositoryQuery has no Find/Move/Get suffix — deliberately excluded.
+        # else: RepositoryQuery has no Find/Move/Get suffix, deliberately excluded.
 
     return ProfileConfig(
         name="default",
@@ -173,11 +217,11 @@ def default_profile() -> ProfileConfig:
             storage_classes=storage_classes,
             qr_classes=qr_classes,
             max_associations=16,
-            max_pdu_size=65536,  # not pynetdicom's DEFAULT_MAX_LENGTH=16382 — avoids rejecting large-PDU clients
+            max_pdu_size=65536,  # not pynetdicom's DEFAULT_MAX_LENGTH=16382, avoids rejecting large-PDU clients
             ae_auth=AEAuthConfig(),
-            acse_timeout=10,  # tighter than pynetdicom's 30s default — shrinks a garbage connection's DoS window
+            acse_timeout=10,  # tighter than pynetdicom's 30s default, shrinks a garbage connection's DoS window
             network_timeout=15,  # tighter than pynetdicom's 60s default, same reason
-            dimse_timeout=20,  # tighter than pynetdicom's 30s default — bounds a peer stalling mid-operation
+            dimse_timeout=20,  # tighter than pynetdicom's 30s default, bounds a peer stalling mid-operation
             max_store_bytes=64 * 1024 * 1024,
         ),
         web=WebConfig(
@@ -220,6 +264,9 @@ def default_profile() -> ProfileConfig:
                 "search": "/portal/search",
                 "upload": "/portal/upload",
                 "logout": "/portal/logout",
+                # Collector asset + its ingest endpoint (registered only when web.fingerprint is on).
+                "fingerprint_script": "/portal/static/telemetry.js",
+                "fingerprint_ingest": "/portal/telemetry",
             },
             cookies={
                 "antiforgery": "portal.xsrf",
@@ -235,6 +282,32 @@ def default_profile() -> ProfileConfig:
                 "text2": "Unable to log in using Windows Authentication.",
                 "text3": "Log in directly",
             },
+            # Empty section lists mean a profile renders no worklist chrome at all.
+            worklist={
+                "title": "Worklist",
+                "header_links": [],
+                "columns": [
+                    {"key": "patient_name", "label": "Patient Name"},
+                    {"key": "description", "label": "Description"},
+                    {"key": "study_datetime", "label": "Study Date Time"},
+                    {"key": "modality", "label": "Modality"},
+                    {"key": "images", "label": "Images"},
+                ],
+                "sidebar": [],
+                "context_menu": [],
+                "footer": {"item_label": "items", "refresh_label": "Last refreshed"},
+                "messages": {"action_failed": "This action is currently unavailable."},
+                # Defaults reproduce the placeholders the worklist has always rendered.
+                "placeholders": {
+                    "description": "—",
+                    "status": "Unread",
+                    "empty": "—",
+                },
+            },
+            # Off unless a profile opts in; opting in with no `signals` key gets every category.
+            fingerprint=FingerprintConfig(
+                enabled=False, signals=sorted(_FINGERPRINT_SIGNALS)
+            ),
         ),
         # Generic single-port /dicom-web/ fallback; a profile opts in and inherits it.
         dicomweb=DicomWebConfig(
@@ -289,6 +362,118 @@ def _parse_sop_class(entry: dict, where: str) -> SopClass:
     ):
         raise ValueError(f"Profile entry '{where}' contains an invalid DICOM UID")
     return (uid_text, transfer_syntaxes)
+
+
+def _worklist_count(value, where: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"Profile '{where}' must be a non-negative integer")
+
+
+def _validate_worklist_columns(columns) -> None:
+    if not isinstance(columns, list) or not columns:
+        raise ValueError("Profile 'web.worklist.columns' must be a non-empty list")
+    for i, column in enumerate(columns):
+        where = f"web.worklist.columns[{i}]"
+        entry = _mapping(column, where)
+        key = _require(entry, "key", where)
+        # An allowlist stops a column naming an attribute the builder never emits.
+        if key not in _WORKLIST_ROW_KEYS:
+            raise ValueError(
+                f"Unknown {where}.key '{key}' "
+                f"(known: {', '.join(sorted(_WORKLIST_ROW_KEYS))})"
+            )
+        if not isinstance(_require(entry, "label", where), str):
+            raise ValueError(f"Profile '{where}.label' must be a string")
+
+
+def _validate_worklist_sidebar(sidebar) -> None:
+    if not isinstance(sidebar, list):
+        raise ValueError("Profile 'web.worklist.sidebar' must be a list")
+    for i, section in enumerate(sidebar):
+        where = f"web.worklist.sidebar[{i}]"
+        entry = _mapping(section, where)
+        if not isinstance(_require(entry, "label", where), str):
+            raise ValueError(f"Profile '{where}.label' must be a string")
+        items = entry.get("items") or []
+        if not isinstance(items, list):
+            raise ValueError(f"Profile '{where}.items' must be a list")
+        for j, item in enumerate(items):
+            item_where = f"{where}.items[{j}]"
+            folder = _mapping(item, item_where)
+            if not isinstance(_require(folder, "label", item_where), str):
+                raise ValueError(f"Profile '{item_where}.label' must be a string")
+            for count_key in ("count", "urgent_count"):
+                if count_key in folder:
+                    _worklist_count(folder[count_key], f"{item_where}.{count_key}")
+            if folder.get("dynamic_count") not in (None, "studies"):
+                raise ValueError(
+                    f"Unknown {item_where}.dynamic_count '{folder['dynamic_count']}'"
+                )
+            if folder.get("dynamic_count") and folder.get("filter"):
+                # The badge is the repository study total, so a narrowed folder would contradict its own list.
+                raise ValueError(
+                    f"Profile '{item_where}' cannot set both dynamic_count and filter"
+                )
+            unknown = set(_mapping(folder.get("filter"), f"{item_where}.filter"))
+            unknown -= _WORKLIST_FILTER_KEYS
+            if unknown:
+                raise ValueError(
+                    f"Unknown {item_where}.filter keys: {', '.join(sorted(unknown))} "
+                    f"(known: {', '.join(sorted(_WORKLIST_FILTER_KEYS))})"
+                )
+
+
+def _validate_worklist_actions(items, where: str, *, icons: bool = False) -> None:
+    if not isinstance(items, list):
+        raise ValueError(f"Profile '{where}' must be a list")
+    for i, item in enumerate(items):
+        item_where = f"{where}[{i}]"
+        if isinstance(item, str):
+            # Bare label strings predate icons; name the fix, don't fail generically.
+            raise ValueError(
+                f"Profile '{item_where}' is a string; entries are now mappings, "
+                f"so write {{label: {item}}} instead"
+            )
+        entry = _mapping(item, item_where)
+        if not isinstance(_require(entry, "label", item_where), str):
+            raise ValueError(f"Profile '{item_where}.label' must be a string")
+        if icons and not isinstance(_require(entry, "icon", item_where), str):
+            raise ValueError(f"Profile '{item_where}.icon' must be a string")
+        result = entry.get("result", "error")
+        if result not in _WORKLIST_RESULTS:
+            raise ValueError(
+                f"Unknown {item_where}.result '{result}' "
+                f"(known: {', '.join(sorted(_WORKLIST_RESULTS))})"
+            )
+        children = entry.get("items", [])
+        if result == "submenu" and not children:
+            raise ValueError(f"Profile '{item_where}.items' must not be empty")
+        if children:
+            _validate_worklist_actions(children, f"{item_where}.items")
+
+
+def _validate_worklist(worklist: dict) -> None:
+    """Reject a malformed worklist block at load time, like every other web section."""
+    if not isinstance(worklist.get("title"), str):
+        raise ValueError("Profile 'web.worklist.title' must be a string")
+    _validate_worklist_actions(
+        worklist.get("header_links"), "web.worklist.header_links", icons=True
+    )
+    _validate_worklist_actions(
+        worklist.get("toolbar", []), "web.worklist.toolbar", icons=True
+    )
+    _validate_worklist_columns(worklist.get("columns"))
+    _validate_worklist_sidebar(worklist.get("sidebar"))
+    _validate_worklist_actions(
+        worklist.get("context_menu"), "web.worklist.context_menu"
+    )
+    for key in ("footer", "messages", "placeholders"):
+        section = _mapping(worklist.get(key), f"web.worklist.{key}")
+        for name, value in section.items():
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"Profile 'web.worklist.{key}.{name}' must be a string"
+                )
 
 
 def _resolve_web_assets(
@@ -513,8 +698,18 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
 
     if "enabled" in web_raw and not isinstance(web_raw["enabled"], bool):
         raise ValueError("Profile 'web.enabled' must be boolean")
-    if "grant_access" in web_raw and not isinstance(web_raw["grant_access"], bool):
-        raise ValueError("Profile 'web.grant_access' must be boolean")
+    if "grant_access" in web_raw:
+        value = web_raw["grant_access"]
+        if isinstance(value, bool):
+            replacement = "any" if value else "none"
+            raise ValueError(
+                f"Profile 'web.grant_access' is no longer boolean; use '{replacement}' "
+                "(or 'bait' to accept only the declared honey_credentials)"
+            )
+        if value not in _GRANT_ACCESS_LEVELS:
+            raise ValueError(
+                f"Profile 'web.grant_access' must be one of {sorted(_GRANT_ACCESS_LEVELS)}"
+            )
     if "browse" in web_raw and not isinstance(web_raw["browse"], bool):
         raise ValueError("Profile 'web.browse' must be boolean")
     if "legacy_csp_header" in web_raw and not isinstance(
@@ -541,6 +736,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             "routes",
             "cookies",
             "winauth_messages",
+            "worklist",
         ):
             if key not in web_raw:
                 fell_back.append(f"web.{key}")
@@ -712,6 +908,30 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     else:
         honey_credentials = d.web.honey_credentials
 
+    fingerprint_raw = _mapping(web_raw.get("fingerprint"), "web.fingerprint")
+    if "enabled" in fingerprint_raw and not isinstance(
+        fingerprint_raw["enabled"], bool
+    ):
+        raise ValueError("Profile 'web.fingerprint.enabled' must be boolean")
+    if "signals" in fingerprint_raw:
+        if not isinstance(fingerprint_raw["signals"], list):
+            raise ValueError("Profile 'web.fingerprint.signals' must be a list")
+        fingerprint_signals = [str(s) for s in fingerprint_raw["signals"]]
+        unknown = sorted(set(fingerprint_signals) - _FINGERPRINT_SIGNALS)
+        if unknown:
+            raise ValueError(
+                f"Unknown web.fingerprint.signals: {', '.join(unknown)} "
+                f"(known: {', '.join(sorted(_FINGERPRINT_SIGNALS))})"
+            )
+    else:
+        fingerprint_signals = list(d.web.fingerprint.signals)
+    fingerprint = FingerprintConfig(
+        # An explicit empty signal list means off, so we never serve a collector that collects nothing.
+        enabled=bool(fingerprint_raw.get("enabled", d.web.fingerprint.enabled))
+        and bool(fingerprint_signals),
+        signals=fingerprint_signals,
+    )
+
     def web_dict(key: str, default: dict) -> dict:
         return {**default, **_mapping(web_raw.get(key), f"web.{key}")}
 
@@ -723,6 +943,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     routes = web_dict("routes", d.web.routes)
     cookies = web_dict("cookies", d.web.cookies)
     winauth_messages = web_dict("winauth_messages", d.web.winauth_messages)
+    worklist = web_dict("worklist", d.web.worklist)
+    _validate_worklist(worklist)
     if any(
         not isinstance(path, str)
         or not path.startswith("/")
@@ -786,6 +1008,11 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         "web.browse_page_size",
         int,
     )
+    worklist_page_size = _number(
+        web_raw.get("worklist_page_size", d.web.worklist_page_size),
+        "web.worklist_page_size",
+        int,
+    )
     upload_max_files = _number(
         web_raw.get("upload_max_files", d.web.upload_max_files),
         "web.upload_max_files",
@@ -797,6 +1024,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         raise ValueError("Profile 'web.upload_max_files' must be 1-100")
     if not 1 <= browse_page_size <= 500:
         raise ValueError("Profile 'web.browse_page_size' must be 1-500")
+    if not 1 <= worklist_page_size <= 500:
+        raise ValueError("Profile 'web.worklist_page_size' must be 1-500")
     browse = bool(web_raw.get("browse", False))
     assets_dir = (
         _resolve_web_assets(
@@ -846,7 +1075,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
         web=WebConfig(
             enabled=web_enabled,
             templates_dir=web_raw.get("templates_dir"),
-            grant_access=bool(web_raw.get("grant_access", False)),
+            grant_access=str(web_raw.get("grant_access", "none")),
             browse=browse,
             # Per-key overlay (a profile can override just one header/oidc key), like overlay_config().
             headers=headers,
@@ -861,7 +1090,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             oidc=oidc,
             favicon=web_raw.get("favicon"),
             honeytraps=honeytraps,
-            fingerprint_script=web_raw.get("fingerprint_script"),
+            fingerprint=fingerprint,
             honey_credentials=honey_credentials,
             routes=routes,
             cookies=cookies,
@@ -870,6 +1099,8 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             upload_max_request_bytes=upload_max_request_bytes,
             upload_max_files=upload_max_files,
             browse_page_size=browse_page_size,
+            worklist=worklist,
+            worklist_page_size=worklist_page_size,
             assets_dir=assets_dir,
         ),
         dicomweb=DicomWebConfig(

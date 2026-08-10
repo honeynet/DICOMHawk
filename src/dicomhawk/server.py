@@ -9,7 +9,7 @@ from pynetdicom.transport import ThreadedAssociationServer
 
 logger = logging.getLogger(__name__)
 
-# (abstract_syntax_uid, [transfer_syntax_uids]) — plain tuple so this module never imports profiles.
+# (abstract_syntax_uid, [transfer_syntax_uids]); a plain tuple so this module never imports profiles.
 type SopClass = tuple[str, list[str]]
 
 

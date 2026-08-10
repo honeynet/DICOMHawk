@@ -10,5 +10,6 @@ app.add_typer(serve_app)
 app.add_typer(honey_app)
 app.add_typer(seed_app)
 
+
 def main():
     app()
