@@ -1024,14 +1024,75 @@ def test_worklist_matches_the_stateful_synapse_shell(repo, bus):
     assert 'aria-expanded="true" data-section="Worklists"' in body
     assert 'aria-expanded="false" data-section="Global Worklists"' in body
     assert 'role="toolbar"' in body
-    assert "glyphicon-comment" in body
-    assert "glyphicon-camera" in body
+    assert "fa-comment" in body
+    assert "fa-camera" in body
     assert "Change Priority" in body
     assert "Reserve for Others" in body
     assert 'class="disabled"' in body
     assert "setInterval(updateClock, 1000)" in body
     total = repo.count_studies()
     assert f'<span class="wl-badge">{total}</span>' in body
+
+
+def test_worklist_icons_resolve_to_a_font_the_profile_actually_ships():
+    web = Path("src/profiles/fujifilm/web")
+    css = (web / "static/synapse/head-third-party.min.css").read_text()
+    worklist = load_profile("fujifilm").web.worklist
+    icons = [
+        item["icon"]
+        for key in ("header_links", "toolbar")
+        for item in worklist.get(key, [])
+    ]
+    assert icons, "profile declares no icons to check"
+
+    for icon in icons:
+        assert (
+            f".fa-{icon}:before" in css
+        ), f"fa-{icon} is not defined in the shipped CSS"
+
+    face = re.search(r"@font-face\{font-family:FontAwesome;(.*?)\}", css)
+    assert face, "no FontAwesome @font-face in the shipped CSS"
+    sources = re.findall(r"url\('([^']+)'", face.group(1))
+    resolved = [
+        (web / "static/synapse" / src.split("?")[0]).resolve() for src in sources
+    ]
+    assert any(path.is_file() for path in resolved), (
+        "every FontAwesome webfont referenced by the CSS is missing; "
+        "the icons would render as blank boxes"
+    )
+
+
+def test_sign_out_exists_on_a_worklist_profile_at_its_own_path(repo, bus):
+    profile = load_profile("fujifilm")
+    logout = profile.web.routes["logout"]
+    assert logout == "/SynapseSignOn/sts/logout", "must not inherit the generic path"
+    client = _worklist_client(repo, bus)
+
+    body = client.get("/WorkflowUI/?path=").get_data(as_text=True)
+    assert logout in body, "no sign-out control on the worklist"
+
+    assert client.post(logout).status_code == 302
+    assert client.get("/WorkflowUI/?path=").status_code == 302  # session really revoked
+    assert client.post("/portal/logout").status_code == 404  # no cross-profile leak
+
+
+def test_login_page_never_advertises_a_logout_url_that_does_not_exist(repo, bus):
+    checked = 0
+    for name in ("fujifilm", "generic-pacs"):
+        profile = load_profile(name)
+        client = new_web(profile, repo, bus).test_client()
+        body = client.get(profile.web.routes["login"] + "?signin=x").get_data(
+            as_text=True
+        )
+        advertised = re.search(r'logoutUrl["\']?\s*:\s*["\']([^"\']+)', body)
+        if advertised is None:
+            continue
+        checked += 1
+        assert advertised.group(1) == profile.web.routes["logout"], name
+        assert client.post(advertised.group(1)).status_code != 404, name
+    assert (
+        checked
+    ), "no shipped profile advertises a logoutUrl; the check proved nothing"
 
 
 def test_worklist_does_not_copy_site_specific_demo_labels(repo, bus):

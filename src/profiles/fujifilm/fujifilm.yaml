@@ -319,15 +319,15 @@ web:
     title: All Studies with Images
     header_links:
       - {label: Messages, icon: comment, result: error}
-      - {label: Help, icon: question-sign, result: error}
+      - {label: Help, icon: question-circle, result: error}
       - {label: Settings, icon: cog, result: error}
       - {label: Text Size, icon: font, result: error}
     toolbar:
       - {label: Open Viewer, icon: camera, result: error}
-      - {label: Documents, icon: file, result: error}
-      - {label: Study Information, icon: edit, result: detail}
-      - {label: Reports, icon: floppy-disk, result: error}
-      - {label: Reserve for Me, icon: pushpin, result: error}
+      - {label: Documents, icon: file-o, result: error}
+      - {label: Study Information, icon: pencil, result: detail}
+      - {label: Reports, icon: floppy-o, result: error}
+      - {label: Reserve for Me, icon: thumb-tack, result: error}
     columns:
       - {key: patient_name, label: Patient Name}
       - {key: description, label: Proc Description}
@@ -415,6 +415,7 @@ web:
     entry: /Synapse
     worklist: /WorkflowUI/
     login: /SynapseSignOn/sts/login
+    logout: /SynapseSignOn/sts/logout
     winauth: /SynapseSignOn/WinAuth/Login.aspx
     forgot_password: /ssomgr/password/forgotpassword
     sts_error: /SynapseSignOn/sts/error
