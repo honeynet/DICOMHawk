@@ -11,6 +11,9 @@
         .navbar-inverse { min-height: 42px; }
         .navbar-brand { padding: 11px 15px; }
         .wl-user { float: right; color: #dcdcdc; padding: 12px 18px 0 0; font-size: 12px; letter-spacing: .5px; }
+        .wl-signout { display: inline; margin: 0 0 0 12px; }
+        .wl-signout button { background: transparent; border: 0; color: #aabbb6; font-size: 12px; cursor: pointer; padding: 0; }
+        .wl-signout button:hover, .wl-signout button:focus { color: #fff; text-decoration: underline; }
         .wl-tools { float: right; padding: 7px 8px 0 0; }
         .wl-icon-button { color: #aabbb6; background: transparent; border: 0; padding: 5px 7px; cursor: pointer; }
         .wl-icon-button:hover, .wl-icon-button:focus { color: #fff; outline: 1px solid #3f5b56; }
@@ -81,11 +84,17 @@
         <div class="wl-tools">
             {% for link in worklist.header_links %}
             <button class="wl-icon-button" type="button" data-action="{{ link.label }}" data-result="{{ link.result|default('error') }}" title="{{ link.label }}" aria-label="{{ link.label }}">
-                <span class="glyphicon glyphicon-{{ link.icon }}" aria-hidden="true"></span>
+                <span class="fa fa-{{ link.icon }}" aria-hidden="true"></span>
             </button>
             {% endfor %}
         </div>
-        {% if username %}<div class="wl-user">{{ username|upper }}</div>{% endif %}
+        {% if username %}
+        <div class="wl-user">{{ username|upper }}
+            <form class="wl-signout" action="{{ routes.logout }}" method="post">
+                <button type="submit"><span class="fa fa-sign-out" aria-hidden="true"></span> {{ worklist.footer.signout_label|default('Sign Out') }}</button>
+            </form>
+        </div>
+        {% endif %}
     </nav>
 
     <div class="wl-shell">
@@ -116,7 +125,7 @@
             <div class="wl-commandbar" role="toolbar" aria-label="Study actions">
                 {% for item in worklist.toolbar %}
                 <button class="wl-command" type="button" data-action="{{ item.label }}" data-result="{{ item.result|default('error') }}" title="{{ item.label }}" aria-label="{{ item.label }}">
-                    <span class="glyphicon glyphicon-{{ item.icon }}" aria-hidden="true"></span>
+                    <span class="fa fa-{{ item.icon }}" aria-hidden="true"></span>
                 </button>
                 {% endfor %}
             </div>
@@ -159,8 +168,8 @@
                             {% for study in studies %}
                             <tr data-uid="{{ study.study_instance_uid }}"
                                 class="{% if detail and detail.study_instance_uid == study.study_instance_uid %}selected{% endif %}">
-                                <td class="status-cell"><span class="glyphicon glyphicon-camera" aria-label="Images available"></span></td>
-                                <td class="status-cell">{% if study.images|int > 1 %}<span class="glyphicon glyphicon-file" aria-label="Multiple images"></span>{% endif %}</td>
+                                <td class="status-cell"><span class="fa fa-camera" aria-label="Images available"></span></td>
+                                <td class="status-cell">{% if study.images|int > 1 %}<span class="fa fa-file" aria-label="Multiple images"></span>{% endif %}</td>
                                 {% for column in worklist.columns %}<td>{{ study[column.key] }}</td>{% endfor %}
                             </tr>
                             {% else %}

@@ -1322,6 +1322,7 @@ def new_web(
     )
     app.add_url_rule(routes["login"], "login_get", login_get, methods=["GET"])
     app.add_url_rule(routes["login"], "login_post", login_post, methods=["POST"])
+    app.add_url_rule(routes["logout"], "logout", logout, methods=["POST"])
     app.add_url_rule(routes["winauth"], "winauth_login", winauth_login)
     app.add_url_rule(routes["csp_report"], "csp_report", csp_report, methods=["POST"])
     app.add_url_rule(
@@ -1367,7 +1368,6 @@ def new_web(
         app.add_url_rule(routes["search"], "search", search, methods=["GET"])
         app.add_url_rule(routes["upload"], "upload_get", upload_get, methods=["GET"])
         app.add_url_rule(routes["upload"], "upload_post", upload_post, methods=["POST"])
-        app.add_url_rule(routes["logout"], "logout", logout, methods=["POST"])
 
     # Per-profile data, not engine code; a profile with none stays a plain 404 via _iis_404 above.
     for i, (path, kind) in enumerate(profile.web.honeytraps):
