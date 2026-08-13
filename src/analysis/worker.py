@@ -6,7 +6,7 @@ import signal
 import time
 from pathlib import Path
 
-from dicomhawk.bus import InteractionEvent
+from dicomhawk.bus import InteractionEvent, new_bus
 
 from . import analyzers, yara_engine
 from .config import AnalysisConfig
@@ -200,13 +200,15 @@ def _run_job(
     )
 
 
-def run_worker(config: AnalysisConfig, job_queue) -> None:
-    """Process entrypoint (forked by AnalysisComponent). Inherits the parent's configured `bus` logger."""
-    # fork() copies the parent's signal handlers too; reset so Ctrl+C doesn't hit the child.
+def run_worker(
+    config: AnalysisConfig, job_queue, bus_config: dict | None = None
+) -> None:
+    """Spawn-safe process entrypoint with explicit interaction-log configuration."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    logging.basicConfig(level=logging.INFO)
     _set_resource_limits()
-    bus = logging.getLogger("bus")
+    bus = new_bus(**bus_config) if bus_config else logging.getLogger("bus")
     store = new_analysis_store(config.DB_PATH).start()
     # This is the only worker, so any `running` row is from a previous worker that died mid-job.
     requeued = store.recover_stale()

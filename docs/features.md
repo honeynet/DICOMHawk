@@ -12,10 +12,20 @@ active profile, so a device that would not support an operation does not appear 
 
 Queries are answered from a real database of DICOM objects rather than from generated
 placeholders, so a study returned by C-FIND can also be retrieved, and its attributes agree
-across every surface that reports them.
+across every surface that reports them. Unsupported private or unknown optional query keys are
+ignored as DICOM specifies rather than failing the complete C-FIND/C-GET/C-MOVE operation.
 
 Association limits, timeouts, and the maximum accepted object size are bounded and configurable.
 A peer that opens connections without ever sending a PDU cannot occupy every association slot.
+Connection-close events record duration, total received bytes, and a protocol guess. If an
+A-ASSOCIATE-RQ cannot be decoded, DICOMHawk also preserves a bounded hexadecimal prefix and
+best-effort called/calling AE titles and implementation identifiers; HTTP, TLS, and random probes
+on a DIMSE port are therefore distinguishable from an empty TCP connection.
+
+C-STORE status codes distinguish malformed input from resource failure: an unreadable or invalid
+dataset returns `0xC000`, an affected/dataset SOP-class mismatch returns `0xA900`, and `0xA700`
+is reserved for capacity or persistence failures such as a configured size limit, capture failure,
+write failure, or database-index failure.
 
 ## Deception profiles
 
@@ -96,6 +106,13 @@ See [Browser fingerprinting](./fingerprinting.md).
 Every interaction becomes a structured JSON event: the peer, the session, the operation, the
 outcome, and the parameters that were sent. Captured objects are written to disk with their
 exact incoming bytes retained alongside the parsed copy.
+
+Connections that never complete a DICOM handshake are recorded too. Each one closes with the
+bytes it sent, how long it stayed open, a protocol guess covering DICOM, HTTP, TLS and SSH, and
+a bounded hex and readable preview of what arrived, so a port scan, a web scanner pointed at the
+DICOM port, and a malformed handshake are all told apart rather than collapsing into one line.
+When a handshake is rejected as malformed, the calling and called AE titles and the peer's
+implementation identity are still recovered from the raw bytes.
 
 A loopback-only operator API and dashboard summarise what has been collected, including
 per-attacker rollups, captured credentials, uploaded artifacts with their analysis results,

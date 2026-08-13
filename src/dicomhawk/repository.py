@@ -1,5 +1,7 @@
 import logging
+from functools import wraps
 from pathlib import Path
+from threading import RLock
 from typing import Callable
 from uuid import uuid4
 
@@ -78,6 +80,19 @@ _DETAIL_KEYWORDS: dict[str, str] = {
 _DETAIL_MAX_LEN = 64
 
 
+def _serialize_in_memory(method):
+    """StaticPool exposes one SQLite connection, so guard complete transactions."""
+
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        if self._memory_lock is None:
+            return method(self, *args, **kwargs)
+        with self._memory_lock:
+            return method(self, *args, **kwargs)
+
+    return guarded
+
+
 class QRError:
     def __init__(self, error: str, status: QRStatus = QRStatus.FAILURE):
         self.error: str = error
@@ -102,6 +117,7 @@ class Repository:
 
     def __init__(self, location: str | None, storage: Storage):
         self.location: str = location or ":memory:"
+        self._memory_lock = RLock() if self.location == ":memory:" else None
         self.storage: Storage = storage
         self.engine: Engine | None = None
         self.session: Session | None = None
@@ -174,7 +190,14 @@ class Repository:
             )
         return None
 
+    @_serialize_in_memory
     def find(self, ds: Dataset, model) -> QRResult:
+        # pynetdicom's qrscp search tries ``delattr(identifier, elem.keyword)``
+        # for unsupported keys. Private and unknown elements have no keyword,
+        # which turns an optional key that should be ignored into AttributeError.
+        for elem in list(ds):
+            if not elem.keyword:
+                del ds[elem.tag]
         # qrscp treats "" as a literal; DICOM defines it as universal matching.
         for elem in ds:
             if (
@@ -202,6 +225,7 @@ class Repository:
 
         return QRResult(matches=matches)
 
+    @_serialize_in_memory
     def find_page(
         self,
         ds: Dataset,
@@ -260,6 +284,57 @@ class Repository:
 
         return QRResult(matches=matches)
 
+    @_serialize_in_memory
+    def find_patient_ids(self, ds: Dataset, model, limit: int = 2) -> QRResult:
+        """Return at most ``limit`` distinct patient IDs for a query."""
+        for elem in ds:
+            if (
+                elem.keyword != "QueryRetrieveLevel"
+                and elem.value is not None
+                and str(elem.value) == ""
+            ):
+                elem.value = None
+
+        conn = self.conn
+        try:
+            db._check_identifier(ds, model)
+            attr = db._STUDY_ROOT[model]
+            query = None
+            for level, keywords in attr.items():
+                level_ds = Dataset()
+                for keyword in (kw for kw in keywords if kw in ds):
+                    setattr(level_ds, keyword, getattr(ds, keyword))
+                query = db.build_query(level_ds, conn, query)
+                if level == ds.QueryRetrieveLevel:
+                    break
+            rows = (
+                query.with_entities(db.Instance.patient_id)
+                .distinct()
+                .limit(limit)
+                .all()
+            )
+        except db.InvalidIdentifier as exc:
+            conn.rollback()
+            return QRResult(
+                error=QRError(
+                    f"Invalid C-FIND Identifier received: {exc}",
+                    QRStatus.SOP_CLASS_INVALID,
+                )
+            )
+        except Exception as exc:
+            conn.rollback()
+            return QRResult(
+                error=QRError(f"Exception occurred while querying database: {exc}")
+            )
+
+        matches = []
+        for (patient_id,) in rows:
+            result = Dataset()
+            result.PatientID = str(patient_id or "")
+            matches.append(result)
+        return QRResult(matches=matches)
+
+    @_serialize_in_memory
     def count_studies(self) -> int:
         """Distinct indexed studies; a display total, so a failure degrades to zero."""
         try:
@@ -272,6 +347,7 @@ class Repository:
             return 0
         return int(total or 0)
 
+    @_serialize_in_memory
     def count_instances(self, study_uids: list[str]) -> dict[str, int]:
         """Instance count per study for a bounded UID list; the list itself is the bound."""
         uids = list(study_uids)[:_ROLLUP_MAX_STUDIES]
@@ -293,6 +369,7 @@ class Repository:
             return {}
         return {str(uid): int(count) for uid, count in rows}
 
+    @_serialize_in_memory
     def study_modalities(self, study_uids: list[str]) -> dict[str, list[str]]:
         """Modality is a SERIES attribute, so a STUDY-level find never returns it."""
         uids = list(study_uids)[:_ROLLUP_MAX_STUDIES]
@@ -316,6 +393,7 @@ class Repository:
                 found.setdefault(str(uid), set()).add(str(modality))
         return {uid: sorted(values) for uid, values in found.items()}
 
+    @_serialize_in_memory
     def study_details(self, study_uids: list[str]) -> dict[str, dict]:
         """Attributes the Q/R index lacks, read from our own table instead of the files."""
         uids = list(study_uids)[:_ROLLUP_MAX_STUDIES]
@@ -352,6 +430,7 @@ class Repository:
         for column, value in values.items():
             setattr(row, column, value)
 
+    @_serialize_in_memory
     def store(
         self,
         ds: Dataset,
@@ -360,18 +439,19 @@ class Repository:
         raw_bytes: bytes | None = None,
         capture: bool = True,
         on_captured: Callable[[Capture], None] | None = None,
+        expected_sop_class_uid: str | None = None,
     ) -> QRError | None:
         # Capture before validation so failed attacker payloads remain available.
         if not safe and capture:
+            if raw_bytes is None:
+                return QRError(
+                    "Exact incoming bytes are required for untrusted storage",
+                    QRStatus.STORE_ERROR,
+                )
             try:
-                if raw_bytes is not None:
-                    captured = self.storage.capture(raw_bytes)
-                    if on_captured is not None:
-                        on_captured(captured)
-                else:
-                    with self.storage.temp() as tf:
-                        ds.save_as(tf, enforce_file_format=False)
-                        self.storage.compress(tf)
+                captured = self.storage.capture(raw_bytes)
+                if on_captured is not None:
+                    on_captured(captured)
             except Exception as exc:
                 logger.warning(f"Failed to quarantine C-STORE payload: {exc}")
                 return QRError(
@@ -382,20 +462,31 @@ class Repository:
         try:
             fname = str(ds.SOPInstanceUID)
         except AttributeError:
+            return QRError("C-STORE dataset missing SOPInstanceUID", QRStatus.FAILURE)
+        if len(fname) > 64:
+            logger.warning(
+                "Overlong SOPInstanceUID rejected (%s characters)", len(fname)
+            )
             return QRError(
-                "C-STORE dataset missing SOPInstanceUID", QRStatus.STORE_ERROR
+                "Invalid SOPInstanceUID rejected: value exceeds 64 characters",
+                QRStatus.FAILURE,
             )
         try:
             sop_class_uid = ds.SOPClassUID
         except AttributeError:
-            return QRError("C-STORE dataset missing SOPClassUID", QRStatus.STORE_ERROR)
+            return QRError("C-STORE dataset missing SOPClassUID", QRStatus.FAILURE)
+        if expected_sop_class_uid and str(sop_class_uid) != expected_sop_class_uid:
+            return QRError(
+                "C-STORE dataset SOPClassUID does not match the affected SOP class",
+                QRStatus.SOP_CLASS_INVALID,
+            )
 
         try:
             fpath = self.storage.path_for(safe, fname)
-        except ValueError as exc:
-            logger.warning(f"Path traversal attempt blocked: {fname}: {exc}")
+        except (ValueError, OSError) as exc:
+            logger.warning("Unsafe SOPInstanceUID path rejected: %s", exc)
             return QRError(
-                f"Dangerous SOPInstanceUID rejected: {fname}", QRStatus.STORE_ERROR
+                f"Dangerous SOPInstanceUID rejected: {fname}", QRStatus.FAILURE
             )
 
         if fpath.exists():

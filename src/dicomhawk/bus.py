@@ -1,6 +1,9 @@
+import copy
 import logging
+import os
 import sys
 import threading
+import time
 import weakref
 from collections import deque
 
@@ -15,6 +18,11 @@ from pydicom.dataset import Dataset
 from pynetdicom.events import Event
 
 from .status import QRStatus
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +41,105 @@ _PARAM_VALUE_LIMIT = 4096
 _PARAM_COUNT_LIMIT = 128
 _DEFAULT_LOG_SIZE = 50 * 1024 * 1024
 _DEFAULT_LOG_BACKUPS = 5
+_CONNECTION_PREFIX_LIMIT = 4096
+
+
+class _MultiprocessFileMixin:
+    """Serialize writes and rollover across independent worker processes.
+
+    logging's rotating handlers only protect threads in one process. The analysis
+    analysis worker configures its own interaction logger, so independent handlers can
+    otherwise rename and continue writing different generations of the same file.
+    A stable sidecar lock coordinates those handlers, and the inode check reopens
+    the active file after another process rotates it.
+    """
+
+    _lock_stream = None
+    _lock_pid = None
+
+    def _acquire_process_lock(self) -> bool:
+        if fcntl is None:
+            return False
+        pid = os.getpid()
+        if self._lock_pid != pid:
+            inherited, self._lock_stream = self._lock_stream, None
+            self._lock_pid = None
+            if inherited is not None:
+                try:
+                    inherited.close()
+                except (OSError, ValueError):
+                    pass
+            stream = open(f"{self.baseFilename}.lock", "a", encoding="utf-8")
+            self._lock_stream = stream
+            self._lock_pid = pid
+        fcntl.flock(self._lock_stream.fileno(), fcntl.LOCK_EX)
+        return True
+
+    def _release_process_lock(self) -> None:
+        if fcntl is None or self._lock_stream is None:
+            return
+        try:
+            fcntl.flock(self._lock_stream.fileno(), fcntl.LOCK_UN)
+        except (OSError, ValueError):
+            pass
+
+    def _reopen_after_external_rollover(self) -> None:
+        if self.stream is None:
+            self.stream = self._open()
+            return
+        try:
+            current = os.stat(self.baseFilename)
+            opened = os.fstat(self.stream.fileno())
+            unchanged = (current.st_dev, current.st_ino) == (
+                opened.st_dev,
+                opened.st_ino,
+            )
+        except (FileNotFoundError, OSError, ValueError):
+            unchanged = False
+        if not unchanged:
+            self.stream.close()
+            self.stream = self._open()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        acquired = False
+        try:
+            acquired = self._acquire_process_lock()
+            self._reopen_after_external_rollover()
+            should_rollover = getattr(self, "shouldRollover", None)
+            if should_rollover is not None and should_rollover(record):
+                self.doRollover()
+            logging.FileHandler.emit(self, record)
+        except Exception:
+            self.handleError(record)
+        finally:
+            if acquired:
+                self._release_process_lock()
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            if self._lock_stream is not None:
+                try:
+                    self._lock_stream.close()
+                except (OSError, ValueError):
+                    pass
+                self._lock_stream = None
+                self._lock_pid = None
+
+
+class MultiprocessRotatingFileHandler(_MultiprocessFileMixin, RotatingFileHandler):
+    pass
+
+
+class MultiprocessTimedRotatingFileHandler(
+    _MultiprocessFileMixin, TimedRotatingFileHandler
+):
+    pass
+
+
+class MultiprocessFileHandler(_MultiprocessFileMixin, logging.FileHandler):
+    pass
 
 
 class SessionCache:
@@ -41,6 +148,7 @@ class SessionCache:
     def __init__(self) -> None:
         self._sessions: dict[int, str] = {}
         self._versions: dict[int, str] = {}
+        self._connections: dict[int, dict] = {}
         self._lock = threading.Lock()
         self._last_id = 0
 
@@ -63,6 +171,54 @@ class SessionCache:
         with self._lock:
             self._sessions.pop(key, None)
             self._versions.pop(key, None)
+            self._connections.pop(key, None)
+
+    def connection_opened(self, assoc) -> None:
+        key = id(assoc)
+        with self._lock:
+            self._connections[key] = {
+                "opened": time.monotonic(),
+                "bytes": 0,
+                "prefix": bytearray(),
+                "association_seen": False,
+            }
+
+    def connection_data(self, assoc, data: bytes) -> None:
+        key = id(assoc)
+        with self._lock:
+            observation = self._connections.setdefault(
+                key,
+                {
+                    "opened": time.monotonic(),
+                    "bytes": 0,
+                    "prefix": bytearray(),
+                    "association_seen": False,
+                },
+            )
+            observation["bytes"] += len(data)
+            remaining = _CONNECTION_PREFIX_LIMIT - len(observation["prefix"])
+            if remaining > 0:
+                observation["prefix"].extend(data[:remaining])
+
+    def association_seen(self, assoc) -> None:
+        with self._lock:
+            observation = self._connections.get(id(assoc))
+            if observation is not None:
+                observation["association_seen"] = True
+
+    def connection_closed(self, assoc) -> dict:
+        with self._lock:
+            observation = self._connections.pop(id(assoc), None)
+        if observation is None:
+            return {
+                "bytes": 0,
+                "prefix": b"",
+                "association_seen": False,
+                "duration": 0.0,
+            }
+        observation["prefix"] = bytes(observation["prefix"])
+        observation["duration"] = max(0.0, time.monotonic() - observation.pop("opened"))
+        return observation
 
     def cache_version(self, assoc, version: str) -> None:
         """Cache the requestor's implementation version name from the A-ASSOCIATE-RQ."""
@@ -329,7 +485,7 @@ class _ConsoleFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         ie = record.msg if isinstance(record.msg, InteractionEvent) else None
         if ie is None:
-            msg = record.getMessage()
+            msg = _terminal_safe(record.getMessage())
             if self._color and record.levelno >= logging.WARNING:
                 c = _LEVEL_COLORS.get(record.levelname, "")
                 return f"{c}{record.levelname}{_RESET}  {msg}"
@@ -343,13 +499,13 @@ class _ConsoleFormatter(logging.Formatter):
         parts = [f"{dim}{ts}{reset}", f"{dim}{ie.channel}{reset}"]
         # Background events (async analysis results) have no live peer to report.
         if ie.ip is not None:
-            parts.append(f"{ie.ip}:{ie.port}")
+            parts.append(f"{_terminal_safe(ie.ip)}:{_terminal_safe(ie.port)}")
             parts.append(f":{ie.local_port}")
         elif ie.session_id:
-            parts.append(f"session={ie.session_id}")
+            parts.append(f"session={_terminal_safe(ie.session_id)}")
         parts.append(f"{c}{ie.request_type:<22}{reset}")
         if ie.query_level:
-            parts.append(ie.query_level)
+            parts.append(_terminal_safe(ie.query_level))
         if ie.matches is not None:
             parts.append(f"matches={ie.matches}")
         if ie.status:
@@ -357,13 +513,37 @@ class _ConsoleFormatter(logging.Formatter):
         if ie.artifact_id:
             parts.append(f"artifact={ie.artifact_id[:12]}")
         if ie.session_parameters:
-            parts.append("  ".join(p[:60] for p in ie.session_parameters))
+            parts.append(
+                "  ".join(_terminal_safe(p)[:60] for p in ie.session_parameters)
+            )
         if ie.version:
-            parts.append(f"{dim}[{ie.version}]{reset}")
+            parts.append(f"{dim}[{_terminal_safe(ie.version)}]{reset}")
         return "  ".join(parts)
 
 
-class LevelColorFormatter(logging.Formatter):
+def _terminal_safe(value) -> str:
+    """Escape terminal controls while leaving the durable JSON event untouched."""
+    return "".join(
+        character if character.isprintable() else repr(character)[1:-1]
+        for character in str(value)
+    )
+
+
+def _safe_text_record(record: logging.LogRecord) -> logging.LogRecord:
+    safe = copy.copy(record)
+    safe.msg = _terminal_safe(record.getMessage())
+    safe.args = ()
+    return safe
+
+
+class SafeTextFormatter(logging.Formatter):
+    """Escape controls in a log message without flattening genuine traceback lines."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return super().format(_safe_text_record(record))
+
+
+class LevelColorFormatter(SafeTextFormatter):
     """Colors the whole record by level (green/yellow/red) for terminal output."""
 
     def format(self, record: logging.LogRecord) -> str:
@@ -431,7 +611,34 @@ def new_bus(
     return lg
 
 
-class _InnerFrameFormatter(logging.Formatter):
+def worker_bus_config(logger: Logger) -> dict | None:
+    """Serializable file/console settings for a spawned analysis worker."""
+    handler = next(
+        (
+            candidate
+            for candidate in logger.handlers
+            if isinstance(candidate, logging.FileHandler)
+        ),
+        None,
+    )
+    if handler is None:
+        return None
+    verbose = any(
+        isinstance(candidate, logging.StreamHandler)
+        and not isinstance(candidate, logging.FileHandler)
+        for candidate in logger.handlers
+    )
+    return {
+        "stdout": handler.baseFilename,
+        "when": getattr(handler, "_dicomhawk_when", None),
+        "interval": getattr(handler, "_dicomhawk_interval", 1),
+        "size": getattr(handler, "maxBytes", None) or None,
+        "backups": getattr(handler, "backupCount", _DEFAULT_LOG_BACKUPS),
+        "verbose": verbose,
+    }
+
+
+class _InnerFrameFormatter(SafeTextFormatter):
     """Prepends '[in module]' from the innermost traceback frame, not the caller."""
 
     def format(self, record: logging.LogRecord) -> str:
@@ -486,12 +693,17 @@ def _build_handler(
 ) -> logging.Handler:
     Path(stdout).parent.mkdir(parents=True, exist_ok=True)
     if when:
-        return TimedRotatingFileHandler(
-            stdout, when=when, interval=interval, backupCount=backups
+        handler = MultiprocessTimedRotatingFileHandler(
+            stdout, when=when, interval=interval, backupCount=backups, delay=True
         )
+        handler._dicomhawk_when = when  # type: ignore[attr-defined]
+        handler._dicomhawk_interval = interval  # type: ignore[attr-defined]
+        return handler
     if size:
-        return RotatingFileHandler(stdout, maxBytes=size, backupCount=backups)
-    return logging.FileHandler(stdout)
+        return MultiprocessRotatingFileHandler(
+            stdout, maxBytes=size, backupCount=backups, delay=True
+        )
+    return MultiprocessFileHandler(stdout, delay=True)
 
 
 def _owned(handler: logging.Handler) -> logging.Handler:

@@ -12,10 +12,17 @@ web:
     - path: /admin/
       response: unauthorized_page
   # Safe to disclose in login.html's source since there's no real vendor page to stay faithful to.
-  grant_access: bait           # none | bait | any; only the honey_credentials below get in
+  grant_access: keyword        # none | bait | keyword | any; keyword = the bait pairs plus honey_keywords
   honey_credentials:
     - username: test
       password: test
+  honey_keywords:
+    - admin
+    - pacs
+    - dicom
+    - radiology
+    - imaging
+    - service
   # Opting in with no signal list or route overrides: everything comes from default_profile().
   fingerprint:
     enabled: true

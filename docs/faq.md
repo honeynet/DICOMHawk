@@ -27,15 +27,24 @@ work.
 ### Why is the login rejecting everything?
 
 Check `grant_access` in the profile. `none` denies every attempt including the declared bait
-credentials, `bait` admits only those credentials, and `any` admits everything. Both shipped
-profiles use `bait`, so only the pairs listed in `honey_credentials` get in and every other
-guess is denied the way the real product denies it.
+credentials, `bait` admits only those credentials, `keyword` also admits anything containing a
+term from `honey_keywords`, and `any` admits everything. A username listed in
+`honey_credentials` is exempt from the keyword rule and still needs its exact password. Both
+shipped profiles use `keyword`, so a keyword-bearing guess for any other username gets in and
+every other guess is denied the way the real product denies it.
 
 ### Should I set `grant_access: any`?
 
 Usually not. It is quicker to engage an attacker, but the first deliberately wrong password
-that works tells them they are in a decoy. Bait credentials give you the same engagement
-without the tell.
+that works tells them they are in a decoy. Bait credentials and keywords give you the same
+engagement without that tell.
+
+### How detectable is `grant_access: keyword`?
+
+More than `bait`, less than `any`. An attacker who succeeds with `admin` and a nonsense
+password, then fails with a credential containing none of the keywords, can work out that a
+word list is in play and narrow it down. That is the cost of admitting more attackers than a
+fixed pair list ever will. Choose `bait` if you would rather engage fewer of them invisibly.
 
 ### I changed the DIMSE port and now nothing connects.
 

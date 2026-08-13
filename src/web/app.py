@@ -29,6 +29,7 @@ from pydicom.dataset import Dataset
 from pydicom.uid import UID
 from pynetdicom.sop_class import StudyRootQueryRetrieveInformationModelFind
 from werkzeug.serving import WSGIRequestHandler
+from markupsafe import escape
 
 from dicomhawk.bus import InteractionEvent
 from dicomhawk.handlers import _FIND_LEVEL_UID
@@ -108,7 +109,7 @@ def _login_context(signin, error_message=""):
         "siteUrl": web.routes["login"].rsplit("/", 1)[0] + "/",
         "siteName": web.identity.get("site_name", web.oidc["client_name"]),
         "currentUser": None,
-        "logoutUrl": web.routes["login"].rsplit("/", 1)[0] + "/logout",
+        "logoutUrl": web.routes["logout"],
         "custom": None,
         "synapseBtnDisplay": None,
     }
@@ -212,12 +213,13 @@ def _http_session_id():
     return "web-" + _bounded(token or request.remote_addr or "unknown")
 
 
-def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT"):
+def _capture(username, password, request_type="WEB_LOGIN_ATTEMPT", extra=()):
     """Log the credential attempt to the shared interaction log (channel=WEB)."""
     username, password = _bounded(username), _bounded(password)
     params = [f"Username: {username}"]
     if password:
         params.append(f"Password: {password}")
+    params.extend(extra)
     current_app.config["BUS"].warning(
         InteractionEvent.from_http(
             "WEB",
@@ -598,15 +600,22 @@ def _honeytrap_view(response_kind):
 def _iis_404(err):
     # Log scans and hide Werkzeug's default page behind the spoofed identity.
     _log_probe("WEB_404")
-    return ("404 - Not Found", 404, {"Content-Type": "text/plain"})
+    return (
+        "<!doctype html><html><head><title>404 - Not Found</title></head>"
+        "<body><h1>404 - Not Found</h1></body></html>",
+        404,
+        {"Content-Type": "text/html; charset=utf-8"},
+    )
 
 
 def _request_too_large(err):
     _log_probe("WEB_REQUEST_TOO_LARGE")
     return (
-        "The request filtering module is configured to deny a request that exceeds the request content length.",
+        "<!doctype html><html><head><title>Request Filtering</title></head><body>"
+        "<h1>Request Filtering</h1><p>The request filtering module is configured to deny "
+        "a request that exceeds the request content length.</p></body></html>",
         413,
-        {"Content-Type": "text/plain"},
+        {"Content-Type": "text/html; charset=utf-8"},
     )
 
 
@@ -749,6 +758,22 @@ def worklist(subpath=None):
         routes=web.routes,
         browse=web.browse,
     )
+
+
+def worklist_directory_redirect():
+    """IIS-shaped canonical slash redirect instead of Werkzeug's identifying 308."""
+    target = _web().routes["worklist"].rstrip("/") + "/"
+    if request.query_string:
+        target += "?" + request.query_string.decode("ascii", "ignore")
+    body = (
+        "<!doctype html><html><head><title>Document Moved</title></head>"
+        f'<body><h1>Object Moved</h1>This document may be found <a href="{escape(target)}">here</a>.'
+        "</body></html>"
+    )
+    response = make_response(body, 301)
+    response.headers["Location"] = target
+    response.headers["Content-Type"] = "text/html; charset=utf-8"
+    return response
 
 
 # --- Browse console (profiles with web.browse; every view is session-gated) ---
@@ -1136,20 +1161,42 @@ def login_get():
     return resp
 
 
+def _matched_keyword(username: str, password: str) -> str | None:
+    haystack = f"{username}\n{password}".casefold()
+    return next((k for k in _web().honey_keywords if k in haystack), None)
+
+
+def _login_decision(username: str, password: str) -> tuple[bool, str, list[str]]:
+    web = _web()
+    if web.grant_access == "none":
+        return False, "WEB_LOGIN_ATTEMPT", []
+    if (username, password) in web.honey_credentials:
+        # Bait, not a real account: works whenever any login does, and logs distinctly.
+        return True, "WEB_HONEY_CREDENTIAL_USED", []
+    if web.grant_access == "keyword":
+        declared_bait_usernames = {
+            bait_username.casefold() for bait_username, _ in web.honey_credentials
+        }
+        if username.casefold() in declared_bait_usernames:
+            return False, "WEB_LOGIN_ATTEMPT", []
+        keyword = _matched_keyword(username, password)
+        if keyword is not None:
+            field = "username" if keyword in username.casefold() else "password"
+            return True, "WEB_HONEY_KEYWORD_USED", [f"Keyword: {keyword} ({field})"]
+    if web.grant_access == "any":
+        return True, "WEB_LOGIN_ATTEMPT", []
+    return False, "WEB_LOGIN_ATTEMPT", []
+
+
 def login_post():
     username = request.form.get("username", "")
     password = request.form.get("password", "")
 
-    access = _web().grant_access
-    if access != "none" and (username, password) in _web().honey_credentials:
-        # Bait, not a real account: works whenever any login does, and logs distinctly.
-        _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
+    granted, request_type, detail = _login_decision(username, password)
+    _capture(username, password, request_type=request_type, extra=detail)
+    if granted:
         return _grant(username)
-
-    _capture(username, password)
     signin = request.args.get("signin") or secrets.token_hex(16)
-    if access == "any":
-        return _grant(username)
     # Deny: re-render the sign-on page with the real error banner.
     return render_template(
         "login.html", **_login_context(signin, "Username or password is incorrect")
@@ -1252,13 +1299,11 @@ def winauth_login():
         return _winauth_challenge()
     username, password = auth.username or "", auth.password or ""
 
-    access = _web().grant_access
-    if access != "none" and (username, password) in _web().honey_credentials:
-        _capture(username, password, request_type="WEB_HONEY_CREDENTIAL_USED")
-        return _grant(username)
-
-    _capture(username, password, request_type="WEB_WINAUTH_ATTEMPT")
-    if access == "any":
+    granted, request_type, detail = _login_decision(username, password)
+    if request_type == "WEB_LOGIN_ATTEMPT":
+        request_type = "WEB_WINAUTH_ATTEMPT"
+    _capture(username, password, request_type=request_type, extra=detail)
+    if granted:
         return _grant(username)
     return (
         _winauth_challenge()
@@ -1316,6 +1361,11 @@ def new_web(
     app.add_url_rule("/robots.txt", "robots_txt", robots_txt)
     app.add_url_rule(routes["entry"], "entry", entry)
     worklist_prefix = routes["worklist"].rstrip("/")
+    app.add_url_rule(
+        worklist_prefix,
+        "worklist_directory_redirect",
+        worklist_directory_redirect,
+    )
     app.add_url_rule(worklist_prefix + "/", "worklist", worklist)
     app.add_url_rule(
         worklist_prefix + "/<path:subpath>", "worklist_deep_link", worklist

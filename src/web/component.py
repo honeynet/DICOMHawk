@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import errno
 import logging
 import re
 import threading
 import time
+from typing import TYPE_CHECKING
 
 import waitress
 
-from analysis.store import AnalysisStore
 from dicomhawk.component import Component
 from dicomhawk.repository import Repository
 from dicomhawk.storage import ArtifactSink
@@ -15,6 +17,9 @@ from profiles.profile import ProfileConfig
 from .app import new_web
 from .dicomweb import new_dicomweb
 from .operator_api import new_operator_api
+
+if TYPE_CHECKING:
+    from analysis.store import AnalysisStore
 
 logger = logging.getLogger(__name__)
 _QUEUE_DEPTH = re.compile(r"^Task queue depth is (\d+)$")
@@ -201,13 +206,20 @@ class WebComponent(Component):
             self.analysis_store,
             self.fingerprint_store,
         )
+        web_listener_max = self.profile.web.max_request_bytes
+        if self.profile.web.browse:
+            # Waitress rejects oversized bodies before Flask can apply the upload
+            # route's larger request.max_content_length override.
+            web_listener_max = max(
+                web_listener_max, self.profile.web.upload_max_request_bytes
+            )
         specs = (
             (
                 "web",
                 web_app,
                 self.host,
                 self.web_port,
-                self.profile.web.max_request_bytes,
+                web_listener_max,
                 True,
                 self.profile.web.headers.get("Server"),
             ),

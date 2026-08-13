@@ -12,6 +12,7 @@ from dicomhawk.storage import new_store
 from fingerprint.component import new_fingerprint_component
 from fingerprint.config import new_fingerprint_config
 from fingerprint.signals import evaluate, sanitize, stable_hash
+from fingerprint.store import new_fingerprint_store
 from profiles.profile import load_profile
 from web.app import new_web
 from web.operator_api import new_operator_api
@@ -158,6 +159,26 @@ def test_both_shipped_profiles_opt_in():
         assert load_profile(name).web.fingerprint.enabled is True
 
 
+def test_unstarted_fingerprint_store_get_degrades_to_none(tmp_path):
+    store = new_fingerprint_store(str(tmp_path / "fingerprint.db"))
+
+    assert store.get("missing") is None
+
+
+def test_removed_top_level_fingerprint_script_is_rejected(tmp_path):
+    profile = tmp_path / "obsolete.yaml"
+    profile.write_text(
+        "meta: {name: obsolete, kind: pacs}\n"
+        "web:\n"
+        "  enabled: true\n"
+        "  templates_dir: generic-pacs\n"
+        "  fingerprint_script: telemetry.js\n"
+    )
+
+    with pytest.raises(ValueError, match="was removed"):
+        load_profile(str(profile))
+
+
 def test_sparse_profile_inherits_generic_routes_and_all_signals():
     generic = load_profile("generic-pacs")
     assert generic.web.routes["fingerprint_script"] == "/portal/static/telemetry.js"
@@ -270,8 +291,10 @@ def test_disabled_profile_has_no_collector_and_no_ingest(repo, bus):
     assert client.get(profile.web.routes["fingerprint_script"]).status_code == 404
     ingest = client.post(profile.web.routes["fingerprint_ingest"], data=_payload())
     assert ingest.status_code == 404
-    # The 404 is the profile's own scan page, not a Werkzeug default.
-    assert ingest.get_data(as_text=True) == "404 - Not Found"
+    # The 404 is the profile's own HTML scan page, not a Werkzeug default.
+    assert ingest.mimetype == "text/html"
+    assert b"404 - Not Found" in ingest.data
+    assert b"Werkzeug" not in ingest.data
 
 
 def test_cli_override_removes_the_collector_and_the_route(repo, bus):

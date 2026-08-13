@@ -27,12 +27,17 @@ instead.
 | `DICOMHAWK_PORTS` | DIMSE ports to listen on, comma separated. |
 | `DICOMHAWK_WEB_PORT` | Attacker-facing web port. |
 | `DICOMHAWK_OPERATOR_PORT` | Operator API port, published on host loopback only. |
+| `DICOMHAWK_OPERATOR_HOST` | Container-side operator bind address; Compose uses `0.0.0.0` while publishing it on host loopback. |
 | `DICOMHAWK_OPERATOR_TOKEN` | Token protecting the operator API. Strongly recommended. |
 | `DICOMHAWK_SECURE_COOKIES` | Overrides the profile's `Secure` session-cookie flag. |
 | `DICOMHAWK_TRUSTED_PROXY` | Exact IP of the reverse proxy allowed to supply forwarded client identity. |
 | `DICOMHAWK_PUBLIC_BASE_URL` | External origin used in generated redirect URIs. |
 | `DICOMHAWK_BACKEND_SERVER` | Per-deployment backend header value for profiles that expose one. |
 | `DICOMHAWK_ANALYSIS` | Turns payload analysis on or off. |
+| `DICOMHAWK_ANALYSIS_RULES` | Optional mounted directory containing additional operator `.yar` rules. |
+| `DICOMHAWK_ANALYSIS_TIMEOUT` | Hard wall-clock deadline for one analysis job, in seconds. |
+| `DICOMHAWK_ANALYSIS_MAX_BYTES` | Maximum bytes read or extracted from one capture during analysis. |
+| `DICOMHAWK_ANALYSIS_QUEUE_SIZE` | In-memory worker wake-up queue bound; durable jobs remain in the analysis DB. |
 | `DICOMHAWK_FINGERPRINT` | Turns the browser fingerprint collector on or off. |
 | `DICOMHAWK_TRACES` | Directory for captured objects. |
 | `DICOMHAWK_DB` | SQLite path for the DICOM index. |
@@ -41,6 +46,10 @@ instead.
 | `DICOMHAWK_FINGERPRINT_MAX_BYTES` | Maximum size of one collector submission. |
 | `DICOMHAWK_FINGERPRINT_MAX_PER_SESSION` | Fingerprints retained for one web session. |
 | `DICOMHAWK_FINGERPRINT_MAX_PER_IP` | Per-source-address fingerprint storage cap; must be at least the per-session cap. |
+| `DICOMHAWK_TRACES_HOST_PATH` | Production bind-mount source for captures; must be a dedicated bounded filesystem. |
+| `DICOMHAWK_STATE_HOST_PATH` | Production bind-mount source for the SQLite databases and cache. |
+| `DICOMHAWK_LOGS_HOST_PATH` | Production bind-mount source for interaction logs and rotations. |
+| `DICOMHAWK_TRACE_FILESYSTEM_MAX_BYTES` | Operator-declared trace-filesystem ceiling checked by the production preflight. |
 
 The three database paths are deliberately separate files. A flood of captured objects filling
 the traces volume must not be able to break indexing or lose analysis results.
@@ -64,6 +73,11 @@ they come from the profile, and Compose publishes every layout the shipped profi
 ## Settings that interact
 
 A few combinations are only comprehensible together.
+
+**Who gets in and what it costs.** `grant_access` decides which logins succeed: `none`,
+`bait` for the declared pairs only, `keyword` for those plus anything containing a term from
+`honey_keywords`, and `any`. Widening the gate engages more attackers and makes the gate itself
+easier to infer. See [Adding a profile](./profiles.md) for the full comparison.
 
 **Login and session cookies.** A profile modelling an HTTPS product marks its session cookie
 `Secure`, and browsers discard such a cookie over plain HTTP. The decoy login then accepts a

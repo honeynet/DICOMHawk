@@ -78,9 +78,10 @@ and the underlying signals are retained. All inputs still come from the visitor 
 fabricated; treat the verdict as an indicator, not proof of a particular browser or bot.
 
 `hash` is the useful pivot: two visits sharing a hash came from the same browser
-environment, which is how repeat visits are recognised across addresses. Web events in the
-interaction log carry the same `fingerprint_hash`, so a fingerprint can be tied back to the
-requests that session made. Events logged when fingerprinting is off carry `null` there.
+environment, which is how repeat visits are recognised across addresses. The
+`WEB_FINGERPRINT` ingestion event carries `fingerprint_hash`. Use its `session_id` to pivot to
+the other web events from that session; those events do not repeat the hash. Events logged when
+fingerprinting is off, or before a submission is received, carry `null` there.
 
 Correlating web activity with DICOM activity is done by address and time. The two protocols
 share no session identifier.

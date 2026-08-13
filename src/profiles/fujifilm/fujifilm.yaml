@@ -248,7 +248,7 @@ web:
   enabled: true
   templates_dir: fujifilm
   favicon: synapse/favicon.ico
-  grant_access: bait                             # none | bait | any; only the honey_credentials below get in
+  grant_access: keyword                          # none | bait | keyword | any; keyword = the bait pairs plus honey_keywords
   secure_cookies: true                           # real product is HTTPS; without TLS set DICOMHAWK_SECURE_COOKIES=false
 
   # Real Synapse paths, sourced from public passive recon; response kinds are defined in web/app.py::_HONEYTRAP_RESPONSES.
@@ -308,6 +308,14 @@ web:
       password: svc_dicom
     - username: pacsadmin
       password: Password1
+
+  honey_keywords:
+    - admin
+    - pacs
+    - dicom
+    - radiology
+    - imaging
+    - service
 
   fingerprint:
     enabled: true

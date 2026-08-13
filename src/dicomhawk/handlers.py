@@ -56,6 +56,11 @@ _ACSE_EVENTS: frozenset[EventType] = frozenset(
         evt.EVT_ABORTED,
     }
 )
+_TRANSPORT_EVENTS: frozenset[EventType] = frozenset(
+    {evt.EVT_CONN_OPEN, evt.EVT_CONN_CLOSE}
+)
+# Bytes of the connection prefix rendered as hex and as its ASCII twin.
+_PREVIEW_BYTES = 64
 
 # C-FIND deduplication column; IMAGE remains one response per instance.
 _FIND_LEVEL_UID: dict[str, str] = {
@@ -193,6 +198,7 @@ def handle_associate(
     # EVT_ACSE_RECV also fires for release and abort PDUs.
     if not isinstance(event.primitive, A_ASSOCIATE):
         return
+    cache.association_seen(event.assoc)
     if _mark_healthcheck(event, event.primitive):
         return
     # Negotiation overwrites this primitive before DIMSE handlers run.
@@ -288,14 +294,134 @@ def _is_healthcheck(event: Event) -> bool:
     return bool(getattr(getattr(event, "assoc", None), _HEALTHCHECK_ATTR, False))
 
 
+def _tap_socket(assoc, cache: SessionCache) -> None:
+    """Tee the peer's bytes before the PDU-type filter drops HTTP/TLS/junk unseen."""
+    sock = getattr(getattr(assoc, "dul", None), "socket", None)
+    original = getattr(sock, "recv", None)
+    if original is None:
+        return
+
+    def recv(nr_bytes: int):
+        data = original(nr_bytes)
+        try:
+            if data:
+                # Passed uncopied: connection_data only keeps a bounded slice.
+                cache.connection_data(assoc, data)
+        except Exception:
+            # Observation must never break the peer's own read path.
+            logger.debug("Could not record connection prefix", exc_info=True)
+        return data
+
+    sock.recv = recv
+
+
 def handle_connect(
     repo: Repository, bus: Logger, cache: SessionCache, event: Event
 ) -> None:
     # Fires on TCP accept; captures probes that never send a valid A-ASSOCIATE-RQ & skips loopback probes.
+    cache.connection_opened(event.assoc)
     addr = getattr(event, "address", None)
     if addr and addr[0] in _LOOPBACK:
         return
+    _tap_socket(event.assoc, cache)
     bus.info(InteractionEvent(event, cache, "Connection Opened"))
+
+
+def _protocol_guess(prefix: bytes) -> str:
+    upper = prefix[:16].upper()
+    if upper.startswith(
+        (
+            b"GET ",
+            b"POST ",
+            b"HEAD ",
+            b"PUT ",
+            b"OPTIONS ",
+            b"DELETE ",
+            b"PATCH ",
+            b"TRACE ",
+            b"CONNECT ",
+        )
+    ):
+        return "HTTP"
+    if prefix.startswith(b"\x16\x03"):
+        return "TLS"
+    if prefix.startswith(b"SSH-"):
+        return "SSH"
+    if prefix[:1] in {b"\x01", b"\x02", b"\x03", b"\x04", b"\x05", b"\x06", b"\x07"}:
+        return "DICOM"
+    return "unknown"
+
+
+def _ascii_preview(prefix: bytes) -> str:
+    """Readable twin of the hex dump; non-printables become '.' so no control byte survives."""
+    return "".join(
+        chr(byte) if 0x20 <= byte < 0x7F else "." for byte in prefix[:_PREVIEW_BYTES]
+    )
+
+
+def _associate_request_details(prefix: bytes) -> list[str]:
+    """Best-effort fields from a bounded A-ASSOCIATE-RQ, even if pynetdicom rejects it."""
+    if len(prefix) < 74 or prefix[0] != 0x01:
+        return []
+
+    def text(raw: bytes) -> str:
+        return raw.decode("ascii", "backslashreplace").rstrip(" \0")
+
+    details = [f"Called: {text(prefix[10:26])}", f"Calling: {text(prefix[26:42])}"]
+    position = 74
+    end = min(len(prefix), 6 + int.from_bytes(prefix[2:6], "big"))
+    while position + 4 <= end:
+        item_type = prefix[position]
+        item_length = int.from_bytes(prefix[position + 2 : position + 4], "big")
+        item_start, item_end = position + 4, position + 4 + item_length
+        if item_end > end:
+            break
+        if item_type == 0x50:  # User Information item
+            subposition = item_start
+            while subposition + 4 <= item_end:
+                subtype = prefix[subposition]
+                sublength = int.from_bytes(
+                    prefix[subposition + 2 : subposition + 4], "big"
+                )
+                value_start = subposition + 4
+                value_end = value_start + sublength
+                if value_end > item_end:
+                    break
+                if subtype == 0x52:
+                    details.append(
+                        f"Implementation Class UID: {text(prefix[value_start:value_end])}"
+                    )
+                elif subtype == 0x55:
+                    details.append(
+                        f"Implementation Version: {text(prefix[value_start:value_end])}"
+                    )
+                subposition = value_end
+        position = item_end
+    return details
+
+
+def handle_close(
+    repo: Repository, bus: Logger, cache: SessionCache, event: Event
+) -> None:
+    observation = cache.connection_closed(event.assoc)
+    addr = getattr(event, "address", None)
+    if (addr and addr[0] in _LOOPBACK) or _is_healthcheck(event):
+        return
+    prefix = observation["prefix"]
+    decoded = observation["association_seen"]
+    params = [
+        f"Bytes received: {observation['bytes']}",
+        f"Duration: {observation['duration']:.3f}s",
+        f"Protocol: {_protocol_guess(prefix)}",
+        f"Association decoded: {'yes' if decoded else 'no'}",
+    ]
+    if not decoded and prefix:
+        params.extend(_associate_request_details(prefix))
+        params.append(f"First bytes: {prefix[:_PREVIEW_BYTES].hex()}")
+        params.append(f"Preview: {_ascii_preview(prefix)}")
+    bus.info(
+        InteractionEvent(event, cache, "Connection Closed", session_parameters=params)
+    )
 
 
 # --- DIMSE handlers (generators) ---
@@ -665,7 +791,13 @@ def handle_store(
         yield (QRStatus.FAILURE, None)
         return
 
-    if (err := repo.store(ds, capture=False)) is not None:
+    if (
+        err := repo.store(
+            ds,
+            capture=False,
+            expected_sop_class_uid=str(event.request.AffectedSOPClassUID),
+        )
+    ) is not None:
         bus.error(
             InteractionEvent(
                 event,
@@ -812,6 +944,7 @@ def bind_dimse_simple(
 
 _handlers: list[tuple[str, EventType, EventHandler]] = [
     ("connect", evt.EVT_CONN_OPEN, handle_connect),
+    ("close", evt.EVT_CONN_CLOSE, handle_close),
     ("associate", evt.EVT_ACSE_RECV, handle_associate),
     ("reject", evt.EVT_ACSE_SENT, handle_reject),
     ("release", evt.EVT_RELEASED, handle_release),
@@ -836,7 +969,7 @@ def new_dimse_factory(
     for n, t, h in _handlers:
         if n == "store":
             h = partial(h, max_store_bytes=max_store_bytes, sink=sink)
-        if t in _ACSE_EVENTS or t == evt.EVT_CONN_OPEN:
+        if t in _ACSE_EVENTS or t in _TRANSPORT_EVENTS:
             binder = bind_acse(h, repo, bus, cache)
         elif t in _QR_EVENTS:
             binder = bind_dimse_qr(h, repo, bus, cache)

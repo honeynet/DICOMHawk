@@ -22,8 +22,11 @@ The filesystem layout and complete schema are documented in
   flow token.
 - Login, forgotten-password, Windows-auth, scanner 404, honeytrap, oversized-request,
   and worklist activity are recorded in the shared JSON interaction log.
-- Ordinary credentials are denied unless `grant_access` is enabled. Declared honey
-  credentials always enter the decoy and produce a distinct high-confidence event.
+- `grant_access: none` denies every credential, `bait` admits only declared honey
+  credentials, `keyword` also admits any credential containing a `honey_keywords` term in
+  its username or password, and `any` admits every credential. A declared bait username is
+  exempt from keyword matching, so it still requires its declared password. Both an admitted
+  honey credential and a keyword match produce their own distinct high-confidence event.
 - Successful Fujifilm flows land on `/WorkflowUI/?path=`; deep links below `/WorkflowUI/`
   remain in the authenticated shell.
 - The worklist reads trusted seeded studies from the same repository used by DIMSE.

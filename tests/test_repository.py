@@ -1,4 +1,5 @@
 import io
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from pydicom import dcmread
@@ -32,6 +33,12 @@ def _ct_dataset(patient_id="TESTPAT", study_uid=None, series_uid=None):
     return dcmread(buf)
 
 
+def _part10_bytes(ds):
+    buf = io.BytesIO()
+    ds.save_as(buf, enforce_file_format=True)
+    return buf.getvalue()
+
+
 @pytest.fixture
 def repo(tmp_path):
     r = new_repo(None, new_store(str(tmp_path / "traces")))
@@ -61,7 +68,7 @@ def test_store_safe_writes_under_storage_dir(repo):
 
 def test_store_unsafe_quarantines_and_keeps_a_raw_capture(repo):
     ds = _ct_dataset()
-    assert repo.store(ds, safe=False) is None
+    assert repo.store(ds, safe=False, raw_bytes=_part10_bytes(ds)) is None
     assert (repo.storage.quarantine_dir / str(ds.SOPInstanceUID)).exists()
     assert any(repo.storage.traces_dir.glob("*.dcm.gz"))  # raw pre-parse forensic copy
 
@@ -70,7 +77,7 @@ def test_store_writes_part10_canonical_file_atomically(repo):
     ds = _ct_dataset()
     ds.file_meta = FileMetaDataset()
 
-    assert repo.store(ds, safe=False) is None
+    assert repo.store(ds, safe=False, raw_bytes=b"exact incoming bytes") is None
 
     path = repo.storage.quarantine_dir / str(ds.SOPInstanceUID)
     assert path.read_bytes()[128:132] == b"DICM"
@@ -92,12 +99,23 @@ def test_store_does_not_report_success_when_forensic_capture_fails(repo, monkeyp
     assert "quarantine" in err.error
 
 
+def test_store_rejects_untrusted_dataset_without_exact_wire_bytes(repo):
+    ds = _ct_dataset()
+
+    err = repo.store(ds, safe=False)
+
+    assert err is not None
+    assert err.status == QRStatus.STORE_ERROR
+    assert "exact incoming bytes" in err.error.lower()
+    assert not any(repo.storage.traces_dir.glob("*.dcm.gz"))
+
+
 def test_store_rejects_missing_sop_instance_uid(repo):
     ds = Dataset()
     ds.PatientID = "X"
     err = repo.store(ds, safe=True)
     assert err is not None
-    assert err.status == QRStatus.STORE_ERROR
+    assert err.status == QRStatus.FAILURE
 
 
 def test_store_rejects_missing_sop_class_uid(repo):
@@ -105,7 +123,7 @@ def test_store_rejects_missing_sop_class_uid(repo):
     del ds.SOPClassUID
     err = repo.store(ds, safe=True)
     assert err is not None
-    assert err.status == QRStatus.STORE_ERROR
+    assert err.status == QRStatus.FAILURE
     assert "SOPClassUID" in err.error
 
 
@@ -114,8 +132,20 @@ def test_store_blocks_path_traversal_in_sop_instance_uid(repo):
     ds.SOPInstanceUID = "../../../etc/passwd"
     err = repo.store(ds, safe=True)
     assert err is not None
-    assert err.status == QRStatus.STORE_ERROR
+    assert err.status == QRStatus.FAILURE
     assert "Dangerous" in err.error
+
+
+def test_store_rejects_overlong_sop_instance_uid_without_touching_filesystem(repo):
+    ds = _ct_dataset()
+    ds.SOPInstanceUID = "1." + ("2" * 300)
+
+    err = repo.store(ds, safe=True)
+
+    assert err is not None
+    assert err.status == QRStatus.FAILURE
+    assert "64 characters" in err.error
+    assert not any(repo.storage.storage_dir.iterdir())
 
 
 def test_store_with_missing_identity_keys_writes_file_but_skips_indexing(repo):
@@ -131,6 +161,15 @@ def test_store_with_missing_identity_keys_writes_file_but_skips_indexing(repo):
     assert indexed == 0
 
 
+def test_store_reports_dataset_sop_class_mismatch_not_resource_exhaustion(repo):
+    ds = _ct_dataset()
+
+    err = repo.store(ds, safe=True, expected_sop_class_uid="1.2.3.4")
+
+    assert err is not None
+    assert err.status == QRStatus.SOP_CLASS_INVALID
+
+
 def test_store_reports_database_index_failure(repo, monkeypatch):
     ds = _ct_dataset()
 
@@ -143,6 +182,16 @@ def test_store_reports_database_index_failure(repo, monkeypatch):
     assert err is not None
     assert err.status == QRStatus.STORE_ERROR
     assert "database unavailable" in err.error
+
+
+def test_in_memory_repository_serializes_concurrent_writes(repo):
+    datasets = [_ct_dataset() for _ in range(24)]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        errors = list(executor.map(lambda ds: repo.store(ds, safe=True), datasets))
+
+    assert errors == [None] * len(datasets)
+    assert repo.conn.query(qrdb.Instance).count() == len(datasets)
 
 
 # --- find() ---
@@ -176,6 +225,30 @@ def test_find_filters_by_a_specific_key(repo):
 
     assert result.error is None
     assert {m.study_instance_uid for m in result.matches} == {str(a.StudyInstanceUID)}
+
+
+@pytest.mark.parametrize(
+    ("tag", "vr", "value"),
+    [
+        ((0x0009, 0x0010), "LO", "ACME"),
+        ((0x0009, 0x1001), "SQ", [Dataset()]),
+        ((0x7777, 0x0010), "LO", "UNKNOWN"),
+    ],
+)
+def test_find_ignores_private_and_unknown_optional_keys(repo, tag, vr, value):
+    stored = _ct_dataset()
+    repo.store(stored, safe=True)
+    query = Dataset()
+    query.QueryRetrieveLevel = "STUDY"
+    query.StudyInstanceUID = stored.StudyInstanceUID
+    query.add_new(tag, vr, value)
+
+    result = repo.find(query, StudyRootQueryRetrieveInformationModelFind)
+
+    assert result.error is None
+    assert [match.study_instance_uid for match in result.matches] == [
+        str(stored.StudyInstanceUID)
+    ]
 
 
 def test_find_page_limits_at_the_database_and_deduplicates(repo):
@@ -439,7 +512,7 @@ def test_eval_qr_accepts_a_valid_request(repo):
 
 def test_find_instance_blocks_quarantined_instances(repo):
     ds = _ct_dataset()
-    repo.store(ds, safe=False)
+    repo.store(ds, safe=False, raw_bytes=_part10_bytes(ds))
     match = Dataset()
     match.filename = str(repo.storage.quarantine_dir / str(ds.SOPInstanceUID))
 

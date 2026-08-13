@@ -39,6 +39,8 @@ from profiles.profile import DicomWebService, ProfileConfig
 logger = logging.getLogger(__name__)
 
 _LOG_FIELD_LIMIT = 4096
+_MAX_RENDER_DIMENSION = 8192
+_MAX_RENDER_PIXELS = 16_777_216
 _QIDO_SKIP = frozenset({"limit", "offset", "fuzzymatching", "includefield"})
 _DICOM_XML = "http://dicom.nema.org/PS3.19/models/NativeDICOM"
 _SESSION_SALT = uuid.uuid4().bytes
@@ -460,47 +462,68 @@ def _run_qido(level, path_uids, return_keys, request_type) -> Response:
     except (TypeError, ValueError) as exc:
         _log(request_type, level="WARNING", matches=0, params=[_bounded(exc)])
         return _problem(400, "Invalid query parameters")
-    result = repo.find(query, _FIND)
-    if result.error is not None:
-        _log(request_type, level="ERROR", matches=0, params=[result.error.error])
+    patients = repo.find_patient_ids(query, _FIND)
+    if patients.error is not None:
+        _log(request_type, level="ERROR", matches=0, params=[patients.error.error])
         return _problem(400, "Invalid query")
 
     dedup_attr = _DEDUP[level]
-    seen, rows, patient_ids = set(), [], set()
-    for match in result.matches:
-        safe_ds = None
-        if (
-            header_filters
-            or include_all
-            or any(keyword_for_tag(tag) not in qr_db._ATTRIBUTES for tag in return_tags)
-        ):
-            safe_ds = _safe_dataset(repo, match)
-        if header_filters and (
-            safe_ds is None or not _matches_header(safe_ds, header_filters)
-        ):
-            continue
-        uid = getattr(match, dedup_attr, None)
-        if uid in seen:
-            continue
-        seen.add(uid)
-        row = match.as_identifier(query, _FIND)
-        if "QueryRetrieveLevel" in row:  # a query key, not a QIDO result attribute
-            del row.QueryRetrieveLevel
-        if safe_ds is not None:
-            if include_all:
-                row = _without_bulk_data(safe_ds)
-            else:
-                for tag in return_tags:
-                    if tag not in row and tag in safe_ds:
-                        row.add(copy.deepcopy(safe_ds[tag]))
-        rows.append(row)
-        patient_ids.add(str(getattr(match, "patient_id", "")))
+    result_limit = limit
+    if len(patients.matches) != 1:
+        configured_cap = current_app.config["QIDO_MAX"]
+        result_limit = (
+            configured_cap
+            if result_limit is None
+            else min(result_limit, configured_cap)
+        )
 
-    rows = rows[offset:]
-    if limit is not None:
-        rows = rows[:limit]
-    if len(patient_ids) != 1:
-        rows = rows[: current_app.config["QIDO_MAX"]]
+    rows = []
+    matched_before_offset = 0
+    database_offset = 0
+    batch_size = 256
+    needs_file = (
+        bool(header_filters)
+        or include_all
+        or any(keyword_for_tag(tag) not in qr_db._ATTRIBUTES for tag in return_tags)
+    )
+    while result_limit is None or len(rows) < result_limit:
+        result = repo.find_page(
+            query,
+            _FIND,
+            dedup_col=dedup_attr,
+            offset=database_offset,
+            limit=batch_size,
+        )
+        if result.error is not None:
+            _log(request_type, level="ERROR", matches=0, params=[result.error.error])
+            return _problem(400, "Invalid query")
+        if not result.matches:
+            break
+        database_offset += len(result.matches)
+        for match in result.matches:
+            safe_ds = _safe_dataset(repo, match) if needs_file else None
+            if header_filters and (
+                safe_ds is None or not _matches_header(safe_ds, header_filters)
+            ):
+                continue
+            if matched_before_offset < offset:
+                matched_before_offset += 1
+                continue
+            row = match.as_identifier(query, _FIND)
+            if "QueryRetrieveLevel" in row:
+                del row.QueryRetrieveLevel
+            if safe_ds is not None:
+                if include_all:
+                    row = _without_bulk_data(safe_ds)
+                else:
+                    for tag in return_tags:
+                        if tag not in row and tag in safe_ds:
+                            row.add(copy.deepcopy(safe_ds[tag]))
+            rows.append(row)
+            if result_limit is not None and len(rows) >= result_limit:
+                break
+        if len(result.matches) < batch_size:
+            break
 
     _log(request_type, matches=len(rows))
     fuzzy = request.args.get("fuzzymatching", "").lower() == "true"
@@ -855,6 +878,14 @@ def _render_jpeg(ds: Dataset) -> bytes:
     if rows or columns:
         target_width = columns or max(1, round(image.width * rows / image.height))
         target_height = rows or max(1, round(image.height * columns / image.width))
+        if (
+            target_width > _MAX_RENDER_DIMENSION
+            or target_height > _MAX_RENDER_DIMENSION
+            or target_width * target_height > _MAX_RENDER_PIXELS
+        ):
+            raise ValueError(
+                "requested render dimensions exceed the configured safety limit"
+            )
         image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
     quality = _positive_int_parameter("imageQuality", 90)
     if quality > 100:

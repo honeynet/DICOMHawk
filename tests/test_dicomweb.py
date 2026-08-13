@@ -228,6 +228,36 @@ def test_qido_cap_applies_only_to_multiple_patients(repo, apps):
     assert len(json.loads(client.get("/qido-rs/studies").get_data())) == 1
 
 
+def test_qido_multi_patient_cap_is_applied_in_bounded_database_pages(
+    repo, apps, monkeypatch
+):
+    for patient_id in ("P1", "P2", "P3"):
+        repo.store(_ct_dataset(patient_id=patient_id), safe=True)
+    apps[QIDO].config["QIDO_MAX"] = 2
+    original = repo.find_page
+    page_limits = []
+
+    def bounded_page(*args, **kwargs):
+        page_limits.append(kwargs["limit"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(repo, "find_page", bounded_page)
+    monkeypatch.setattr(
+        repo,
+        "find",
+        lambda *_args, **_kwargs: pytest.fail("QIDO must not materialize repo.find()"),
+    )
+
+    response = _client(apps, QIDO).get("/qido-rs/studies")
+
+    assert response.status_code == 200
+    assert len(json.loads(response.get_data())) == 2
+    assert page_limits and max(page_limits) == 256
+
+    oversized_limit = _client(apps, QIDO).get("/qido-rs/studies?limit=1000")
+    assert len(json.loads(oversized_limit.get_data())) == 2
+
+
 # --- WADO-RS ---
 
 
@@ -617,6 +647,26 @@ def test_wado_uri_defaults_to_real_jpeg_for_image(repo, apps):
     assert resp.status_code == 200
     assert resp.content_type == "image/jpeg"
     assert resp.get_data().startswith(b"\xff\xd8")
+
+
+@pytest.mark.parametrize(
+    "render_parameters",
+    ("rows=40000", "columns=40000", "rows=8192&columns=8192"),
+)
+def test_wado_uri_rejects_render_dimensions_that_can_exhaust_memory(
+    repo, apps, render_parameters
+):
+    ds = _ct_dataset(pixels=True)
+    repo.store(ds, safe=True)
+    path = (
+        f"/services/wado/?requestType=WADO&studyUID={ds.StudyInstanceUID}"
+        f"&seriesUID={ds.SeriesInstanceUID}&objectUID={ds.SOPInstanceUID}"
+        f"&{render_parameters}"
+    )
+
+    resp = _client(apps, WADO_URI).get(path, headers=_CREDS)
+
+    assert resp.status_code == 406
 
 
 def test_wado_uri_observed_case_alias_and_text_representation(repo, apps):
