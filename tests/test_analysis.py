@@ -811,6 +811,21 @@ def _dead_component(tmp_path):
     return comp
 
 
+def test_analysis_component_uses_spawn_and_copies_bus_file_configuration(tmp_path):
+    from analysis.component import new_analysis_component
+    from analysis.config import new_analysis_config
+    from dicomhawk.bus import new_bus
+
+    bus = new_bus(str(tmp_path / "dicomhawk.log"), size=None, verbose=False)
+    comp = new_analysis_component(
+        new_analysis_config(db_path=str(tmp_path / "analysis.db")), bus
+    )
+
+    assert comp._context.get_start_method() == "spawn"
+    assert comp._worker_bus_config["stdout"] == str(tmp_path / "dicomhawk.log")
+    assert comp._worker_bus_config["size"] is None
+
+
 def test_unopenable_store_disables_analysis_without_killing_the_process(tmp_path):
     comp = _dead_component(
         tmp_path

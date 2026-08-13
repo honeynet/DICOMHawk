@@ -103,6 +103,11 @@ database write, and if that write cannot complete the job is recorded as not que
 than surfaced to the sender. Exact response timing is not a guarantee an optional
 asynchronous component or the host scheduler can make.
 
+The supervised worker always uses Python's `spawn` process context, including crash recovery,
+so it is never forked from the live supervisor thread. Its interaction-log path and rotation
+settings are passed explicitly to the child; analysis events therefore continue reaching the
+same JSON log on Python versions whose default multiprocessing method is not `fork`.
+
 Two independent timeouts protect the worker: a per-job wall-clock deadline (`--analysis-timeout`,
 what actually bounds a single analysis) and a much larger process-lifetime CPU-time backstop
 (1 hour cumulative, not configurable) that only matters if a job somehow gets stuck in

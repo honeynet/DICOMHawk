@@ -18,11 +18,11 @@ Start the DICOM honeypot server.
 | `--database` | `-db` | *(in-memory)* | Path to SQLite database file. **Must match `seed --database`** |
 | `--traces` | `-t` | `traces` | Directory for received DICOM files and quarantined uploads |
 | `--log-path` | `-l` | `data/dicomhawk.log` | JSON interaction event log (one record per line) |
-| `--log-max-bytes` | | `52428800` | Rotate the event log after this many bytes; `0` disables size rotation |
+| `--log-max-bytes` | | `52428800` | Rotate the event log after this many bytes; `0` disables size rotation but keeps cross-process write locking |
 | `--log-backups` | | `5` | Number of rotated event logs to keep |
 | `--dev-log` | | | Path for Python-level warnings, errors, and pynetdicom protocol events |
 | `--web-port` | | `8080` | Port for the attacker-facing web UI (`pacs`-kind profiles with `web.enabled` only) |
-| `--operator-port` | | `8081` | Port for the read-only operator dashboard (`/`) and API (`/api/overview`, `/api/stats`, `/api/attackers`, `/api/credentials`, `/api/uploads`, `/api/events`, `/api/sessions`, `/api/profiles`, `/api/artifacts`) |
+| `--operator-port` | | `8081` | Port for the read-only operator dashboard (`/`) and API (`/api/overview`, `/api/stats`, `/api/attackers`, `/api/credentials`, `/api/uploads`, `/api/events`, `/api/sessions`, `/api/profiles`, `/api/artifacts`, `/api/fingerprints`) |
 | `--operator-host` | | `127.0.0.1` | Bind address for the operator surface. A non-loopback value also requires `--allow-remote-operator`. In Docker, use `0.0.0.0`; the supplied host mapping still publishes it only on `127.0.0.1`. |
 | `--operator-token` | | *(unset)* | Optional operator password/Bearer token; also read from `DICOMHAWK_OPERATOR_TOKEN`. Browsers use Basic auth (any username), while API clients may use Basic or `Authorization: Bearer …`. |
 | `--allow-remote-operator` | | off | Explicitly permit a non-loopback operator bind. The supplied Docker configuration sets this because container loopback cannot be published; it retains a host-side loopback-only port mapping. |

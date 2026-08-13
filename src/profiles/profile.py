@@ -95,14 +95,15 @@ class FingerprintConfig:
     signals: list[str] = field(default_factory=list)
 
 
-_GRANT_ACCESS_LEVELS = frozenset({"none", "bait", "any"})
+_GRANT_ACCESS_LEVELS = frozenset({"none", "bait", "keyword", "any"})
+_MIN_HONEY_KEYWORD_CHARS = 3
 
 
 @dataclass
 class WebConfig:
     enabled: bool = False
     templates_dir: str | None = None
-    # none = deny every login; bait = only honey_credentials; any = accept anything.
+    # none = deny every login; bait = only honey_credentials; keyword = bait plus honey_keywords; any = accept anything.
     grant_access: str = "none"
     # Post-login DICOM browse console (patients/studies/series/instances/upload).
     browse: bool = False
@@ -123,6 +124,7 @@ class WebConfig:
     fingerprint: FingerprintConfig = field(default_factory=FingerprintConfig)
     # (username, password) bait pairs; using one grants access unconditionally (see login_post).
     honey_credentials: list[tuple[str, str]] = field(default_factory=list)
+    honey_keywords: list[str] = field(default_factory=list)
     # URL paths for every route the engine serves; keeps one profile's identity out of another's address bar.
     routes: dict[str, str] = field(default_factory=dict)
     # Cookie names the engine sets; same isolation reasoning as routes.
@@ -421,6 +423,24 @@ def _validate_worklist_sidebar(sidebar) -> None:
                     f"Unknown {item_where}.filter keys: {', '.join(sorted(unknown))} "
                     f"(known: {', '.join(sorted(_WORKLIST_FILTER_KEYS))})"
                 )
+
+
+def _parse_honey_keywords(raw) -> list[str]:
+    if not isinstance(raw, list):
+        raise ValueError("Profile 'web.honey_keywords' must be a list")
+    keywords: list[str] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise ValueError(f"Profile 'web.honey_keywords[{i}]' must be a string")
+        keyword = item.strip().casefold()
+        if len(keyword) < _MIN_HONEY_KEYWORD_CHARS:
+            raise ValueError(
+                f"Profile 'web.honey_keywords[{i}]' must be at least "
+                f"{_MIN_HONEY_KEYWORD_CHARS} characters; '{item}' would admit almost every login"
+            )
+        if keyword not in keywords:
+            keywords.append(keyword)
+    return keywords
 
 
 def _validate_worklist_actions(items, where: str, *, icons: bool = False) -> None:
@@ -908,6 +928,16 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     else:
         honey_credentials = d.web.honey_credentials
 
+    if "honey_keywords" in web_raw:
+        honey_keywords = _parse_honey_keywords(web_raw["honey_keywords"])
+    else:
+        honey_keywords = d.web.honey_keywords
+    if web_raw.get("grant_access") == "keyword" and not honey_keywords:
+        raise ValueError(
+            "Profile 'web.grant_access' is 'keyword' but 'web.honey_keywords' is empty; "
+            "declare keywords or use 'bait'"
+        )
+
     fingerprint_raw = _mapping(web_raw.get("fingerprint"), "web.fingerprint")
     if "enabled" in fingerprint_raw and not isinstance(
         fingerprint_raw["enabled"], bool
@@ -1027,6 +1057,10 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     if not 1 <= worklist_page_size <= 500:
         raise ValueError("Profile 'web.worklist_page_size' must be 1-500")
     browse = bool(web_raw.get("browse", False))
+    if "fingerprint_script" in web_raw:
+        raise ValueError(
+            "Profile 'web.fingerprint_script' was removed; use 'web.routes.fingerprint_script'"
+        )
     assets_dir = (
         _resolve_web_assets(
             str(web_raw["templates_dir"]), source_dir, honeytraps, browse
@@ -1036,19 +1070,15 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
     )
     if assets_dir:
         static_dir = Path(assets_dir) / "static"
-        for label, asset in (
-            ("favicon", web_raw.get("favicon")),
-            ("fingerprint_script", web_raw.get("fingerprint_script")),
-        ):
-            if asset is None:
-                continue
+        asset = web_raw.get("favicon")
+        if asset is not None:
             asset_path = (static_dir / str(asset)).resolve()
             if (
                 not asset_path.is_relative_to(static_dir.resolve())
                 or not asset_path.is_file()
             ):
                 raise ValueError(
-                    f"Profile 'web.{label}' does not name a file under the profile static directory"
+                    "Profile 'web.favicon' does not name a file under the profile static directory"
                 )
 
     return ProfileConfig(
@@ -1092,6 +1122,7 @@ def _parse_profile(data: dict, source_dir: Path | None = None) -> ProfileConfig:
             honeytraps=honeytraps,
             fingerprint=fingerprint,
             honey_credentials=honey_credentials,
+            honey_keywords=honey_keywords,
             routes=routes,
             cookies=cookies,
             winauth_messages=winauth_messages,

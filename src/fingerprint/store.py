@@ -145,6 +145,8 @@ class FingerprintStore:
         return True
 
     def get(self, fingerprint_id: str) -> FingerprintRecord | None:
+        if not self.ready():
+            return None
         return self.session.get(FingerprintRecord, fingerprint_id)
 
     def list_fingerprints(

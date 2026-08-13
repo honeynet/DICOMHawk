@@ -4,7 +4,7 @@ import queue
 import threading
 import time
 
-from dicomhawk.bus import InteractionEvent
+from dicomhawk.bus import InteractionEvent, worker_bus_config
 from dicomhawk.component import Component
 from dicomhawk.storage import SubmittedArtifact
 
@@ -25,6 +25,8 @@ class AnalysisComponent(Component):
     def __init__(self, config: AnalysisConfig, bus: logging.Logger):
         self.config = config
         self.bus = bus
+        self._context = multiprocessing.get_context("spawn")
+        self._worker_bus_config = worker_bus_config(bus)
         # Constructed (not started) so other components can hold this reference before start().
         self.store: AnalysisStore = new_analysis_store(config.DB_PATH)
         self._queue: multiprocessing.Queue | None = None
@@ -45,7 +47,7 @@ class AnalysisComponent(Component):
                 "Analysis disabled: could not open %s", self.config.DB_PATH
             )
             return
-        self._queue = multiprocessing.Queue(maxsize=self.config.QUEUE_SIZE)
+        self._queue = self._context.Queue(maxsize=self.config.QUEUE_SIZE)
         self._stopping.clear()
         self._spawn()
         self._supervisor = threading.Thread(
@@ -62,9 +64,9 @@ class AnalysisComponent(Component):
         )
 
     def _spawn(self) -> None:
-        self._process = multiprocessing.Process(
+        self._process = self._context.Process(
             target=run_worker,
-            args=(self.config, self._queue),
+            args=(self.config, self._queue, self._worker_bus_config),
             daemon=True,
             name="dicomhawk-analysis-worker",
         )

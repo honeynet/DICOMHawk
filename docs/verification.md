@@ -19,7 +19,7 @@ and timestamps will differ on yours.
 | 8 | The payload sandbox scans uploads and matches its rules |
 | 9 | Browser fingerprinting records a real visit |
 | 10 | The operator console shows the captured intelligence |
-| 11 | The event log is intact |
+| 11 | Active and rotated event logs are valid JSONL |
 
 Checks 4, 5, and 6 use the paths of the bundled `fujifilm` profile. If you run
 `generic-pacs`, substitute `/portal` for `/Synapse` and `/dicom-web/` for the four
@@ -141,7 +141,22 @@ HTTP/1.1 302 FOUND
 Location: /WorkflowUI/?path=
 ```
 
+Both shipped profiles also run `grant_access: keyword`, so a credential containing one of
+their `honey_keywords` is accepted even though it was never declared as a pair:
+
+```bash
+curl -si -X POST 'http://localhost:8080/SynapseSignOn/sts/login?signin=x' \
+    -d 'username=bob&password=MyPacsPass' | sed -n '1p;/^[Ll]ocation:/p'
+```
+
+```
+HTTP/1.1 302 FOUND
+Location: /WorkflowUI/?path=
+```
+
 Both attempts are written to the event log either way, which is the point of the surface.
+A keyword match is logged as `WEB_HONEY_KEYWORD_USED` naming the term that matched, and a
+declared pair as `WEB_HONEY_CREDENTIAL_USED`.
 
 If the bait credential returns `302` but the worklist still bounces you back to the
 sign-on page in a browser, the session cookie is marked `Secure` while the site is served
@@ -372,21 +387,53 @@ curl -s -H "Authorization: Bearer $(grep '^DICOMHAWK_OPERATOR_TOKEN=' .env | cut
     http://localhost:8081/api/stats
 ```
 
-## 11. The event log is intact
+## 11. Active and rotated event logs are valid JSONL
 
 ```bash
 docker compose exec dicomhawk sh -c \
-    'python3 -c "import json;[json.loads(l) for l in open(\"/var/log/dicomhawk/dicomhawk.log\")];print(\"all lines valid JSON\")"'
+    'python3 -c "import glob,json,os;p=\"/var/log/dicomhawk/dicomhawk.log\";fs=[f for f in glob.glob(p+\"*\") if f==p or f[len(p)+1:].isdigit()];n=sum(sum(1 for line in open(f) if json.loads(line) is not None) for f in fs);print(f\"{len(fs)} files, {n} valid JSON records\")"'
 ```
 
 ```
-all lines valid JSON
+1 files, 42 valid JSON records
 ```
 
-Every surface writes one JSON object per line into a single file, tagged with a `channel`
-of `DIMSE`, `WEB`, `DICOMWEB`, or `ANALYSIS`. Attacker-controlled values are stored as
-data, so a payload containing quotes or newlines cannot forge extra log entries. That
-property is worth confirming, because a log an attacker can write to is worse than no log.
+Every surface writes one JSON object per line into the active file, tagged with a `channel` of
+`DIMSE`, `WEB`, `DICOMWEB`, or `ANALYSIS`. At 50 MiB the file rotates to numbered backups, with
+five retained by default. A sidecar `dicomhawk.log.lock` coordinates the main process and analysis
+worker during rollover; it is a lock file, not JSONL, and the command deliberately excludes it.
+Attacker-controlled values are stored as data, so quotes or newlines cannot forge extra records.
+The compact terminal view and developer log additionally render control characters as escaped
+text, preventing ANSI sequences, carriage returns, or newlines from changing the operator's
+terminal; the JSON record retains the original value as evidence.
+
+This check proves that every retained line is parseable; it cannot prove that an external log
+shipper received every event. Monitor the rotated-file count and ship files before the configured
+retention window expires when completeness is an operational requirement.
+
+## 12. Non-DICOM probes on the DICOM port are classified
+
+```bash
+printf 'GET /admin HTTP/1.1\r\nHost: pacs\r\n\r\n' | nc -w 1 localhost 104
+docker compose exec dicomhawk sh -c \
+    'grep "Connection Closed" /var/log/dicomhawk/dicomhawk.log | tail -1'
+```
+
+```
+{"session_id":"...","channel":"DIMSE","request_type":"Connection Closed",
+ "session_parameters":["Bytes received: 36","Duration: 0.004s","Protocol: HTTP",
+ "Association decoded: no","First bytes":"474554202f61646d696e...",
+ "Preview: GET /admin HTTP/1.1..Host: pacs.."],...}
+```
+
+Most traffic an internet-facing DICOM port receives never speaks DICOM. `Protocol` names what
+the peer appeared to be doing, `Preview` renders the same bytes the hex covers with
+non-printable values replaced by `.`, and `Duration` separates a peer that connected and said
+nothing from one that sent a payload. Expect `Protocol: unknown` for traffic none of the
+signatures match; the hex and preview still show what arrived.
+
+Probes from the container's own loopback address are not recorded, so run this from the host
+against the published port rather than through `docker compose exec`.
 
 ## If a check fails
 

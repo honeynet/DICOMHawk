@@ -199,8 +199,12 @@ does not go stale. See [Commands](./commands.md#dicomhawk-seed). Give the seed r
 
 The interaction log (`--log-path`) is one JSON record per line, ready to ship to your SIEM. It rotates
 by size (`--log-max-bytes` / `--log-backups`), and Docker's json-file driver caps the container
-stdout log separately. Keep the developer log (`--dev-log`, Python-level diagnostics) separate
-from the interaction log; only the latter is attacker intelligence.
+stdout log separately. Every file write uses a sidecar `.lock` file, including when size rotation
+is disabled, so the main service and spawned analysis worker cannot interleave records or race a
+rollover; keep that lock on the same logs volume. The active log, numbered
+backups, and lock all survive `docker compose down` because `/var/log/dicomhawk` is mounted.
+Keep the developer log (`--dev-log`, Python-level diagnostics) separate from the interaction log;
+only the latter is attacker intelligence.
 
 Also collect Docker health transitions, OOM events, restart counts, and filesystem usage on the
 host. These are operational failures rather than attacker interaction events and should alert

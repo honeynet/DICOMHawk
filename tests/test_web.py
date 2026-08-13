@@ -79,8 +79,8 @@ def test_fingerprint_seam_injects_collector_with_enabled_signals(repo, bus):
 
 def test_honey_credential_grants_unconditionally_and_logs_distinctly(repo, bus, caplog):
     profile = load_profile("generic-pacs")
-    # The point: bait works while arbitrary credentials do not.
-    assert profile.web.grant_access == "bait"
+    # The point: the declared pair works and is logged as bait, not as an ordinary attempt.
+    assert profile.web.grant_access in {"bait", "keyword"}
     client = new_web(profile, repo, bus).test_client()
 
     with caplog.at_level(logging.WARNING, logger="bus"):
@@ -209,6 +209,8 @@ def test_oversized_login_is_rejected_and_logged(repo, bus, caplog):
     with caplog.at_level(logging.INFO, logger="bus"):
         resp = client.post("/portal/login", data={"username": "x" * 100})
     assert resp.status_code == 413
+    assert resp.mimetype == "text/html"
+    assert b"<!doctype html>" in resp.data.lower()
     assert b"Werkzeug" not in resp.data
     assert "WEB_REQUEST_TOO_LARGE" in caplog.text
 
@@ -358,6 +360,8 @@ def test_unmapped_path_gets_spoofed_headers_not_werkzeug_default(client, caplog)
     with caplog.at_level(logging.INFO, logger="bus"):
         resp = client.get("/totally/made/up/path")
     assert resp.status_code == 404
+    assert resp.mimetype == "text/html"
+    assert b"<!doctype html>" in resp.data.lower()
     assert resp.headers["Server"] == "Microsoft-IIS/10.0"
     assert b"Werkzeug" not in resp.data
     assert b"traceback" not in resp.data.lower()
@@ -426,6 +430,18 @@ def test_worklist_reads_seeded_studies(repo, bus, caplog):
 
     deep = client.get("/WorkflowUI/PowerJacket/?PJType=POWERJACKET")
     assert deep.status_code == 200
+
+
+def test_worklist_missing_slash_uses_iis_shaped_301_not_werkzeug_308(repo, bus):
+    client = new_web(load_profile("fujifilm"), repo, bus).test_client()
+
+    response = client.get("/WorkflowUI?path=CT")
+
+    assert response.status_code == 301
+    assert response.headers["Location"].endswith("/WorkflowUI/?path=CT")
+    assert response.mimetype == "text/html"
+    assert b"Object Moved" in response.data
+    assert b"Redirecting..." not in response.data
 
 
 def test_generic_pacs_profile_serves_all_pages(repo, bus):
@@ -858,11 +874,17 @@ def test_fujifilm_honey_credential_lands_on_the_worklist(repo, bus, caplog):
 
 def test_fujifilm_wrong_password_is_still_denied(repo, bus):
     """A honeypot that accepts any password identifies itself on the first wrong guess."""
-    client = new_web(load_profile("fujifilm"), repo, bus).test_client()
+    profile = load_profile("fujifilm")
+    client = new_web(profile, repo, bus).test_client()
+
+    username = "j.okonkwo"
+    assert not any(
+        k in username.casefold() for k in profile.web.honey_keywords
+    ), "pick a username the keyword rule does not cover, or this proves nothing"
 
     denied = client.post(
         "/SynapseSignOn/sts/login?signin=x",
-        data={"username": "svc_dicom", "password": "not-the-password"},
+        data={"username": username, "password": "not-the-password"},
     )
 
     assert denied.status_code == 200
@@ -1374,6 +1396,168 @@ def test_winauth_honours_the_same_gate_as_the_form_login(repo, bus):
         profile.web.routes["winauth"], headers={"Authorization": f"Basic {header}"}
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("username", "password"),
+    [
+        ("admin", "whatever"),  # keyword in the username
+        ("bob", "pacs2024"),  # keyword in the password
+        ("bob", "myRadiologyPass"),  # mid-string, not a prefix
+        ("bob", "PACS"),  # case-insensitive
+        ("DicomSvc", "x"),  # case-insensitive on the username too
+    ],
+)
+def test_keyword_mode_admits_a_credential_containing_a_declared_keyword(
+    repo, bus, username, password
+):
+    profile = load_profile("generic-pacs")
+    assert profile.web.grant_access == "keyword"
+    client = new_web(profile, repo, bus).test_client()
+
+    resp = client.post(
+        "/portal/login?signin=x", data={"username": username, "password": password}
+    )
+    assert resp.status_code == 302
+
+
+def test_a_keyword_in_a_bait_username_still_requires_the_bait_password(repo, bus):
+    """Declared bait users must not become universal passwords via keyword matching."""
+    profile = load_profile("fujifilm")
+    baits = [u for u, _ in profile.web.honey_credentials]
+    assert any(
+        k in u.casefold() for u in baits for k in profile.web.honey_keywords
+    ), "no bait username carries a keyword; this test proves nothing"
+    client = new_web(profile, repo, bus).test_client()
+
+    for username in baits:
+        resp = client.post(
+            "/SynapseSignOn/sts/login?signin=x",
+            data={"username": username, "password": "not-the-password"},
+        )
+        assert resp.status_code == 200, username
+        assert b"incorrect" in resp.data.lower(), username
+        assert not resp.headers.getlist("Set-Cookie"), username
+
+
+def test_keyword_mode_still_denies_a_credential_with_no_keyword(repo, bus):
+    client = new_web(load_profile("generic-pacs"), repo, bus).test_client()
+
+    resp = client.post(
+        "/portal/login?signin=x", data={"username": "bob", "password": "hunter2"}
+    )
+    assert resp.status_code == 200
+    assert b"incorrect" in resp.data
+    assert not resp.headers.getlist("Set-Cookie")
+
+
+def test_keyword_mode_still_admits_the_exact_bait_pair(repo, bus, caplog):
+    profile = load_profile("generic-pacs")
+    client = new_web(profile, repo, bus).test_client()
+
+    with caplog.at_level(logging.WARNING, logger="bus"):
+        resp = client.post(
+            "/portal/login?signin=x", data={"username": "test", "password": "test"}
+        )
+    assert resp.status_code == 302
+    assert "WEB_HONEY_CREDENTIAL_USED" in caplog.text
+
+
+def test_bait_mode_ignores_declared_keywords(repo, bus):
+    profile = load_profile("generic-pacs")
+    profile.web.grant_access = "bait"
+    client = new_web(profile, repo, bus).test_client()
+
+    resp = client.post(
+        "/portal/login?signin=x", data={"username": "admin", "password": "whatever"}
+    )
+    assert resp.status_code == 200
+
+
+def test_none_denies_a_keyword_match(repo, bus):
+    profile = load_profile("generic-pacs")
+    profile.web.grant_access = "none"
+    client = new_web(profile, repo, bus).test_client()
+
+    resp = client.post(
+        "/portal/login?signin=x", data={"username": "admin", "password": "whatever"}
+    )
+    assert resp.status_code == 200
+    assert not resp.headers.getlist("Set-Cookie")
+
+
+def test_keyword_grant_logs_which_keyword_matched_and_where(repo, bus, caplog):
+    client = new_web(load_profile("generic-pacs"), repo, bus).test_client()
+
+    with caplog.at_level(logging.WARNING, logger="bus"):
+        client.post(
+            "/portal/login?signin=x",
+            data={"username": "bob", "password": "MyPacsPassword"},
+        )
+
+    assert "WEB_HONEY_KEYWORD_USED" in caplog.text
+    assert "Keyword: pacs (password)" in caplog.text
+
+
+def test_winauth_honours_keyword_mode_too(repo, bus, caplog):
+    profile = load_profile("fujifilm")
+    assert profile.web.grant_access == "keyword"
+    client = new_web(profile, repo, bus).test_client()
+
+    header = base64.b64encode(b"radiology-svc:anything").decode()
+    with caplog.at_level(logging.WARNING, logger="bus"):
+        resp = client.get(
+            profile.web.routes["winauth"], headers={"Authorization": f"Basic {header}"}
+        )
+    assert resp.status_code == 302
+    assert "WEB_HONEY_KEYWORD_USED" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("keywords", "match"),
+    [
+        ("admin", "must be a list"),
+        ([42], r"honey_keywords\[0\]' must be a string"),
+        (["ab"], "at least 3 characters"),
+        ([""], "at least 3 characters"),
+    ],
+)
+def test_malformed_keywords_are_refused_at_load(repo, keywords, match):
+    import yaml
+
+    source = Path(__file__).parents[1] / "src/profiles/generic-pacs/generic-pacs.yaml"
+    raw = yaml.safe_load(source.read_text())
+    raw["web"]["honey_keywords"] = keywords
+    broken = Path(repo.storage.storage_dir).parent / "bad-keywords.yaml"
+    broken.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match=match):
+        load_profile(str(broken))
+
+
+def test_keyword_mode_without_keywords_is_refused_rather_than_silently_bait(repo):
+    import yaml
+
+    source = Path(__file__).parents[1] / "src/profiles/generic-pacs/generic-pacs.yaml"
+    raw = yaml.safe_load(source.read_text())
+    raw["web"]["honey_keywords"] = []
+    broken = Path(repo.storage.storage_dir).parent / "empty-keywords.yaml"
+    broken.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="honey_keywords' is empty"):
+        load_profile(str(broken))
+
+
+def test_keywords_are_casefolded_and_deduplicated_at_load(repo):
+    import yaml
+
+    source = Path(__file__).parents[1] / "src/profiles/generic-pacs/generic-pacs.yaml"
+    raw = yaml.safe_load(source.read_text())
+    raw["web"]["honey_keywords"] = ["ADMIN", "admin", " Pacs "]
+    profile_path = Path(repo.storage.storage_dir).parent / "dup-keywords.yaml"
+    profile_path.write_text(yaml.safe_dump(raw))
+
+    assert load_profile(str(profile_path)).web.honey_keywords == ["admin", "pacs"]
 
 
 def test_a_boolean_grant_access_is_refused_with_its_replacement_named(repo, bus):

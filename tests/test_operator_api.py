@@ -176,6 +176,22 @@ def test_credentials_flag_honey_hits():
     assert creds[("root", "toor")]["honey_hit"] is False
 
 
+def test_keyword_grants_are_counted_as_honey_credentials(profile, tmp_path):
+    event = {
+        "request_type": "WEB_HONEY_KEYWORD_USED",
+        "channel": "WEB",
+        "ip": "10.0.0.10",
+        "session_parameters": ["Username: admin", "Password: guess"],
+        "timestamp": "2026-07-19T11:00:00",
+    }
+    client = _durable_client(profile, tmp_path, [event])
+
+    assert client.get("/api/stats").get_json()["credentials_captured"] == 1
+    assert client.get("/api/credentials").get_json()[0]["honey_hit"] is True
+    attacker = client.get("/api/attackers").get_json()[0]
+    assert attacker["classification"] == "credential-access"
+
+
 def test_honey_pair_matches_across_channels():
     events = [
         {
@@ -415,7 +431,7 @@ def test_credential_cap_still_truncates_once_every_slot_is_a_honey_hit(monkeypat
     )  # first-seen honey hit kept; no non-honey slot to evict
 
 
-def test_operator_security_headers_auth_and_redaction(bus):
+def test_operator_security_headers_auth_and_complete_honey_configuration(bus):
     client = new_operator_api(
         load_profile("generic-pacs"), bus, "secret-token"
     ).test_client()
@@ -430,7 +446,35 @@ def test_operator_security_headers_auth_and_redaction(bus):
     assert response.status_code == 200
     assert response.headers["Cache-Control"].startswith("no-store")
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
-    assert response.get_json()["web"]["honey_credentials"] == [["test", "********"]]
+    web = response.get_json()["web"]
+    assert web["honey_credentials"] == [["test", "test"]]
+    assert web["honey_keywords"] == [
+        "admin",
+        "pacs",
+        "dicom",
+        "radiology",
+        "imaging",
+        "service",
+    ]
+
+
+def test_operator_auth_handles_unicode_tokens_without_a_500(bus):
+    client = new_operator_api(
+        load_profile("generic-pacs"), bus, "ünïcödé"
+    ).test_client()
+
+    assert (
+        client.get(
+            "/api/profiles", headers={"Authorization": "Bearer ünïcödé"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/profiles", headers={"Authorization": "Bearer wröng"}
+        ).status_code
+        == 401
+    )
 
 
 def test_dashboard_and_overview_are_available(operator_client):

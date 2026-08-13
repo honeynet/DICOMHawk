@@ -35,6 +35,7 @@ _CRED_EVENTS = frozenset(
     {
         "WEB_LOGIN_ATTEMPT",
         "WEB_HONEY_CREDENTIAL_USED",
+        "WEB_HONEY_KEYWORD_USED",
         "WEB_WINAUTH_ATTEMPT",
         "DICOMWEB_AUTH_ATTEMPT",
     }
@@ -426,7 +427,10 @@ def _add_credential(
             credential["source_ips_truncated"] = True
     if channel := _text(event.get("channel")):
         credential["channels"].add(channel)
-    if event.get("request_type") == "WEB_HONEY_CREDENTIAL_USED":
+    if event.get("request_type") in {
+        "WEB_HONEY_CREDENTIAL_USED",
+        "WEB_HONEY_KEYWORD_USED",
+    }:
         credential["honey_hit"] = True
     timestamp = _text(event.get("timestamp"))
     if timestamp:
@@ -578,15 +582,6 @@ def _stream_page(
     return response
 
 
-def _redacted_profile(profile: ProfileConfig) -> dict:
-    payload = dataclasses.asdict(profile)
-    credentials = payload.get("web", {}).get("honey_credentials", [])
-    payload["web"]["honey_credentials"] = [
-        [pair[0], "********"] for pair in credentials if pair
-    ]
-    return payload
-
-
 def _sessions(events: Iterable[dict]) -> tuple[list[dict], bool]:
     seen: OrderedDict[str, dict] = OrderedDict()
     truncated = False
@@ -666,7 +661,7 @@ def dashboard():
 
 @bp.route("/api/profiles")
 def profiles():
-    return jsonify(_redacted_profile(current_app.config["PROFILE"]))
+    return jsonify(dataclasses.asdict(current_app.config["PROFILE"]))
 
 
 @bp.route("/api/events")
@@ -836,8 +831,12 @@ def _authenticate_operator():
         supplied = auth.password
     elif request.headers.get("Authorization", "").startswith("Bearer "):
         supplied = request.headers["Authorization"][7:]
-    if supplied is not None and secrets.compare_digest(supplied, token):
-        return None
+    if supplied is not None:
+        try:
+            if secrets.compare_digest(supplied.encode("utf-8"), token.encode("utf-8")):
+                return None
+        except (AttributeError, UnicodeError):
+            pass
     return (
         jsonify({"error": "operator authentication required"}),
         401,

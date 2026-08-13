@@ -1,17 +1,24 @@
 import gc
 import json
 import logging
+import multiprocessing
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import pytest
+
 from dicomhawk.bus import (
+    _ConsoleFormatter,
     InteractionEvent,
+    MultiprocessFileHandler,
+    MultiprocessRotatingFileHandler,
     RecentEventsHandler,
     SessionCache,
     _extract_params,
     new_bus,
     new_dev_log,
     recent_events,
+    worker_bus_config,
 )
 from dicomhawk.status import QRStatus
 from pydicom.dataset import Dataset
@@ -141,8 +148,6 @@ def test_background_event_carries_artifact_id_and_analysis_with_no_network_conte
 
 
 def test_console_formatter_shows_session_not_none_for_background_events():
-    from dicomhawk.bus import _ConsoleFormatter
-
     ie = InteractionEvent.background(
         "ANALYSIS",
         "ANALYSIS_RESULT",
@@ -157,6 +162,41 @@ def test_console_formatter_shows_session_not_none_for_background_events():
     assert "session=1785516989802" in line
     assert "artifact=9d1a2d9ca0f0" in line
     assert "Matched: EICAR_Test_String" in line
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    ["\x1b[2J\x1b[H", "\x1b]0;PWNED\x07", "x\nFAKE EVENT", "real\rFAKE"],
+)
+def test_console_formatter_escapes_attacker_control_characters(hostile):
+    event = InteractionEvent.from_http(
+        "WEB",
+        "WEB_LOGIN_ATTEMPT",
+        session_id="web-1",
+        ip="1.2.3.4",
+        port=1,
+        session_parameters=[f"Username: {hostile}"],
+    )
+    record = logging.LogRecord("bus", logging.WARNING, __file__, 0, event, (), None)
+
+    line = _ConsoleFormatter(use_color=False).format(record)
+
+    assert all(character.isprintable() for character in line)
+    assert hostile not in line
+
+
+def test_dev_log_escapes_message_controls_but_keeps_traceback_lines(tmp_path):
+    path = tmp_path / "dev.log"
+    new_dev_log(str(path))
+    logger = logging.getLogger("control-test")
+    try:
+        raise ValueError("bad")
+    except ValueError:
+        logger.exception("attacker=\x1b[2J\nforged")
+
+    content = path.read_text()
+    assert "\\x1b[2J\\nforged" in content
+    assert "Traceback (most recent call last):\n" in content
 
 
 class _FakeRequestorAddr:
@@ -224,6 +264,80 @@ def test_new_bus_replaces_its_handlers_instead_of_duplicating(tmp_path):
     rotating = next(h for h in logger.handlers if isinstance(h, RotatingFileHandler))
     assert rotating.maxBytes == 50 * 1024 * 1024
     assert rotating.backupCount == 5
+
+
+def _write_bus_events(count, prefix):
+    logger = logging.getLogger("bus")
+    for index in range(count):
+        logger.info(
+            InteractionEvent.background(
+                "ANALYSIS",
+                "ROTATION_TEST",
+                session_id=f"{prefix}-{index}",
+            )
+        )
+
+
+def test_rotating_bus_preserves_events_written_by_forked_processes(tmp_path):
+    path = tmp_path / "bus.log"
+    logger = new_bus(str(path), size=700, backups=200, verbose=False)
+    assert any(
+        isinstance(handler, MultiprocessRotatingFileHandler)
+        for handler in logger.handlers
+    )
+
+    context = multiprocessing.get_context("fork")
+    workers = [
+        context.Process(target=_write_bus_events, args=(30, f"worker-{index}"))
+        for index in range(3)
+    ]
+    for worker in workers:
+        worker.start()
+    _write_bus_events(30, "parent")
+    for worker in workers:
+        worker.join(timeout=10)
+        assert worker.exitcode == 0
+
+    records = []
+    for logfile in tmp_path.glob("bus.log*"):
+        if logfile.name.endswith(".lock"):
+            continue
+        records.extend(json.loads(line) for line in logfile.read_text().splitlines())
+    assert len(records) == 120
+    assert len({record["session_id"] for record in records}) == 120
+
+
+def test_unrotated_bus_still_uses_the_multiprocess_lock(tmp_path):
+    path = tmp_path / "bus.log"
+    logger = new_bus(str(path), size=None, verbose=False)
+
+    handler = next(h for h in logger.handlers if isinstance(h, logging.FileHandler))
+    assert isinstance(handler, MultiprocessFileHandler)
+    assert worker_bus_config(logger) == {
+        "stdout": str(path),
+        "when": None,
+        "interval": 1,
+        "size": None,
+        "backups": 5,
+        "verbose": False,
+    }
+
+
+def test_bus_lock_open_failure_never_escapes_logging(tmp_path, monkeypatch):
+    handler = MultiprocessFileHandler(str(tmp_path / "bus.log"), delay=True)
+    errors = []
+    handler.handleError = errors.append
+
+    def fail_open(*_args, **_kwargs):
+        raise OSError("read-only volume")
+
+    monkeypatch.setattr("builtins.open", fail_open)
+    record = logging.LogRecord("bus", logging.INFO, __file__, 1, "event", (), None)
+
+    handler.emit(record)
+
+    assert errors == [record]
+    handler.close()
 
 
 def test_new_bus_silences_pynetdicoms_own_exception_tracebacks(tmp_path, capsys):

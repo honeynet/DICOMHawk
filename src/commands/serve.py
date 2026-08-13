@@ -4,17 +4,17 @@ import signal
 import sys
 
 import typer
-from analysis.component import new_analysis_component
-from analysis.config import new_analysis_config
 from dicomhawk.app import new_dicomhawk
 from dicomhawk.handlers import new_dimse_factory
 from dicomhawk.repository import new_repo
 from dicomhawk.server import new_config, new_server
-from dicomhawk.bus import new_bus, new_dev_log, LevelColorFormatter
+from dicomhawk.bus import (
+    LevelColorFormatter,
+    SafeTextFormatter,
+    new_bus,
+    new_dev_log,
+)
 from dicomhawk.storage import new_store
-from fingerprint.component import new_fingerprint_component
-from fingerprint.config import new_fingerprint_config
-
 from profiles.profile import load_profile
 from web.component import new_dicomweb_component, new_web_component
 
@@ -29,6 +29,7 @@ _ALWAYS_ON_HANDLERS: tuple[str, ...] = (
     "release",
     "abort",
     "connect",
+    "close",
 )
 
 
@@ -341,7 +342,7 @@ def serve(
         handler.setFormatter(
             LevelColorFormatter(fmt, datefmt)
             if sys.stdout.isatty()
-            else logging.Formatter(fmt, datefmt)
+            else SafeTextFormatter(fmt, datefmt)
         )
         logging.basicConfig(level=logging.INFO, handlers=[handler])
         logging.getLogger("pynetdicom").setLevel(logging.WARNING)
@@ -363,6 +364,17 @@ def serve(
     components = []
     sink = None
     analysis_store = None
+    if analysis:
+        try:
+            from analysis.component import new_analysis_component
+            from analysis.config import new_analysis_config
+        except ModuleNotFoundError as exc:
+            if exc.name != "analysis":
+                raise
+            logger.warning(
+                "Analysis requested but its optional package is not installed; continuing without analysis"
+            )
+            analysis = False
     if analysis:
         analysis_component = new_analysis_component(
             new_analysis_config(
@@ -390,6 +402,22 @@ def serve(
         # The flag overrides the profile, so no collector is served and no route is registered.
         prof.web.fingerprint.enabled = False
     # Only build the store when a profile actually serves a collector, so nothing is created unused.
+    if (
+        fingerprint
+        and prof.kind == "pacs"
+        and prof.web.enabled
+        and prof.web.fingerprint.enabled
+    ):
+        try:
+            from fingerprint.component import new_fingerprint_component
+            from fingerprint.config import new_fingerprint_config
+        except ModuleNotFoundError as exc:
+            if exc.name != "fingerprint":
+                raise
+            logger.warning(
+                "Fingerprinting requested but its optional package is not installed; continuing without it"
+            )
+            prof.web.fingerprint.enabled = False
     if (
         fingerprint
         and prof.kind == "pacs"

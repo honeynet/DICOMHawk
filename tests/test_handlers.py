@@ -5,7 +5,10 @@ import gzip
 import hashlib
 import json
 import logging
+import re
+import socket
 import tempfile
+import time
 
 import pytest
 from pydicom import dcmread
@@ -23,9 +26,12 @@ from pynetdicom.sop_class import (
 
 from dicomhawk.bus import SessionCache
 from dicomhawk.handlers import (
+    _ascii_preview,
+    _associate_request_details,
     _strip_sublevel_tags,
     handle_abort,
     handle_associate,
+    handle_close,
     handle_connect,
     handle_reject,
     handle_release,
@@ -51,11 +57,13 @@ class _FakeAssoc:
 
 
 class _FakeEvent:
-    def __init__(self, primitive=None, assoc=None, address=None):
+    def __init__(self, primitive=None, assoc=None, address=None, data=None):
         self.primitive = primitive
         self.assoc = assoc if assoc is not None else _FakeAssoc()
         if address is not None:
             self.address = address
+        if data is not None:
+            self.data = data
 
 
 @pytest.fixture
@@ -80,6 +88,125 @@ def test_handle_connect_logs_non_loopback_addresses(acse_bus, cache, caplog):
     with caplog.at_level(logging.INFO, logger="test-acse-bus"):
         handle_connect(None, acse_bus, cache, _FakeEvent(address=("10.0.0.9", 555)))
     assert "Connection Opened" in caplog.text
+
+
+def _associate_rq(called=b"SCPTEST", calling=b"SCUTEST"):
+    implementation_uid = b"1.2.826.0.1.3680043.8.498.1"
+    implementation_version = b"EVIL_TOOL_1"
+    subitems = (
+        b"\x52\x00"
+        + len(implementation_uid).to_bytes(2, "big")
+        + implementation_uid
+        + b"\x55\x00"
+        + len(implementation_version).to_bytes(2, "big")
+        + implementation_version
+    )
+    user_info = b"\x50\x00" + len(subitems).to_bytes(2, "big") + subitems
+    pdu = bytearray(74)
+    pdu[0] = 0x01
+    pdu[6:8] = b"\x00\x01"
+    pdu[10:26] = called.ljust(16)
+    pdu[26:42] = calling.ljust(16)
+    pdu.extend(user_info)
+    pdu[2:6] = (len(pdu) - 6).to_bytes(4, "big")
+    return bytes(pdu)
+
+
+def test_malformed_associate_fields_are_recovered_from_bounded_wire_prefix():
+    details = _associate_request_details(
+        _associate_rq(called=b"BAD\x1bAE", calling=b"ATTACKER")
+    )
+
+    assert "Called: BAD\x1bAE" in details
+    assert "Calling: ATTACKER" in details
+    assert any(
+        value.startswith("Implementation Class UID: 1.2.826") for value in details
+    )
+    assert "Implementation Version: EVIL_TOOL_1" in details
+
+
+def _probe_connection(loopback, caplog, payload: bytes) -> str:
+    """Send raw bytes at the real listener and return the Connection Closed log text."""
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        with socket.create_connection(("127.0.0.1", loopback.port), timeout=2) as peer:
+            if payload:
+                peer.sendall(payload)
+            peer.shutdown(socket.SHUT_WR)
+            try:
+                peer.recv(1024)
+            except (ConnectionError, TimeoutError, OSError):
+                pass
+        deadline = time.monotonic() + 2
+        while "Connection Closed" not in caplog.text and time.monotonic() < deadline:
+            time.sleep(0.01)
+    return caplog.text
+
+
+@pytest.mark.parametrize(
+    ("payload", "protocol"),
+    [
+        (b"GET /admin HTTP/1.1\r\nHost: x\r\n\r\n", "HTTP"),
+        (b"\x16\x03\x01\x00\x50" + b"\x00" * 80, "TLS"),
+        (b"SSH-2.0-OpenSSH_9.6\r\n", "SSH"),
+        (b"\x99garbage-not-a-pdu", "unknown"),
+    ],
+)
+def test_non_dicom_probes_are_classified_and_counted_on_a_real_connection(
+    loopback, caplog, monkeypatch, payload, protocol
+):
+    """Without the socket tap every one of these is 'unknown' with 0 bytes."""
+    monkeypatch.setattr("dicomhawk.handlers._LOOPBACK", frozenset())
+
+    text = _probe_connection(loopback, caplog, payload)
+
+    assert "Connection Closed" in text
+    assert f"Protocol: {protocol}" in text
+    assert "Association decoded: no" in text
+    # The DUL aborts on the first bad PDU type, so the drained remainder is a race.
+    counted = int(re.search(r"Bytes received: (\d+)", text).group(1))
+    assert 0 < counted <= len(payload)
+
+
+def test_connection_close_previews_a_probe_as_readable_text(
+    loopback, caplog, monkeypatch
+):
+    """The hex dump alone makes the operator decode bytes to see what was asked for."""
+    monkeypatch.setattr("dicomhawk.handlers._LOOPBACK", frozenset())
+
+    text = _probe_connection(loopback, caplog, b"GET /admin HTTP/1.1\r\nHost: pacs\r\n")
+
+    assert "Preview: GET /admin HTTP/1.1..Host: pacs.." in text
+
+
+def test_connection_preview_strips_control_bytes_before_they_are_logged():
+    preview = _ascii_preview(b"\x1b[2J\x07GET /x\x00\xff")
+
+    assert preview == ".[2J.GET /x.."
+    assert not any(ord(character) < 32 for character in preview)
+
+
+def test_connection_close_counts_bytes_once_for_a_decoded_association(
+    loopback, caplog, monkeypatch
+):
+    """The socket tap replaced the EVT_DATA_RECV handler; running both double-counted."""
+    monkeypatch.setattr("dicomhawk.handlers._LOOPBACK", frozenset())
+    payload = _associate_rq(called=b"SCPTEST", calling=b"ATTACKER")
+
+    text = _probe_connection(loopback, caplog, payload)
+
+    assert f"Bytes received: {len(payload)}" in text
+    assert "Protocol: DICOM" in text
+
+
+def test_connection_close_reports_duration_for_a_silent_peer(
+    loopback, caplog, monkeypatch
+):
+    monkeypatch.setattr("dicomhawk.handlers._LOOPBACK", frozenset())
+
+    text = _probe_connection(loopback, caplog, b"")
+
+    assert "Bytes received: 0" in text
+    assert "Duration: " in text
 
 
 def test_handle_associate_caches_version_and_logs_called_calling(
@@ -535,6 +662,46 @@ def test_c_find_dedups_to_one_row_per_study(loopback):
     pending = [r for r in results if r[0].Status == 0xFF00]
     assert len(pending) == 1
     assoc.release()
+
+
+def test_c_find_ignores_a_private_creator_over_dimse(loopback):
+    ds = _ct_dataset()
+    loopback.repo.store(ds, safe=True)
+    query = _find_query(ds.StudyInstanceUID)
+    query.add_new((0x0009, 0x0010), "LO", "ACME")
+
+    assoc = loopback.associate()
+    results = list(assoc.send_c_find(query, StudyRootQueryRetrieveInformationModelFind))
+    assoc.release()
+
+    assert all(status.Status in (0xFF00, 0x0000) for status, _ in results)
+    assert (
+        len([identifier for status, identifier in results if status.Status == 0xFF00])
+        == 1
+    )
+
+
+def test_malformed_associate_is_logged_on_real_connection_close(
+    loopback, caplog, monkeypatch
+):
+    monkeypatch.setattr("dicomhawk.handlers._LOOPBACK", frozenset())
+    payload = _associate_rq(called=b"BAD\x1bAE", calling=b"ATTACKER")
+
+    with caplog.at_level(logging.INFO, logger=loopback.bus.name):
+        with socket.create_connection(("127.0.0.1", loopback.port), timeout=2) as peer:
+            peer.sendall(payload)
+            peer.shutdown(socket.SHUT_WR)
+            try:
+                peer.recv(1024)
+            except (ConnectionError, TimeoutError):
+                pass
+        deadline = time.monotonic() + 2
+        while "Connection Closed" not in caplog.text and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    assert "Connection Closed" in caplog.text
+    assert "Association decoded: no" in caplog.text
+    assert "Calling: ATTACKER" in caplog.text
 
 
 def test_c_move_always_captures_and_rejects(loopback):

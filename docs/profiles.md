@@ -170,7 +170,7 @@ is nonce-based) and `fingerprint_seam` (put `{{ fingerprint_seam|safe }}` before
 web:
   enabled: true
   templates_dir: my-vendor
-  grant_access: bait         # none | bait | any (see Honey credentials below)
+  grant_access: keyword      # none | bait | keyword | any (see Who gets in below)
   favicon: myvendor/favicon.ico
   headers:                   # emitted on every response
     Server: MyWebServer/1.0
@@ -298,11 +298,46 @@ WinAuth challenge alike:
 | Value | Effect |
 |---|---|
 | `none` | Every attempt is logged and denied, including a declared honey credential. The post-login pages are unreachable; the surface is a pure credential collector. |
-| `bait` | Only the pairs in `honey_credentials` get in. Anything else gets the product's real error. Both shipped profiles use this. |
+| `bait` | Only the pairs in `honey_credentials` get in. Anything else gets the product's real error. |
+| `keyword` | The bait pairs, plus an attempt whose username or password contains one of `honey_keywords`, except that a declared bait username still requires its declared password. Both shipped profiles use this. |
 | `any` | Every password works. Quicker to engage, but it tells an attacker it is a decoy the first time a deliberately wrong password succeeds. |
 
 It is a string, not a boolean; a `true`/`false` value is rejected at load time with the
 replacement named in the error.
+
+### Keyword bait
+
+`bait` only admits credentials you predicted exactly. `keyword` widens that to the terms
+attackers actually spray, so more of them reach the pages behind the login instead of stopping
+at a rejection:
+
+```yaml
+web:
+  grant_access: keyword
+  honey_keywords: [admin, pacs, dicom, radiology, imaging, service]
+```
+
+Matching is a case-insensitive substring against the username **or** the password, so
+`admin` admits `admin`, `Administrator`, and `svc-admin`, and a password of `MyPacsPass`
+admits any username. Each keyword must be at least three characters, because a shorter one
+matches nearly every input and quietly turns the profile into `any`. Declaring
+`grant_access: keyword` with no keywords is rejected at load rather than silently behaving
+like `bait`. Keywords are casefolded and de-duplicated when the profile loads.
+
+Declared bait usernames are exempt from keyword matching. This keeps the pair meaningful:
+`svc_dicom` with a wrong password is denied even though its username contains `dicom`, while
+the exact declared pair succeeds. Keyword matching still applies normally to every username
+that is not declared in `honey_credentials`, and to those attempts' passwords.
+
+A grant through a keyword is logged as `WEB_HONEY_KEYWORD_USED`, recording which keyword
+matched and which field it hit, so the log tells you what is being sprayed at the surface. An
+exact `honey_credentials` pair keeps its own `WEB_HONEY_CREDENTIAL_USED` event.
+
+Keyword mode is more detectable than `bait`. An attacker who gets in with `admin` and a
+nonsense password, then fails with a credential containing no keyword, can infer the rule and
+narrow the list with a few attempts. Use it when engagement matters more than that, and `bait`
+when it does not. The loopback-only operator profile API returns the configured honey credentials
+and keyword list in full so the operator can verify the active deception configuration.
 
 **A session cookie the browser refuses makes every level above `none` useless.** A profile
 modelling an HTTPS product sets `secure_cookies: true`, and browsers discard `Secure`
@@ -421,8 +456,9 @@ The upload page validates Part-10 identity, profile-supported SOP Class and Tran
 Syntax, then routes accepted files to the **quarantine**. Exact incoming bytes are kept
 for valid and rejected/malformed files, logged with size and SHA-256 (`WEB_UPLOAD`), and
 never served back out. Files above the count limit are explicitly rejected and captured.
-The larger upload body cap is request-specific; login and other forms retain the smaller
-`max_request_bytes` limit.
+The Waitress listener is sized for the larger upload ceiling so it does not reject the body
+before routing. Flask then applies that larger cap only to the upload POST; login and other forms
+retain the smaller `max_request_bytes` limit.
 
 Browse and search use server-side database pagination rather than loading the whole index;
 deep offsets are capped at 20,000 rows to prevent deliberately expensive scans.
@@ -483,7 +519,9 @@ DICOMweb shares the same store and query as DICOM, so:
   profile-specific (`application/json` for Fujifilm; `application/dicom+json` for generic PACS),
   and clients may request DICOM JSON or multipart DICOM XML.
 - **WADO** defaults DICOM retrieval to the configured transfer syntax and negotiates raw
-  single-instance, multipart, JSON metadata, and XML metadata representations.
+  single-instance, multipart, JSON metadata, and XML metadata representations. WADO-URI JPEG
+  rendering rejects a requested dimension above 8,192 pixels or an output above 16,777,216
+  total pixels before asking Pillow to allocate the image.
 - Every request is logged to the same interaction log with `channel: DICOMWEB`.
 - Responses reuse your `web.headers` identity (the `Server` banner, etc.) so the DICOMweb
   ports present the same product as the web tier.

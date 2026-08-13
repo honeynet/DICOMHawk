@@ -1,4 +1,6 @@
+import ast
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -6,6 +8,19 @@ from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
 from web.component import _QueueDepthFilter, new_web_component
+
+
+def test_core_web_modules_do_not_import_optional_packages_at_module_load():
+    root = Path(__file__).parents[1]
+    forbidden = {"analysis", "fingerprint"}
+    for relative in ("src/web/component.py", "src/commands/serve.py"):
+        tree = ast.parse((root / relative).read_text())
+        imports = {
+            node.module.split(".", 1)[0]
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom) and node.module
+        }
+        assert imports.isdisjoint(forbidden), relative
 
 
 class _Dispatcher:
@@ -156,6 +171,29 @@ def test_trusted_proxy_applies_only_to_attacker_facing_server(monkeypatch, tmp_p
         "x-forwarded-proto",
     }
     assert "trusted_proxy" not in calls[1]
+
+
+def test_waitress_allows_the_route_specific_upload_body_limit(monkeypatch, tmp_path):
+    calls = []
+
+    def create_server(*_args, **kwargs):
+        calls.append(kwargs)
+        return _FakeServer()
+
+    monkeypatch.setattr("web.component.waitress.create_server", create_server)
+    component = new_web_component(
+        load_profile("generic-pacs"),
+        new_repo(None, new_store(str(tmp_path / "traces"))),
+        logging.getLogger("test-web-upload-listener-limit"),
+        "127.0.0.1",
+        18080,
+        18081,
+    )
+    component.start()
+    component.stop()
+
+    assert calls[0]["max_request_body_size"] == 50 * 1024 * 1024
+    assert calls[1]["max_request_body_size"] == 1024 * 1024
 
 
 # --- shutdown race: stop() closes the socket asyncore is polling ---
