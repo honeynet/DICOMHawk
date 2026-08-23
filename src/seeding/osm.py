@@ -128,21 +128,31 @@ class OsmClient:
 
     def _build_query(self) -> str:
         # map_to_area pivot, not area∩area (which silently returns nothing for FR/US).
+        city = self._escape_query_value(self._city or "")
+        country = self._escape_query_value(self._country or "")
         if self._city and self._country:
             area = (
-                f'area["ISO3166-1:alpha2"="{self._country}"]["admin_level"="2"]->.country;\n'
-                f'rel(area.country)["name"="{self._city}"]["boundary"="administrative"]'
-                f'["admin_level"~"^[4-8]$"]->.c;\n'
+                f'area["ISO3166-1:alpha2"="{country}"]["admin_level"="2"]->.country;\n'
+                "(\n"
+                f'  rel(area.country)["name"="{city}"]["boundary"="administrative"]'
+                f'["admin_level"~"^[4-8]$"];\n'
+                f'  rel(area.country)["name:en"="{city}"]["boundary"="administrative"]'
+                f'["admin_level"~"^[4-8]$"];\n'
+                ")->.c;\n"
                 f".c map_to_area->.a;"
             )
         elif self._city:
             area = (
-                f'rel["name"="{self._city}"]["boundary"="administrative"]'
-                f'["admin_level"~"^[4-8]$"]->.c;\n'
+                "(\n"
+                f'  rel["name"="{city}"]["boundary"="administrative"]'
+                f'["admin_level"~"^[4-8]$"];\n'
+                f'  rel["name:en"="{city}"]["boundary"="administrative"]'
+                f'["admin_level"~"^[4-8]$"];\n'
+                ")->.c;\n"
                 f".c map_to_area->.a;"
             )
         elif self._country:
-            area = f'area["ISO3166-1:alpha2"="{self._country}"]["admin_level"="2"]->.a;'
+            area = f'area["ISO3166-1:alpha2"="{country}"]["admin_level"="2"]->.a;'
         else:
             area = ""
         scope = "(area.a)" if area else ""
@@ -157,6 +167,16 @@ class OsmClient:
             f'  way["healthcare"="hospital"]{scope};\n'
             f");\n"
             f"out tags;"
+        )
+
+    @staticmethod
+    def _escape_query_value(value: str) -> str:
+        """Keep operator-supplied location text inside an Overpass string literal."""
+        return (
+            value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
         )
 
     def _extract_name(self, tags: dict) -> str | None:

@@ -244,6 +244,65 @@ class WebComponent(Component):
         _stop_servers(self._servers, self._threads, self._stopping)
 
 
+class AttackerWebComponent(WebComponent):
+    """Run only the attacker-facing web listener."""
+
+    def start(self) -> None:
+        if self._servers:
+            return
+        web_app = new_web(
+            self.profile, self.repo, self.bus, self.sink, self.fingerprint_sink
+        )
+        web_listener_max = self.profile.web.max_request_bytes
+        if self.profile.web.browse:
+            web_listener_max = max(
+                web_listener_max, self.profile.web.upload_max_request_bytes
+            )
+        specs = (
+            (
+                "web",
+                web_app,
+                self.host,
+                self.web_port,
+                web_listener_max,
+                True,
+                self.profile.web.headers.get("Server"),
+            ),
+        )
+        self._servers, self._threads, self._stopping = _build_servers(
+            specs, self.trusted_proxy
+        )
+        logger.info("Web: %s:%s", self.host, self.web_port)
+
+
+class OperatorComponent(WebComponent):
+    """Run only the operator dashboard/API listener."""
+
+    def start(self) -> None:
+        if self._servers:
+            return
+        operator_app = new_operator_api(
+            self.profile,
+            self.bus,
+            self.operator_token,
+            self.analysis_store,
+            self.fingerprint_store,
+        )
+        specs = (
+            (
+                "operator",
+                operator_app,
+                self.operator_host,
+                self.operator_port,
+                1_048_576,
+                False,
+                None,
+            ),
+        )
+        self._servers, self._threads, self._stopping = _build_servers(specs)
+        logger.info("Operator API: %s:%s", self.operator_host, self.operator_port)
+
+
 class DicomWebComponent(Component):
     """Run one server per profile DICOMweb port."""
 
@@ -323,6 +382,14 @@ def new_web_component(
         fingerprint_sink,
         fingerprint_store,
     )
+
+
+def new_attacker_web_component(*args, **kwargs) -> AttackerWebComponent:
+    return AttackerWebComponent(*args, **kwargs)
+
+
+def new_operator_component(*args, **kwargs) -> OperatorComponent:
+    return OperatorComponent(*args, **kwargs)
 
 
 def new_dicomweb_component(

@@ -14,7 +14,7 @@ echo "$*" >> "$DICOMHAWK_TEST_LOG"
 case "$*" in
   "info") [ "${DICOMHAWK_TEST_DAEMON_DOWN:-0}" = 1 ] && exit 1; exit 0 ;;
   "compose version --short") echo "${DICOMHAWK_TEST_COMPOSE_VERSION:-2.29.1}"; exit 0 ;;
-  "compose ps --format {{.Health}} dicomhawk") echo "${DICOMHAWK_TEST_HEALTH:-healthy}"; exit 0 ;;
+  "compose ps --format {{.Health}} dimse") echo "${DICOMHAWK_TEST_HEALTH:-healthy}"; exit 0 ;;
   *"dicomhawk seed"*) exit "${DICOMHAWK_TEST_SEED_EXIT:-0}" ;;
 esac
 exit 0
@@ -37,6 +37,7 @@ FAKE_WHIPTAIL = "#!/bin/sh\n" 'echo "WHIPTAIL $*" >> "$DICOMHAWK_TEST_LOG"\n' "e
 # Cleared per case: a value exported in the developer's shell would silently change assertions.
 SEEDED_ANSWERS = (
     "DICOMHAWK_PROFILE",
+    "DICOMHAWK_DATA_DIR",
     "DICOMHAWK_AE_TITLE",
     "DICOMHAWK_PORTS",
     "DICOMHAWK_WEB_PORT",
@@ -48,6 +49,20 @@ SEEDED_ANSWERS = (
     "DICOMHAWK_SECURE_COOKIES",
     "DICOMHAWK_ANALYSIS",
     "DICOMHAWK_FINGERPRINT",
+    "DICOMHAWK_SEED_COLLECTION",
+    "DICOMHAWK_SEED_MODALITY",
+    "DICOMHAWK_SEED_MAX_SERIES",
+    "DICOMHAWK_SEED_MAX_IMAGES",
+    "DICOMHAWK_SEED_LOCALE",
+    "DICOMHAWK_SEED_OSM_CITY",
+    "DICOMHAWK_SEED_OSM_COUNTRY",
+    "DICOMHAWK_SEED_HONEY_URL",
+    "DICOMHAWK_SEED_CANARY_PDF",
+    "DICOMHAWK_CUSTOM_PROFILE_NAME",
+    "DICOMHAWK_CUSTOM_IMPLEMENTATION_UID",
+    "DICOMHAWK_CUSTOM_IMPLEMENTATION_VERSION",
+    "DICOMHAWK_CUSTOM_MANUFACTURER",
+    "DICOMHAWK_CUSTOM_MODEL",
 )
 
 
@@ -75,8 +90,14 @@ def _harness(tmp_path, **extra_env):
     log = tmp_path / "docker.log"
     log.write_text("")
 
-    env = {key: value for key, value in os.environ.items() if key not in SEEDED_ANSWERS}
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in SEEDED_ANSWERS and not key.startswith("DICOMHAWK_CUSTOM_")
+    }
     env["PATH"] = f"{bindir}:{env['PATH']}"
+    # Keep the installer's T-Pot-style home/data tree inside each test sandbox.
+    env["HOME"] = str(tmp_path / "home")
     env["DICOMHAWK_TEST_LOG"] = str(log)
     env["DICOMHAWK_HEALTH_TIMEOUT"] = "1"
     env.update(extra_env)
@@ -127,6 +148,38 @@ def test_defaults_never_launches_the_interface(tmp_path):
     assert "WHIPTAIL" not in log.read_text()
 
 
+@pytest.mark.parametrize(("columns", "expected_width"), ((90, 86), (160, 116)))
+def test_interactive_dialog_width_fits_the_terminal_and_has_a_readable_cap(
+    tmp_path, columns, expected_width
+):
+    root, env, log = _harness(tmp_path)
+    env["COLUMNS"] = str(columns)
+
+    # The fake whiptail records the welcome dialog and returns Back immediately.
+    master, slave = os.openpty()
+    try:
+        process = subprocess.Popen(
+            [str(root / "setup.sh"), "--no-start"],
+            env=env,
+            stdin=slave,
+            stdout=slave,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        os.close(slave)
+        slave = -1
+        process.communicate(timeout=10)
+    finally:
+        if slave >= 0:
+            os.close(slave)
+        os.close(master)
+
+    assert process.returncode == 1
+    invocation = log.read_text()
+    assert "--msgbox" in invocation
+    assert invocation.rstrip().endswith(f"19 {expected_width}")
+
+
 def test_defaults_writes_a_complete_env_file(tmp_path):
     root, env, _log = _harness(tmp_path)
     assert _run(root, env, "--defaults", "--no-start").returncode == 0
@@ -143,7 +196,11 @@ def test_defaults_agree_with_the_examples_own_values(tmp_path):
     # Drift would make --defaults disagree with the file every doc points operators at.
     root, env, _log = _harness(tmp_path)
     _run(root, env, "--defaults", "--no-start")
-    assert _env_values(root / ".env") == _env_values(root / ".env.example")
+    written = _env_values(root / ".env")
+    example = _env_values(root / ".env.example")
+    assert written.pop("DICOMHAWK_DATA_DIR") == str(tmp_path / "home/data/dicomhawk")
+    example.pop("DICOMHAWK_DATA_DIR")
+    assert written == example
 
 
 def test_defaults_preserves_the_examples_comments(tmp_path):
@@ -277,11 +334,72 @@ def test_keep_existing_configuration_does_not_reseed():
     assert "keep) KEEP_EXISTING=1; DO_SEED=0" in source
 
 
-def test_guided_installer_does_not_offer_an_unmounted_custom_profile():
+def test_guided_installer_offers_a_mounted_custom_profile():
     step = (
         SCRIPT.read_text().split("step_profile()", 1)[1].split("step_ae_title()", 1)[0]
     )
-    assert '"custom"' not in step
+    assert '"custom"' in step
+    assert "/opt/dicomhawk/profiles/custom.yaml" in step
+
+
+def test_custom_profile_is_generated_and_readable_by_the_container(tmp_path):
+    import yaml
+    from profiles.profile import load_profile
+
+    root, env, _log = _harness(
+        tmp_path,
+        DICOMHAWK_PROFILE="/opt/dicomhawk/profiles/custom.yaml",
+        DICOMHAWK_AE_TITLE="CLINIC_PACS",
+        DICOMHAWK_CUSTOM_IMPLEMENTATION_UID="1.2.826.0.1.3680043.10.543.1",
+        DICOMHAWK_CUSTOM_MANUFACTURER="Clinic's PACS",
+        DICOMHAWK_CUSTOM_OPERATIONS="echo,find,store",
+        DICOMHAWK_CUSTOM_MAX_ASSOCIATIONS="24",
+        DICOMHAWK_CUSTOM_WEB_ROUTE_PREFIX="/clinic",
+        DICOMHAWK_CUSTOM_DICOMWEB_PORT="18042",
+    )
+    assert _run(root, env, "--defaults", "--no-start").returncode == 0
+
+    profile_path = tmp_path / "home/data/dicomhawk/profiles/custom.yaml"
+    profile = yaml.safe_load(profile_path.read_text())
+    assert profile["identity"]["ae_title"] == "CLINIC_PACS"
+    assert profile["identity"]["implementation_class_uid"].endswith("543.1")
+    assert profile["identity"]["manufacturer"] == "Clinic's PACS"
+    assert profile["dicom"]["operations"] == ["echo", "find", "store"]
+    assert profile["dicom"]["max_associations"] == 24
+    assert profile["web"]["routes"]["login"] == "/clinic/login"
+    assert profile["dicomweb"]["services"][0]["port"] == 18042
+    assert profile_path.stat().st_mode & 0o444 == 0o444
+    loaded = load_profile(str(profile_path))
+    assert loaded.ae_title == "CLINIC_PACS"
+    assert loaded.web.templates_dir == "generic-pacs"
+    assert loaded.dicom.max_associations == 24
+    override = (root / "docker-compose.override.yml").read_text()
+    assert '- "18042:18042"' in override
+    assert '- "8042:8042"' not in override
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("DICOMHAWK_CUSTOM_OPERATIONS", "echo,delete"),
+        ("DICOMHAWK_CUSTOM_WEB_ENABLED", "yes"),
+        ("DICOMHAWK_CUSTOM_WEB_ROUTE_PREFIX", "portal"),
+        ("DICOMHAWK_CUSTOM_FINGERPRINT_SIGNALS", "browser,gps"),
+        ("DICOMHAWK_CUSTOM_DICOMWEB_SERVICES", "qido,delete"),
+        ("DICOMHAWK_CUSTOM_DICOMWEB_PORT", "70000"),
+    ],
+)
+def test_invalid_custom_profile_answers_are_rejected(tmp_path, name, value):
+    root, env, _log = _harness(
+        tmp_path,
+        DICOMHAWK_PROFILE="/opt/dicomhawk/profiles/custom.yaml",
+        DICOMHAWK_AE_TITLE="CUSTOM_PACS",
+        **{name: value},
+    )
+
+    result = _run(root, env, "--defaults", "--no-start")
+    assert result.returncode != 0
+    assert not (root / ".env").exists()
 
 
 def test_reconfigure_overwrites_an_existing_env(tmp_path):
@@ -337,6 +455,7 @@ def _isolate_path(env, *extra):
         "rm",
         "mv",
         "chmod",
+        "mkdir",
         *extra,
     )
     for tool in tools:
@@ -444,6 +563,26 @@ def test_seed_carries_the_chosen_collection_and_modality(tmp_path):
     assert "--max-images 30" in seed
 
 
+def test_seed_mounts_a_host_canary_and_uses_saved_seed_answers(tmp_path):
+    canary = tmp_path / "canary.pdf"
+    canary.write_bytes(b"%PDF-1.4\n")
+    root, env, log = _harness(
+        tmp_path,
+        DICOMHAWK_SEED_COLLECTION="CPTAC-PDA",
+        DICOMHAWK_SEED_MAX_SERIES="1",
+        DICOMHAWK_SEED_CANARY_PDF=str(canary),
+    )
+
+    assert _run(root, env, "--defaults").returncode == 0
+    seed = _seed_args(log)
+    assert "compose run --rm --no-deps" in seed
+    assert f"-v {canary}:/run/dicomhawk/canary.pdf:ro" in seed
+    assert "--canary-pdf /run/dicomhawk/canary.pdf" in seed
+    written = _env_values(root / ".env")
+    assert written["DICOMHAWK_SEED_COLLECTION"] == "CPTAC-PDA"
+    assert written["DICOMHAWK_SEED_MAX_SERIES"] == "1"
+
+
 def test_seed_omits_optional_flags_that_were_left_blank(tmp_path):
     # An empty --osm-city would resolve to no country and silently drop the built-in list.
     root, env, log = _harness(tmp_path)
@@ -451,7 +590,7 @@ def test_seed_omits_optional_flags_that_were_left_blank(tmp_path):
 
     seed = _seed_args(log)
     assert "--osm-city" not in seed
-    assert "--honey-url" not in seed
+    assert "--honey-url https://example.com/honey" in seed
 
 
 def test_the_seed_plan_is_announced_before_the_silent_download(tmp_path):
@@ -461,6 +600,26 @@ def test_the_seed_plan_is_announced_before_the_silent_download(tmp_path):
 
     assert "TCGA-LUAD" in result.stdout
     assert "several minutes" in result.stdout
+
+
+def test_summary_prints_a_copyable_reseed_command_with_the_selected_values(tmp_path):
+    root, env, _log = _harness(
+        tmp_path,
+        DICOMHAWK_SEED_COLLECTION="TCGA-BRCA,CPTAC-PDA",
+        DICOMHAWK_SEED_MODALITY="CT,MR",
+        DICOMHAWK_SEED_LOCALE="en_IN",
+        DICOMHAWK_SEED_OSM_CITY="New York",
+        DICOMHAWK_SEED_OSM_COUNTRY="US",
+    )
+    result = _run(root, env, "--defaults")
+
+    assert result.returncode == 0
+    assert "Re-seed example" in result.stdout
+    assert r"--collection TCGA-BRCA\,CPTAC-PDA" in result.stdout
+    assert r"--modality CT\,MR" in result.stdout
+    assert "--locale en_IN" in result.stdout
+    assert "--osm-city New\\ York" in result.stdout
+    assert "--osm-country US" in result.stdout
 
 
 def test_no_seed_still_builds_and_starts(tmp_path):
@@ -485,14 +644,14 @@ def test_a_container_that_never_becomes_healthy_fails_and_dumps_logs(tmp_path):
     root, env, log = _harness(tmp_path, DICOMHAWK_TEST_HEALTH="starting")
     result = _run(root, env, "--defaults")
     assert result.returncode != 0
-    assert "compose logs --tail=50 dicomhawk" in log.read_text()
+    assert "compose logs --tail=50" in log.read_text()
 
 
 def test_an_unhealthy_container_fails_without_waiting_out_the_timeout(tmp_path):
     root, env, log = _harness(tmp_path, DICOMHAWK_TEST_HEALTH="unhealthy")
     result = _run(root, env, "--defaults")
     assert result.returncode != 0
-    assert "compose logs --tail=50 dicomhawk" in log.read_text()
+    assert "compose logs --tail=50" in log.read_text()
 
 
 def test_a_failed_seed_leaves_the_honeypot_running(tmp_path):
@@ -511,13 +670,58 @@ def test_the_republished_dicomweb_ports_match_the_compose_file():
     # Last field is the container port; the operator entry also carries a 127.0.0.1 host_ip.
     published = {
         int(str(entry).split(":")[-1])
-        for entry in compose["services"]["dicomhawk"]["ports"]
+        for service in compose["services"].values()
+        for entry in service.get("ports", [])
     }
     # Everything the script does not rebuild from an answer must be carried over verbatim.
     carried = published - {104, 8080, 8081}
 
     declared = SCRIPT.read_text().split("DICOMWEB_PUBLISHED=(")[1].split(")")[0]
     assert {int(port) for port in declared.split()} == carried
+
+
+def test_compose_runs_one_runtime_role_per_container_with_shared_persistence():
+    import yaml
+
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+    expected = {"dimse", "web", "operator", "dicomweb", "analysis"}
+    assert set(compose["services"]) == expected
+    for name, service in compose["services"].items():
+        command = [str(item) for item in service["command"]]
+        assert command[command.index("--service") + 1] == name
+        assert service["tmpfs"] == ["/tmp:size=128m,mode=1777,noexec,nosuid,nodev"]
+        volumes = service["volumes"]
+        for target in (
+            "/opt/dicomhawk/state",
+            "/var/log/dicomhawk",
+            "/opt/dicomhawk/profiles",
+        ):
+            assert any(f":{target}" in volume for volume in volumes)
+
+
+def test_only_the_operator_service_receives_the_operator_token():
+    import yaml
+
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+    for name, service in compose["services"].items():
+        token = service["environment"]["DICOMHAWK_OPERATOR_TOKEN"]
+        if name == "operator":
+            assert token == "${DICOMHAWK_OPERATOR_TOKEN:-}"
+        else:
+            assert token == "", f"{name} carries the operator token"
+
+
+def test_the_operator_api_is_not_reachable_from_the_attacker_facing_network():
+    # It binds 0.0.0.0 so Docker can publish it, which puts it on any shared bridge.
+    import yaml
+
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+    operator = set(compose["services"]["operator"]["networks"])
+    for name, service in compose["services"].items():
+        if name == "operator":
+            continue
+        assert not operator & set(service["networks"]), f"{name} shares a network"
+    assert operator <= set(compose["networks"])
 
 
 def test_every_variable_written_is_actually_consumed(tmp_path):
@@ -531,6 +735,7 @@ def test_every_variable_written_is_actually_consumed(tmp_path):
             *(REPO / "src").rglob("*.py"),
             *(REPO / "deploy").glob("*"),
             REPO / "docker-compose.yml",
+            REPO / "setup.sh",
         ]
         if path.is_file()
     )
@@ -645,7 +850,7 @@ def test_a_failed_build_reports_the_step_and_dumps_logs(tmp_path):
     result = _run(root, env, "--defaults")
     assert result.returncode != 0
     assert "Build failed" in result.stderr
-    assert "compose logs --tail=50 dicomhawk" in log.read_text()
+    assert "compose logs --tail=50" in log.read_text()
 
 
 def test_a_failed_start_reports_the_step(tmp_path):

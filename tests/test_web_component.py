@@ -7,7 +7,12 @@ import pytest
 from dicomhawk.repository import new_repo
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
-from web.component import _QueueDepthFilter, new_web_component
+from web.component import (
+    _QueueDepthFilter,
+    new_attacker_web_component,
+    new_operator_component,
+    new_web_component,
+)
 
 
 def test_core_web_modules_do_not_import_optional_packages_at_module_load():
@@ -121,6 +126,35 @@ def test_web_component_stop_closes_both_servers(monkeypatch, tmp_path):
     assert all(server.closed for server in active)
     assert all(server.task_dispatcher.shutdown_called for server in active)
     component.stop()  # idempotent
+
+
+@pytest.mark.parametrize(
+    ("factory", "expected_port"),
+    [(new_attacker_web_component, 18080), (new_operator_component, 18081)],
+)
+def test_split_web_roles_start_exactly_one_listener(
+    monkeypatch, tmp_path, factory, expected_port
+):
+    calls = []
+
+    def create_server(*_args, **kwargs):
+        calls.append(kwargs)
+        return _FakeServer()
+
+    monkeypatch.setattr("web.component.waitress.create_server", create_server)
+    component = factory(
+        load_profile("generic-pacs"),
+        new_repo(None, new_store(str(tmp_path / "traces"))),
+        logging.getLogger("test-split-web-component"),
+        "127.0.0.1",
+        18080,
+        18081,
+    )
+    component.start()
+    component.stop()
+
+    assert len(calls) == 1
+    assert calls[0]["port"] == expected_port
 
 
 def test_web_component_cleans_up_if_thread_start_fails(monkeypatch, tmp_path):

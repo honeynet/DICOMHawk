@@ -90,11 +90,11 @@ These are a starting point, not a substitute for your own threat intelligence.
 ## Operation and limits
 
 Analysis runs entirely offline. It makes no outbound network access and works under an
-egress-locked deployment. It runs in its own supervised worker process, separate from the
-honeypot's DICOM/web listeners, so a crash or resource spike in file-type detection, DICOM
+egress-locked deployment. Compose gives it a dedicated container containing its supervised
+worker process, separate from the DICOM/web listener containers, so a crash or resource spike in file-type detection, DICOM
 parsing, or YARA matching cannot take down the honeypot itself; a crashed worker restarts
 automatically and resumes pending work. This isolates crashes and runaway resource use, not
-the filesystem. The worker still runs as the same unprivileged container user, so it should
+the shared evidence filesystem. The worker still runs as the same unprivileged container user, so it should
 be treated as a defense-in-depth boundary, not an airtight sandbox.
 
 Analysis never changes response codes, headers, routes, or payloads, whether it is enabled,

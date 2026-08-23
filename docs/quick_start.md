@@ -36,10 +36,16 @@ After `docker compose up -d`, the service is listening on the host ports defined
 
 ```bash
 docker compose ps
-docker compose logs -f dicomhawk
+docker compose logs -f
 ```
 
-Inside the container, the trace directory is `/opt/dicomhawk/storage` (a named Docker volume) and the event log is `/var/log/dicomhawk/dicomhawk.log` (also a named volume).
+Compose starts `dimse`, `web`, `operator`, `dicomweb`, and `analysis` separately. They share the
+trace and state volumes. Inside each container the event log is
+`/var/log/dicomhawk/dicomhawk.log`; on the host it is
+`$DICOMHAWK_DATA_DIR/logs/dicomhawk.log` (default `~/data/dicomhawk/logs/dicomhawk.log`).
+`docker compose logs` shows the same interaction events in a compact human-readable form alongside
+service diagnostics. The host file keeps the complete JSON fields and survives container recreation;
+Docker stdout logs belong to each container and are not the evidence archive.
 
 ## Connect with a DICOM client
 
@@ -62,6 +68,8 @@ under `storage/` and is retrievable.
 ## Seed the database
 
 Before starting the server, populate it with realistic DICOM data from [TCIA](https://www.cancerimagingarchive.net/). The `--database` and `--traces` paths **must match** the values you pass to `dicomhawk serve`.
+See [Seeding values and examples](./seeding-values.md) if you need to discover valid TCIA
+collections, modalities, Faker locales, or OpenStreetMap country codes.
 
 ```bash
 # one-shot seed from TCGA-LUAD (requires internet)
@@ -113,5 +121,5 @@ If TCIA is unreachable the command logs a warning and seeds the bundled offline 
 |---|---|---|
 | Received DICOM files | `./traces/storage/` | `/opt/dicomhawk/storage/` in the container (named volume `dicom_storage`) |
 | Quarantined uploads | `./traces/quarantine/` | `/opt/dicomhawk/storage/quarantine/` (same volume) |
-| JSON event log | `./data/dicomhawk.log` | `/var/log/dicomhawk/dicomhawk.log` (named volume `logs`) |
-| Internal Python logs | stdout / `docker compose logs` | same |
+| Persistent JSON event log | `./data/dicomhawk.log` | `$DICOMHAWK_DATA_DIR/logs/dicomhawk.log` on host; `/var/log/dicomhawk/dicomhawk.log` in containers |
+| Compact events and service diagnostics | stdout | `docker compose logs` (per container) |

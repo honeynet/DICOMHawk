@@ -103,8 +103,9 @@ add YAML keys only for the things your specific vendor actually needs to differ.
 
 ## The web surface
 
-If `kind: pacs` and `web.enabled: true`, `dicomhawk serve` starts two Flask apps for
-your profile automatically. You write templates and config, not routes:
+If `kind: pacs` and `web.enabled: true`, `dicomhawk serve --service all` starts two Flask apps
+for your profile automatically. The Docker deployment runs those apps in separate `web` and
+`operator` containers. You write templates and config, not routes:
 
 - **Attacker-facing** (`--web-port`, default 8080): your profile's login and worklist.
 - **Operator surface** (`--operator-port`, default 8081, loopback-only): the dashboard at `/`
@@ -411,7 +412,10 @@ Values are resolved against the profile's own labels, never trusted directly: an
 unrecognised folder or action falls back to the default view and is not echoed into the
 page. A `?study=` UID that isn't on the current page opens nothing, so the parameter
 can't be used to probe for studies. Each view logs a `WEB_WORKLIST_VIEW` event naming the
-folder, action, study, and filter terms the attacker reached for.
+folder, action, study, and filter terms the attacker reached for. Its persistent JSON record also
+contains the session, source address, HTTP method/path, user agent, and timestamp. Under Docker the
+same event appears as a compact line in `docker compose logs web`; the full record remains in the
+host-mounted `$DICOMHAWK_DATA_DIR/logs/dicomhawk.log` after the container is recreated.
 
 **Placeholders.** `placeholders.description` fills the procedure column when a study
 carries no `StudyDescription`. Real products show their own marker there (Synapse shows

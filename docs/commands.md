@@ -10,6 +10,7 @@ Start the DICOM honeypot server.
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
+| `--service` | | `all` | Runtime role: `all`, `dimse`, `web`, `operator`, `dicomweb`, or `analysis`. Compose uses one role per container; `all` preserves the single-process venv workflow. |
 | `--profile` | | *(generic default)* | Deception profile: `fujifilm`, `generic-pacs`, or a path to a custom YAML. Drives identity, advertised SOP classes, enabled DIMSE ops, and (for `pacs`-kind profiles) the web surface below. |
 | `--host` | `-h` | `0.0.0.0` | Bind address |
 | `--ports` | `-p` | `104,11112` | Comma-separated listen ports |
@@ -87,6 +88,9 @@ filesystem/volume quota as the aggregate bound against many smaller stores.
 ## `dicomhawk seed`
 
 Populate the honeypot database with realistic DICOM data from [TCIA](https://www.cancerimagingarchive.net/).
+If you do not know which collection, modality, locale, city, or country code to enter, use
+[Seeding values and examples](./seeding-values.md); it includes commands that print the complete
+current lists.
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
@@ -105,17 +109,19 @@ Populate the honeypot database with realistic DICOM data from [TCIA](https://www
 | `--osm-cache` | | `~/.cache/dicomhawk/osm.json` | Path for the OSM institution cache (TTL: 24 h) |
 | `--osm-max` | | `50` | Maximum number of institutions to fetch from OpenStreetMap |
 | `--interval` | `-i` | `0` | Re-seed every N minutes in the background; `0` = run once and exit |
-| `--honey-url` | | *(seeding/config.yaml)* | URL baked as `RetrieveURL` into one seeded instance per run |
+| `--honey-url` | | `https://example.com/honey` from `seeding/config.yaml` | URL baked as `RetrieveURL` into one seeded instance per run. Replace the legacy example with a monitored URL. |
 | `--canary-pdf` | | *(seeding/config.yaml)* | Path to a PDF canary token baked as `EncapsulatedDocument` into one seeded instance per run |
 
 **Location resolution order:** OSM query → `--locations` file → built-in 6-entry defaults. Each level falls back to the next if it returns nothing or fails.
 
-**OSM scoping:** pair `--osm-city` with `--osm-country`. The city alone matches same-named cities in every country (there is more than one "Berlin"), and the country code pins it to the one you mean. Up to `--osm-max` names are kept; results are cached for 24 h per city/country pair.
+**OSM scoping:** pair `--osm-city` with `--osm-country`. The city alone matches same-named cities in every country (there is more than one "Berlin"), and the country code pins it to the one you mean. City resolution checks both OSM's local `name` and its English `name:en`, so `Tokyo` correctly resolves the boundary whose local name is `東京都`. Up to `--osm-max` names are kept; results are cached for 24 h per city/country pair.
 
 **Progress:** the command prints what it is about to download, then one line per series as it
 starts. Downloading a full `--max-series 3` × `--max-images 30` run takes several minutes with no
 network activity you can see otherwise, so the per-series lines are how you tell a slow download
-from a stall.
+from a stall. The stored count on a series line is the cumulative count *before* that series starts;
+the final `Seeded N instances` line is the completed total. Both limits are upper bounds, so a TCIA
+series with fewer instances can produce less than their product without indicating an error.
 
 **TCIA fallback:** if TCIA is unreachable the seeder falls back to a small DICOM set bundled with the package, so the honeypot still looks populated offline. With `--interval` it also retries the live API on the next tick.
 
