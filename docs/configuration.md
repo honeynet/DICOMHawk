@@ -22,13 +22,14 @@ instead.
 
 | Variable | Purpose |
 |---|---|
+| `DICOMHAWK_DATA_DIR` | Host data root for logs and installer-generated profiles; default `~/data/dicomhawk`. |
 | `DICOMHAWK_PROFILE` | Profile name, or a path to a profile YAML. Empty runs the generic default. |
 | `DICOMHAWK_AE_TITLE` | Overrides the profile's AE title. Leave empty unless you have a reason. |
 | `DICOMHAWK_PORTS` | DIMSE ports to listen on, comma separated. |
 | `DICOMHAWK_WEB_PORT` | Attacker-facing web port. |
 | `DICOMHAWK_OPERATOR_PORT` | Operator API port, published on host loopback only. |
 | `DICOMHAWK_OPERATOR_HOST` | Container-side operator bind address; Compose uses `0.0.0.0` while publishing it on host loopback. |
-| `DICOMHAWK_OPERATOR_TOKEN` | Token protecting the operator API. Strongly recommended. |
+| `DICOMHAWK_OPERATOR_TOKEN` | Token protecting the operator API. Strongly recommended. Reaches the `operator` service only. |
 | `DICOMHAWK_SECURE_COOKIES` | Overrides the profile's `Secure` session-cookie flag. |
 | `DICOMHAWK_TRUSTED_PROXY` | Exact IP of the reverse proxy allowed to supply forwarded client identity. |
 | `DICOMHAWK_PUBLIC_BASE_URL` | External origin used in generated redirect URIs. |
@@ -46,12 +47,14 @@ instead.
 | `DICOMHAWK_FINGERPRINT_MAX_BYTES` | Maximum size of one collector submission. |
 | `DICOMHAWK_FINGERPRINT_MAX_PER_SESSION` | Fingerprints retained for one web session. |
 | `DICOMHAWK_FINGERPRINT_MAX_PER_IP` | Per-source-address fingerprint storage cap; must be at least the per-session cap. |
+| `DICOMHAWK_SEED_*` | Answers retained for guided seeding; defaults are documented in [Installation](./installation.md#installer-defaults). |
+| `DICOMHAWK_CUSTOM_*` | Identity fields used when the installer generates a custom generic-PACS profile. |
 | `DICOMHAWK_TRACES_HOST_PATH` | Production bind-mount source for captures; must be a dedicated bounded filesystem. |
 | `DICOMHAWK_STATE_HOST_PATH` | Production bind-mount source for the SQLite databases and cache. |
 | `DICOMHAWK_LOGS_HOST_PATH` | Production bind-mount source for interaction logs and rotations. |
 | `DICOMHAWK_TRACE_FILESYSTEM_MAX_BYTES` | Operator-declared trace-filesystem ceiling checked by the production preflight. |
 
-The three database paths are deliberately separate files. A flood of captured objects filling
+The three database paths are deliberately separate files on the shared state volume. A flood of captured objects filling
 the traces volume must not be able to break indexing or lose analysis results.
 
 `.env` may hold the operator token, so it is created with owner-only permissions and is not

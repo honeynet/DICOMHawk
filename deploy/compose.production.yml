@@ -1,12 +1,22 @@
+x-production: &production
+  volumes: !override
+    - type: bind
+      source: ${DICOMHAWK_TRACES_HOST_PATH:?set DICOMHAWK_TRACES_HOST_PATH}
+      target: /opt/dicomhawk/storage
+    - type: bind
+      source: ${DICOMHAWK_STATE_HOST_PATH:?set DICOMHAWK_STATE_HOST_PATH}
+      target: /opt/dicomhawk/state
+    - type: bind
+      source: ${DICOMHAWK_LOGS_HOST_PATH:?set DICOMHAWK_LOGS_HOST_PATH}
+      target: /var/log/dicomhawk
+    - type: bind
+      source: ${DICOMHAWK_DATA_DIR:?set DICOMHAWK_DATA_DIR}/profiles
+      target: /opt/dicomhawk/profiles
+      read_only: true
+
 services:
-  dicomhawk:
-    volumes:
-      - type: bind
-        source: ${DICOMHAWK_TRACES_HOST_PATH:?set DICOMHAWK_TRACES_HOST_PATH}
-        target: /opt/dicomhawk/storage
-      - type: bind
-        source: ${DICOMHAWK_STATE_HOST_PATH:?set DICOMHAWK_STATE_HOST_PATH}
-        target: /opt/dicomhawk/state
-      - type: bind
-        source: ${DICOMHAWK_LOGS_HOST_PATH:?set DICOMHAWK_LOGS_HOST_PATH}
-        target: /var/log/dicomhawk
+  dimse: *production
+  web: *production
+  operator: *production
+  dicomweb: *production
+  analysis: *production

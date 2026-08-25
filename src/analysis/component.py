@@ -158,3 +158,46 @@ def new_analysis_component(
     config: AnalysisConfig, bus: logging.Logger
 ) -> AnalysisComponent:
     return AnalysisComponent(config, bus)
+
+
+class AnalysisSinkComponent(Component):
+    """Enqueue artifacts into the shared durable store without running a worker."""
+
+    def __init__(self, config: AnalysisConfig, bus: logging.Logger):
+        self.config = config
+        self.bus = bus
+        self.store: AnalysisStore = new_analysis_store(config.DB_PATH)
+
+    def start(self) -> None:
+        try:
+            self.store.start()
+        except Exception:
+            logger.exception(
+                "Analysis submissions disabled: could not open %s", self.config.DB_PATH
+            )
+
+    def stop(self) -> None:
+        self.store.stop()
+
+    def sink(self, artifact: SubmittedArtifact) -> None:
+        if not self.store.ready():
+            return
+        try:
+            self.store.enqueue_pending(artifact)
+        except Exception as exc:
+            logger.warning("Could not record artifact for analysis: %s", exc)
+            self.bus.warning(
+                InteractionEvent.background(
+                    "ANALYSIS",
+                    "ANALYSIS_ENQUEUE_FAILED",
+                    session_id=artifact.session_id,
+                    analysis={"error": str(exc)},
+                    session_parameters=[f"Artifact not queued for analysis: {exc}"],
+                )
+            )
+
+
+def new_analysis_sink_component(
+    config: AnalysisConfig, bus: logging.Logger
+) -> AnalysisSinkComponent:
+    return AnalysisSinkComponent(config, bus)

@@ -38,6 +38,7 @@ INDEX_REQUIRED_KEYS: tuple[str, ...] = (
 
 # Rollup queries take a caller-supplied UID list; these cap an oversized or hostile caller.
 _ROLLUP_MAX_STUDIES = 500
+_BUSY_TIMEOUT_SECONDS = 5.0
 _ROLLUP_MAX_MODALITIES = 8
 
 # Our own base, so the extra table never lands in pynetdicom's Q/R schema.
@@ -129,7 +130,13 @@ class Repository:
 
     def _new_connection(self) -> Engine:
         url = f"sqlite:///{self.location}"
-        kwargs: dict = {"connect_args": {"check_same_thread": False}}
+        # Sets busy timeout on every pooled connection; the PRAGMA reaches only one.
+        kwargs: dict = {
+            "connect_args": {
+                "check_same_thread": False,
+                "timeout": _BUSY_TIMEOUT_SECONDS,
+            }
+        }
         if self.location == ":memory:":
             kwargs["poolclass"] = (
                 StaticPool  # required so all threads share one in-memory DB
@@ -137,6 +144,10 @@ class Repository:
         else:
             Path(self.location).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(url, **kwargs)
+        if self.location != ":memory:":
+            # Separate service containers share this file; WAL allows concurrent readers.
+            with engine.begin() as conn:
+                conn.exec_driver_sql("PRAGMA journal_mode=WAL")
         db.Base.metadata.create_all(engine)
         DetailBase.metadata.create_all(engine)
         meta = MetaData()

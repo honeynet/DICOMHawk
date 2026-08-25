@@ -2,6 +2,7 @@ import ipaddress
 import logging
 import signal
 import sys
+import threading
 
 import typer
 from dicomhawk.app import new_dicomhawk
@@ -16,7 +17,12 @@ from dicomhawk.bus import (
 )
 from dicomhawk.storage import new_store
 from profiles.profile import load_profile
-from web.component import new_dicomweb_component, new_web_component
+from web.component import (
+    new_attacker_web_component,
+    new_dicomweb_component,
+    new_operator_component,
+    new_web_component,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +37,8 @@ _ALWAYS_ON_HANDLERS: tuple[str, ...] = (
     "connect",
     "close",
 )
+
+_SERVICES = {"all", "dimse", "web", "operator", "dicomweb", "analysis"}
 
 
 # Over plain HTTP a browser discards the Secure session cookie, so the decoy login silently resets.
@@ -52,6 +60,11 @@ def _warn_unusable_login(prof, trusted_proxy: str | None) -> None:
 
 @serve_app.command()
 def serve(
+    service: str = typer.Option(
+        "all",
+        "--service",
+        help="Runtime role: all, dimse, web, operator, dicomweb, or analysis",
+    ),
     host: str = typer.Option(
         "0.0.0.0", "-h", "--host", help="Host addresses to listen for connections"
     ),
@@ -226,6 +239,11 @@ def serve(
     ),
 ):
 
+    if service not in _SERVICES:
+        raise typer.BadParameter(
+            f"service must be one of: {', '.join(sorted(_SERVICES))}"
+        )
+
     try:
         prof = load_profile(profile)
     except (FileNotFoundError, ValueError) as e:
@@ -376,22 +394,27 @@ def serve(
             )
             analysis = False
     if analysis:
-        analysis_component = new_analysis_component(
-            new_analysis_config(
-                db_path=analysis_db,
-                rules_dir=analysis_rules,
-                timeout=analysis_timeout,
-                max_bytes=analysis_max_bytes,
-                queue_size=analysis_queue_size,
-            ),
-            bus,
+        analysis_config = new_analysis_config(
+            db_path=analysis_db,
+            rules_dir=analysis_rules,
+            timeout=analysis_timeout,
+            max_bytes=analysis_max_bytes,
+            queue_size=analysis_queue_size,
         )
-        # First in `components` -> starts before ingress listeners, stops after they close.
+        if service in {"all", "analysis"}:
+            analysis_component = new_analysis_component(analysis_config, bus)
+        else:
+            from analysis.component import new_analysis_sink_component
+
+            analysis_component = new_analysis_sink_component(analysis_config, bus)
         components.append(analysis_component)
-        sink = analysis_component.sink
         analysis_store = analysis_component.store
+        if service in {"all", "dimse", "web", "dicomweb"}:
+            sink = analysis_component.sink
         logger.info(
-            "Analysis: enabled, rules=%s", analysis_rules or "shipped starters only"
+            "Analysis: %s, rules=%s",
+            "worker" if service in {"all", "analysis"} else "durable submissions",
+            analysis_rules or "shipped starters only",
         )
     else:
         logger.info("Analysis: disabled (--no-analysis)")
@@ -404,6 +427,7 @@ def serve(
     # Only build the store when a profile actually serves a collector, so nothing is created unused.
     if (
         fingerprint
+        and service in {"all", "web", "operator"}
         and prof.kind == "pacs"
         and prof.web.enabled
         and prof.web.fingerprint.enabled
@@ -420,6 +444,7 @@ def serve(
             prof.web.fingerprint.enabled = False
     if (
         fingerprint
+        and service in {"all", "web", "operator"}
         and prof.kind == "pacs"
         and prof.web.enabled
         and prof.web.fingerprint.enabled
@@ -438,23 +463,26 @@ def serve(
         logger.info(
             "Fingerprinting: signals=%s", ",".join(prof.web.fingerprint.signals)
         )
+    elif fingerprint and service not in {"all", "web", "operator"}:
+        logger.info("Fingerprinting: not served by the %s role", service)
     else:
         logger.info("Fingerprinting: disabled")
 
-    dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes, sink=sink)
-
     handlers = []
-    for op in prof.dicom.operations:
-        if h := dimse_fact.get(op):
-            handlers.append(h)
-    for always_on in _ALWAYS_ON_HANDLERS:
-        if h := dimse_fact.get(always_on):
-            handlers.append(h)
+    if service in {"all", "dimse"}:
+        dimse_fact = new_dimse_factory(repo, bus, prof.dicom.max_store_bytes, sink=sink)
+        for op in prof.dicom.operations:
+            if h := dimse_fact.get(op):
+                handlers.append(h)
+        for always_on in _ALWAYS_ON_HANDLERS:
+            if h := dimse_fact.get(always_on):
+                handlers.append(h)
 
-    if prof.kind == "pacs" and prof.web.enabled:
+    if prof.kind == "pacs" and prof.web.enabled and service in {"all", "web"}:
         _warn_unusable_login(prof, trusted_proxy)
+        factory = new_web_component if service == "all" else new_attacker_web_component
         components.append(
-            new_web_component(
+            factory(
                 prof,
                 repo,
                 bus,
@@ -470,25 +498,60 @@ def serve(
                 fingerprint_store,
             )
         )
+    if prof.kind == "pacs" and prof.web.enabled and service == "operator":
+        components.append(
+            new_operator_component(
+                prof,
+                repo,
+                bus,
+                host,
+                web_port,
+                operator_port,
+                operator_host,
+                operator_token,
+                trusted_proxy,
+                None,
+                analysis_store,
+                None,
+                fingerprint_store,
+            )
+        )
     # DICOMweb ports/paths are profile fingerprint identity, not CLI flags; only --host is shared.
-    if prof.kind == "pacs" and prof.dicomweb.enabled:
+    if prof.kind == "pacs" and prof.dicomweb.enabled and service in {"all", "dicomweb"}:
         components.append(
             new_dicomweb_component(prof, repo, bus, host, trusted_proxy, sink)
         )
 
-    srv = new_server(bus, config, handlers)
-    hp = new_dicomhawk(srv, components)
+    hp = None
+    stopped = threading.Event()
+    if service in {"all", "dimse"}:
+        srv = new_server(bus, config, handlers)
+        hp = new_dicomhawk(srv, components)
 
     def stop_honeypot(_signum=None, _frame=None):
-        hp.stop()
+        stopped.set()
+        if hp is not None:
+            hp.stop()
 
     previous_handlers = {}
     for sig in (signal.SIGINT, signal.SIGTERM):
         previous_handlers[sig] = signal.signal(sig, stop_honeypot)
     try:
-        hp.start()
+        if hp is not None:
+            hp.start()
+        else:
+            started = []
+            try:
+                for component in components:
+                    component.start()
+                    started.append(component)
+                stopped.wait()
+            finally:
+                for component in reversed(started):
+                    component.stop()
     finally:
-        hp.stop()
+        if hp is not None:
+            hp.stop()
         repo.stop()
         for sig, previous in previous_handlers.items():
             signal.signal(sig, previous)

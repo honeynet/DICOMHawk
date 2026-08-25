@@ -826,6 +826,25 @@ def test_analysis_component_uses_spawn_and_copies_bus_file_configuration(tmp_pat
     assert comp._worker_bus_config["size"] is None
 
 
+def test_analysis_sink_role_durably_enqueues_without_spawning_a_worker(tmp_path):
+    import logging
+
+    from analysis.component import new_analysis_sink_component
+    from analysis.config import new_analysis_config
+
+    comp = new_analysis_sink_component(
+        new_analysis_config(db_path=str(tmp_path / "analysis.db")),
+        logging.getLogger("bus"),
+    )
+    comp.start()
+    artifact = _artifact(tmp_path)
+    comp.sink(artifact)
+
+    assert comp.store.get(artifact.capture.artifact_id).state == AnalysisState.PENDING
+    assert not hasattr(comp, "_process")
+    comp.stop()
+
+
 def test_unopenable_store_disables_analysis_without_killing_the_process(tmp_path):
     comp = _dead_component(
         tmp_path

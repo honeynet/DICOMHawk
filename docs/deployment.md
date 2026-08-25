@@ -7,7 +7,7 @@ rest are host-level controls Docker cannot express on its own.
 For a first local run, see [Installation](./installation.md) and [Quick start](./quick_start.md).
 For what the honeypot pretends to be, see [Profiles](./profiles.md).
 
-## What the container already does
+## What the containers already do
 
 The shipped image and Compose file provide the following controls:
 
@@ -19,7 +19,13 @@ The shipped image and Compose file provide the following controls:
   `no-new-privileges` is enabled. Binding
   the privileged DICOM port 104 as a non-root user is allowed via a namespaced
   `net.ipv4.ip_unprivileged_port_start=0` sysctl, not by handing back `CAP_NET_BIND_SERVICE`.
-- **Resource limits.** The 1 GiB memory/swap cap, 128 MiB `/tmp`, `pids_limit`, `cpus`,
+- **One service per container.** DIMSE, attacker web, operator API, DICOMweb, and payload
+  analysis run as the `dimse`, `web`, `operator`, `dicomweb`, and `analysis` services. They share
+  only the mounted evidence/state needed to present one honeypot.
+- **The operator API is off the attacker-facing network.** It runs on its own bridge, so a
+  foothold in the `web` container has no route to it, and only that service is given
+  `DICOMHAWK_OPERATOR_TOKEN`.
+- **Resource limits.** Each service has a 512 MiB memory/swap cap, 128 MiB `/tmp`, `pids_limit`, `cpus`,
   and `nofile` limit bound a connection or PDU flood. The default C-STORE/STOW cap is 64 MiB,
   leaving headroom for parsing and concurrent requests.
 - **Protocol-level health check.** The healthcheck loads the active profile, honors its called
@@ -58,18 +64,20 @@ Named volumes are convenient for local use but share Docker's host filesystem an
 aggregate quota. Production uses the supplied bind-mount override so traces can live on a
 dedicated size-limited filesystem while state and logs remain elsewhere.
 
-Provision three directories, with the trace directory mounted from a dedicated finite
-filesystem, then set:
+Provision the directories below, with the trace directory mounted from a dedicated finite
+filesystem. `DICOMHAWK_DATA_DIR` is also the parent of the read-only generated-profiles mount:
 
 ```bash
 export DICOMHAWK_TRACES_HOST_PATH=/srv/dicomhawk-traces
 export DICOMHAWK_STATE_HOST_PATH=/srv/dicomhawk-state
 export DICOMHAWK_LOGS_HOST_PATH=/srv/dicomhawk-logs
+export DICOMHAWK_DATA_DIR=/srv/dicomhawk-data
 export DICOMHAWK_TRACE_FILESYSTEM_MAX_BYTES=10737418240  # operator-selected 10 GiB ceiling
+sudo mkdir -p "$DICOMHAWK_DATA_DIR/profiles"
 sudo chown -R 999:999 "$DICOMHAWK_TRACES_HOST_PATH" "$DICOMHAWK_STATE_HOST_PATH" "$DICOMHAWK_LOGS_HOST_PATH"
 
 docker compose -f docker-compose.yml -f deploy/compose.production.yml create
-sudo --preserve-env=DICOMHAWK_TRACES_HOST_PATH,DICOMHAWK_STATE_HOST_PATH,DICOMHAWK_LOGS_HOST_PATH,DICOMHAWK_TRACE_FILESYSTEM_MAX_BYTES \
+sudo --preserve-env=DICOMHAWK_TRACES_HOST_PATH,DICOMHAWK_STATE_HOST_PATH,DICOMHAWK_LOGS_HOST_PATH,DICOMHAWK_DATA_DIR,DICOMHAWK_TRACE_FILESYSTEM_MAX_BYTES \
   deploy/check-production.sh
 docker compose -f docker-compose.yml -f deploy/compose.production.yml up -d
 ```
@@ -102,8 +110,8 @@ docker compose down
 docker run --rm --user 0 \
   -v dicomhawk_dicom_storage:/opt/dicomhawk/storage \
   -v dicomhawk_dicom_state:/opt/dicomhawk/state \
-  -v dicomhawk_logs:/var/log/dicomhawk \
-  dicomhawk:latest chown -R 999:999 /opt/dicomhawk /var/log/dicomhawk
+  dicomhawk:latest chown -R 999:999 /opt/dicomhawk
+sudo chown -R 999:999 "${DICOMHAWK_DATA_DIR:-$HOME/data/dicomhawk}/logs"
 ```
 
 Do not use `docker compose down -v` for migration; it deletes the evidence instead of fixing it.
@@ -117,8 +125,8 @@ file; keep it on the same state volume as `--database`, not the traces volume, f
 reason the main database is kept off traces: a storage flood on traces must not break the
 analysis job table.
 
-The analysis worker runs as its own supervised process inside the same container, under the
-same non-root user, capability drops, and `no-new-privileges` as the rest of the honeypot; a
+The analysis worker runs as a supervised process in the dedicated `analysis` container, under
+the same non-root user, capability drops, and `no-new-privileges` as the other services; a
 crashed or hung worker (bounded by `--analysis-timeout`) restarts automatically and resumes
 any `pending`/`running` work. If the in-memory hand-off queue ever fills up (very high
 sustained upload volume), the durable job table still has every job recorded. Nothing is
@@ -189,6 +197,12 @@ container binds `0.0.0.0` because a container's own loopback is unreachable thro
 mapping. Keep that mapping loopback-only, and set `DICOMHAWK_OPERATOR_TOKEN` (Basic/Bearer) if
 anything beyond the local host can reach the listener.
 
+Binding all interfaces would otherwise expose the API to every container sharing its network, so
+the `operator` service sits on a bridge of its own. It reads the same SQLite databases from the
+shared volume and never needs to talk to another service, so nothing is lost by isolating it. The
+token is set only on that service; the other four receive an empty value, keeping the credential
+out of the environment of the containers an attacker actually reaches.
+
 ## Keeping data fresh
 
 `serve` never seeds. Run `seed` on a schedule (cron / systemd timer) with rotation so the data
@@ -200,7 +214,7 @@ does not go stale. See [Commands](./commands.md#dicomhawk-seed). Give the seed r
 The interaction log (`--log-path`) is one JSON record per line, ready to ship to your SIEM. It rotates
 by size (`--log-max-bytes` / `--log-backups`), and Docker's json-file driver caps the container
 stdout log separately. Every file write uses a sidecar `.lock` file, including when size rotation
-is disabled, so the main service and spawned analysis worker cannot interleave records or race a
+is disabled, so independent service processes and the spawned analysis worker cannot interleave records or race a
 rollover; keep that lock on the same logs volume. The active log, numbered
 backups, and lock all survive `docker compose down` because `/var/log/dicomhawk` is mounted.
 Keep the developer log (`--dev-log`, Python-level diagnostics) separate from the interaction log;

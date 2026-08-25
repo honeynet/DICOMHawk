@@ -250,6 +250,28 @@ def test_osm_explicit_cache_path_overrides_env(monkeypatch, tmp_path):
     )
 
 
+def test_osm_city_matches_local_and_english_relation_names():
+    query = OsmClient(city="Tokyo", country="JP")._build_query()
+
+    assert 'rel(area.country)["name"="Tokyo"]' in query
+    assert 'rel(area.country)["name:en"="Tokyo"]' in query
+    assert ")->.c;" in query
+    assert ".c map_to_area->.a;" in query
+
+
+def test_osm_city_only_matches_local_and_english_relation_names():
+    query = OsmClient(city="Tokyo")._build_query()
+
+    assert 'rel["name"="Tokyo"]' in query
+    assert 'rel["name:en"="Tokyo"]' in query
+
+
+def test_osm_location_values_cannot_break_out_of_query_strings():
+    query = OsmClient(city='A";node["amenity"="hospital"]', country="JP")._build_query()
+
+    assert 'name"="A\\";node[\\"amenity\\"=\\"hospital\\"]"' in query
+
+
 class _StubClient:
     """Stands in for TCIA so the progress contract can be checked without downloading."""
 

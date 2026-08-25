@@ -1,84 +1,46 @@
+# env_file hands every service the whole .env, so the token is blanked here and restored below.
+x-env: &env
+  DICOMHAWK_PROFILE: "${DICOMHAWK_PROFILE:-}"
+  DICOMHAWK_AE_TITLE: "${DICOMHAWK_AE_TITLE:-}"
+  DICOMHAWK_CACHE_DIR: /opt/dicomhawk/state/cache
+  DICOMHAWK_PORTS: "${DICOMHAWK_PORTS:-104}"
+  DICOMHAWK_OPERATOR_TOKEN: ""
+
+x-common: &common
+  build: .
+  image: dicomhawk:latest
+  restart: unless-stopped
+  env_file: [.env]
+  environment: *env
+  volumes:
+    - dicom_storage:${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}
+    - dicom_state:/opt/dicomhawk/state
+    - ${DICOMHAWK_DATA_DIR:-./data/dicomhawk}/logs:/var/log/dicomhawk
+    - ${DICOMHAWK_DATA_DIR:-./data/dicomhawk}/profiles:/opt/dicomhawk/profiles:ro
+  tmpfs: ["/tmp:size=128m,mode=1777,noexec,nosuid,nodev"]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 512m
+  memswap_limit: 512m
+  pids_limit: 192
+  cpus: 1.0
+  ulimits:
+    nofile: {soft: 1024, hard: 2048}
+  stop_grace_period: 45s
+  logging:
+    driver: json-file
+    options: {max-size: "50m", max-file: "5"}
+  networks: [dicomhawk_net]
+
 services:
-  dicomhawk:
-    build: .
-    image: dicomhawk:latest
-    container_name: dicomhawk
-    restart: unless-stopped
-    tty: true   # pseudo-TTY so the server's stdout is a terminal → colored `docker logs`
-    env_file:
-      - .env
-    environment:
-      DICOMHAWK_PROFILE: "${DICOMHAWK_PROFILE:-}"
-      DICOMHAWK_AE_TITLE: "${DICOMHAWK_AE_TITLE:-}"
-      # Writable cache on the persistent state volume (rootfs is read-only, so ~/.cache fails).
-      DICOMHAWK_CACHE_DIR: /opt/dicomhawk/state/cache
-      DICOMHAWK_PORTS: "${DICOMHAWK_PORTS:-104}"
-    ports:
-      - "104:104"               # standard unencrypted DICOM port; use host privileges/capabilities as required
-      - "8080:8080"             # attacker-facing web (pacs profiles with web.enabled only)
-      - "127.0.0.1:8081:8081"   # container binds 0.0.0.0; host stays loopback-only
-      # Publish every profile port; only the active profile listens.
-      - "8042:8042"             # DICOMweb generic / Orthanc-shaped profile
-      - "9080:9080"             # DICOMweb WADO-URI  (fujifilm)
-      - "10080:10080"           # DICOMweb QIDO-RS   (fujifilm)
-      - "12080:12080"           # DICOMweb WADO-RS   (fujifilm)
-      - "13080:13080"           # DICOMweb STOW-RS   (fujifilm)
-    command:
-      - dicomhawk
-      - serve
-      - --profile
-      - "${DICOMHAWK_PROFILE:-}"        # empty = generic default; e.g. "fujifilm" or a mounted /path.yaml
-      - -p
-      - "${DICOMHAWK_PORTS:-104}"
-      - -ae
-      - "${DICOMHAWK_AE_TITLE:-}"       # empty = use the profile's AE title; set to override it
-      - -db
-      - "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}"   # own volume, off the flood-prone traces volume
-      - --analysis-db
-      - "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}"
-      - --fingerprint-db
-      - "${DICOMHAWK_FINGERPRINT_DB:-/opt/dicomhawk/state/fingerprint.db}"
-      - -t
-      - "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}"
-      - -l
-      - /var/log/dicomhawk/dicomhawk.log
-      - --web-port
-      - "${DICOMHAWK_WEB_PORT:-8080}"
-      - --operator-port
-      - "${DICOMHAWK_OPERATOR_PORT:-8081}"
-      - --operator-host
-      - "${DICOMHAWK_OPERATOR_HOST:-0.0.0.0}"
-      - --allow-remote-operator
-      - --trusted-proxy
-      - "${DICOMHAWK_TRUSTED_PROXY:-}"
-      - -v
-    volumes:
-      # DB on its own volume so a store-flood filling traces can't break indexing (see docs/deployment.md).
-      - dicom_storage:${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}
-      - dicom_state:/opt/dicomhawk/state
-      - logs:/var/log/dicomhawk
-    tmpfs:
-      - /tmp:size=128m,mode=1777,noexec,nosuid,nodev
-    # Let the non-root process bind privileged port 104 (Docker won't make CAP_NET_BIND_SERVICE ambient).
-    sysctls:
-      - net.ipv4.ip_unprivileged_port_start=0
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    # Bound a connection/PDU flood so it can't OOM or fd-exhaust the host. Tune per host.
-    mem_limit: 1g
-    memswap_limit: 1g
-    pids_limit: 256
-    cpus: 1.0
-    ulimits:
-      nofile:
-        soft: 1024
-        hard: 2048
-    stop_grace_period: 45s
+  dimse:
+    <<: *common
+    container_name: dicomhawk-dimse
+    command: [dicomhawk, serve, --service, dimse, --profile, "${DICOMHAWK_PROFILE:-}", -p, "${DICOMHAWK_PORTS:-104}", -ae, "${DICOMHAWK_AE_TITLE:-}", -db, "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}", --analysis-db, "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}", -t, "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}", -l, /var/log/dicomhawk/dicomhawk.log, -v]
+    ports: ["104:104"]
+    sysctls: [net.ipv4.ip_unprivileged_port_start=0]
     healthcheck:
-      # Profile-aware, unlogged loopback C-ECHO proves the DIMSE handler serves, not just the socket.
       test:
         - CMD-SHELL
         - >-
@@ -98,20 +60,41 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "5"
-    networks:
-      - dicomhawk_net
+
+  web:
+    <<: *common
+    container_name: dicomhawk-web
+    command: [dicomhawk, serve, --service, web, --profile, "${DICOMHAWK_PROFILE:-}", -db, "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}", --analysis-db, "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}", --fingerprint-db, "${DICOMHAWK_FINGERPRINT_DB:-/opt/dicomhawk/state/fingerprint.db}", -t, "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}", -l, /var/log/dicomhawk/dicomhawk.log, --web-port, "${DICOMHAWK_WEB_PORT:-8080}", --trusted-proxy, "${DICOMHAWK_TRUSTED_PROXY:-}", -v]
+    ports: ["8080:8080"]
+
+  operator:
+    <<: *common
+    container_name: dicomhawk-operator
+    environment:
+      <<: *env
+      DICOMHAWK_OPERATOR_TOKEN: "${DICOMHAWK_OPERATOR_TOKEN:-}"
+    # Own bridge: it binds 0.0.0.0 so Docker can publish it, and no peer needs to reach it.
+    networks: [dicomhawk_operator_net]
+    command: [dicomhawk, serve, --service, operator, --profile, "${DICOMHAWK_PROFILE:-}", -db, "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}", --analysis-db, "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}", --fingerprint-db, "${DICOMHAWK_FINGERPRINT_DB:-/opt/dicomhawk/state/fingerprint.db}", -t, "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}", -l, /var/log/dicomhawk/dicomhawk.log, --operator-port, "${DICOMHAWK_OPERATOR_PORT:-8081}", --operator-host, "${DICOMHAWK_OPERATOR_HOST:-0.0.0.0}", --allow-remote-operator, -v]
+    ports: ["127.0.0.1:8081:8081"]
+
+  dicomweb:
+    <<: *common
+    container_name: dicomhawk-dicomweb
+    command: [dicomhawk, serve, --service, dicomweb, --profile, "${DICOMHAWK_PROFILE:-}", -db, "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}", --analysis-db, "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}", -t, "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}", -l, /var/log/dicomhawk/dicomhawk.log, --trusted-proxy, "${DICOMHAWK_TRUSTED_PROXY:-}", -v]
+    ports: ["8042:8042", "9080:9080", "10080:10080", "12080:12080", "13080:13080"]
+
+  analysis:
+    <<: *common
+    container_name: dicomhawk-analysis
+    command: [dicomhawk, serve, --service, analysis, --profile, "${DICOMHAWK_PROFILE:-}", -db, "${DICOMHAWK_DB:-/opt/dicomhawk/state/dicomhawk.db}", --analysis-db, "${DICOMHAWK_ANALYSIS_DB:-/opt/dicomhawk/state/analysis.db}", -t, "${DICOMHAWK_TRACES:-/opt/dicomhawk/storage}", -l, /var/log/dicomhawk/dicomhawk.log, -v]
 
 volumes:
   dicom_storage:
   dicom_state:
-  logs:
 
 networks:
   dicomhawk_net:
-    # Externally routable; drop egress at the host firewall, not via `internal: true`.
+    driver: bridge
+  dicomhawk_operator_net:
     driver: bridge

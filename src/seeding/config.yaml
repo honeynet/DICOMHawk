@@ -1,5 +1,6 @@
 # Bait config baked into one instance per seed run.
 
 honeytoken:
-  honey_url: null      # base URL baked in as RetrieveURL (e.g. https://host)
+  # Legacy DICOMHawk customizer default. Replace with a URL you monitor in production.
+  honey_url: https://example.com/honey
   canary_pdf: null     # path to a PDF canary token baked in as EncapsulatedDocument
