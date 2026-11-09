@@ -10,7 +10,7 @@ from services.tci_services import ITCIAScheduler
 from services.tci_services import ITCIAManager
 from dependency_injector.wiring import inject
 import logging
-
+import time
 
 class TCIAScheduler(threading.Thread, ITCIAScheduler):
 
@@ -36,6 +36,12 @@ class TCIAScheduler(threading.Thread, ITCIAScheduler):
         self.logger.info(
             f"TCIA retrieving schedule is started, DICOM files storage and database will be directly updated from The Cancer Imaging Archeive each {self.period} {self.period_unit}"
         )
+
+        self.tcia_manager.change_dicom_files()
+
+        while True:
+            schedule.run_pending()
+            time.sleep(86400)
 
     def schedule_files_retrieval(self):
         try:
@@ -207,18 +213,12 @@ class TCIAManager(ITCIAManager):
                 file,
                 self.tcia_dir,
             )
-            if (
-                series_files_counter == 4
-                or series_files_counter == 12
-                or series_files_counter == 18
-                or series_files_counter == 24
-            ):
-                # Injecting 4 retrieved dicom file with canary token and honeyURL token
-                self.inject_honey_url(dataset)
+            
+            self.inject_honey_url(dataset)
 
-                self.inject_pdf_canary_token(dataset)
+            self.inject_pdf_canary_token(dataset)
 
-                self.redis_handler.add_injected_file(patient_name, modality)
+            self.redis_handler.add_injected_file(patient_name, modality)
 
             tcia_util.store_retrieved_file(
                 directory,
