@@ -112,6 +112,7 @@ Each variable corresponds to a threat intelligence service. You must obtain vali
 - **`ABUSE_IP_API_KEY`** – [AbuseIPDB](https://www.abuseipdb.com/)
 - **`IP_QUALITY_SCORE_API_KEY`** – [IPQualityScore](https://www.ipqualityscore.com/)
 - **`VIRUS_TOTAL_API_KEY`** – [VirusTotal](https://www.virustotal.com/gui/home/upload)
+- **`VPNDETECTION_API_KEY`** – [VPNDetection](https://vpndetection.io/) (optional: adds VPN, Tor and relay flags; left empty, no lookup is made)
 
 Replace the `APIKEY` value in the `docker-compose.yml` file with the obtained API keys for each service:
 

@@ -14,3 +14,6 @@ class IThreatIntelligence(ABC):
 
     def getIPSecurityScore(self, ip) -> dict:
         pass
+
+    def getVpnDetection(self, ip) -> dict:
+        pass

@@ -31,6 +31,7 @@ Threat Intelligence:
 * ABUSE_IP_API_KEY
 * IP_QUALITY_SCORE_API_KEY
 * VIRUS_TOTAL_API_KEY
+* VPNDETECTION_API_KEY
 
 Blackhole:
 ---------------------
@@ -130,6 +131,12 @@ IP_QUALITY_SCORE_API_KEY = os.getenv(
 VIRUS_TOTAL_API_KEY = os.getenv(
     "VIRUS_TOTAL_API_KEY",
     "apikey",
+)
+
+""" API key VPNDetection (optional: no lookup without it) """
+VPNDETECTION_API_KEY = os.getenv(
+    "VPNDETECTION_API_KEY",
+    "",
 )
 
 """Canary pdf path"""

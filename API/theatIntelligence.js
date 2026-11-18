@@ -67,6 +67,29 @@ async function getVirusTotalScore(ip) {
     }
 }
 
+async function getVpnDetection(ip) {
+    const apiKey = process.env.VPNDETECTION_API_KEY;
+    if (!apiKey) {
+        return null;
+    }
+    const url = `https://api.vpndetection.io/${ip}`;
+    const headers = { Authorization: `Bearer ${apiKey}` };
+
+    try {
+        const response = await axios.get(url, { headers, timeout: 10000 });
+        const data = response.data;
+        const asn = data.asn || {};
+        return [
+            data.is_vpn === undefined ? 'N/A' : data.is_vpn,
+            data.is_tor === undefined ? 'N/A' : data.is_tor,
+            data.is_relay === undefined ? 'N/A' : data.is_relay,
+            asn.type === undefined ? 'N/A' : asn.type
+        ];
+    } catch (error) {
+        console.error(`An error occurred: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
+    }
+}
+
 async function getReputationData(ip) {
     const currentTime = format(new Date(), "yyyy-MM-dd'T'HH:mm:ss");
     const abusedb = await getIPSecurityScore(ip);
@@ -77,6 +100,8 @@ async function getReputationData(ip) {
 
     const vt = await getVirusTotalScore(ip);
     const virusTotal = vt || {};
+
+    const vpnDetection = (await getVpnDetection(ip)) || ["N/A", "N/A", "N/A", "N/A"];
 
     try {
         let repData = {};
@@ -90,6 +115,10 @@ async function getReputationData(ip) {
         repData.country = abusedbObject[2];
         repData.ISP = abusedbObject[0];
         repData.AbuseDBScore = abusedbObject[1];
+        repData.vpndetection_vpn = vpnDetection[0];
+        repData.vpndetection_tor = vpnDetection[1];
+        repData.vpndetection_relay = vpnDetection[2];
+        repData.vpndetection_network = vpnDetection[3];
         
         return repData;
     } catch (error) {
