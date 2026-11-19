@@ -11,10 +11,12 @@ class ThreatIntelligence(IThreatIntelligence):
         abuse_ip_api_key,
         ip_quality_score_api_key,
         virus_total_api_key,
+        vpndetection_api_key="",
     ):
         self.abuse_ip_api_key = abuse_ip_api_key
         self.ip_quality_score_api_key = ip_quality_score_api_key
         self.virus_total_api_key = virus_total_api_key
+        self.vpndetection_api_key = vpndetection_api_key
         self.exceptions_logger = exceptions_logger
         self.logger = app_logger
 
@@ -89,6 +91,31 @@ class ThreatIntelligence(IThreatIntelligence):
                 f'Unexpected error while getting IP information from "virustotal.com"'
             )
 
+    # Get VPN, Tor and relay flags from VPNDETECTION (skipped without a key)
+
+    def getVpnDetection(self, ip):
+        if not self.vpndetection_api_key:
+            return None
+        try:
+            url = f"https://api.vpndetection.io/{ip}"
+            headers = {"Authorization": f"Bearer {self.vpndetection_api_key}"}
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return [
+                    data.get("is_vpn", "N/A"),
+                    data.get("is_tor", "N/A"),
+                    data.get("is_relay", "N/A"),
+                    (data.get("asn") or {}).get("type", "N/A"),
+                ]
+            self.exceptions_logger.error(
+                f'VPNDetection returned {response.status_code} for {ip}: {response.text}'
+            )
+        except Exception:
+            self.exceptions_logger.exception(
+                f'Unexpected error while getting VPN flags from "vpndetection.io"'
+            )
+
     # Build reputation object
 
     def get_reputation_data(self, ip):
@@ -101,6 +128,7 @@ class ThreatIntelligence(IThreatIntelligence):
 
         vt = self.getVirusTotalScore(ip)
         virus_total = vt if vt else {}
+        vpn_detection = self.getVpnDetection(ip) or ["", "", "", ""]
         try:
             rep_dat = {}
             rep_dat["timestamp"] = str(current_time)
@@ -113,6 +141,10 @@ class ThreatIntelligence(IThreatIntelligence):
             rep_dat["country"] = abusedb_object[2]
             rep_dat["ISP"] = abusedb_object[0]
             rep_dat["AbuseDBScore"] = abusedb_object[1]
+            rep_dat["vpndetection_vpn"] = vpn_detection[0]
+            rep_dat["vpndetection_tor"] = vpn_detection[1]
+            rep_dat["vpndetection_relay"] = vpn_detection[2]
+            rep_dat["vpndetection_network"] = vpn_detection[3]
             return rep_dat
         except Exception:
             self.exceptions_logger.exception(

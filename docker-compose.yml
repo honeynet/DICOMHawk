@@ -25,6 +25,7 @@ services:
       - ABUSE_IP_API_KEY= APIKEY
       - IP_QUALITY_SCORE_API_KEY= APIKEY
       - VIRUS_TOTAL_API_KEY= APIKEY
+      - VPNDETECTION_API_KEY=
 
   redis:
       image: redis
@@ -51,6 +52,7 @@ services:
       - ABUSE_IP_API_KEY= APIKEY
       - IP_QUALITY_SCORE_API_KEY= APIKEY
       - VIRUS_TOTAL_API_KEY= APIKEY
+      - VPNDETECTION_API_KEY=
       - MODALITIES=["CT", "MR", "US", "DX"]
       - MINIMUM_TCIA_FILES_IN_SERIE=1
       - MAXIMUM_TCIA_FILES_IN_SERIE=3

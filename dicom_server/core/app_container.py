@@ -27,7 +27,7 @@ The setup includes adding the following providers:
  Threat Intelligence:
  ------------------
  
-    * threat_intelligence: provides IP information from three Threat Intelligence services (AbuseIPdatabase, IPQualityScore, and VirusTotal).
+    * threat_intelligence: provides IP information from four Threat Intelligence services (AbuseIPdatabase, IPQualityScore, VirusTotal, and VPNDetection when its key is set).
  
  Files Integrity Checker:
  ------------------
@@ -156,6 +156,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
         config.ABUSE_IP_API_KEY,
         config.IP_QUALITY_SCORE_API_KEY,
         config.VIRUS_TOTAL_API_KEY,
+        config.VPNDETECTION_API_KEY,
     )
 
     # DICOM files integrity cheacker provider
